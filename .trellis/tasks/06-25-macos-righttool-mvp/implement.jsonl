@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/guides/index.md", "reason": "General thinking guides for cross-layer and reuse decisions before implementation."}
+{"file": ".trellis/spec/frontend/index.md", "reason": "SwiftUI/AppKit settings UI and menu presentation should follow frontend-quality guidance once project-specific details are filled."}
+{"file": ".trellis/spec/backend/index.md", "reason": "XPC ActionRunner, file operations, logging, and permission boundaries map to backend/service concerns."}
+{"file": ".trellis/tasks/06-25-macos-righttool-mvp/research/apple-platform-constraints.md", "reason": "Apple Finder Sync, XPC, App Group, and security constraints that drive the architecture."}

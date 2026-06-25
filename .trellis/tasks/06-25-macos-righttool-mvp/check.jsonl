@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/guides/index.md", "reason": "Quality check should verify cross-layer consistency, reuse, and edge-case handling."}
+{"file": ".trellis/spec/frontend/index.md", "reason": "Check settings UI and Finder/menu-facing behavior against frontend guidance."}
+{"file": ".trellis/spec/backend/index.md", "reason": "Check ActionRunner, file operations, logging, and permission handling against service-quality guidance."}
+{"file": ".trellis/tasks/06-25-macos-righttool-mvp/research/apple-platform-constraints.md", "reason": "Verify implementation honors Apple Finder Sync, XPC, App Group, and security constraints."}

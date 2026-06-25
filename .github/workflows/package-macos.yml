@@ -1,0 +1,78 @@
+name: Package macOS
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Test package version
+        required: true
+        type: string
+        default: 0.1.0-test.1
+      configuration:
+        description: Swift/Xcode build configuration
+        required: true
+        type: choice
+        default: release
+        options:
+          - release
+          - debug
+  push:
+    tags:
+      - "v*"
+  pull_request:
+    paths:
+      - ".github/workflows/package-macos.yml"
+      - "Package.swift"
+      - "Sources/**"
+      - "Tests/**"
+      - "scripts/**"
+      - "docs/**"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: package-macos-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  package:
+    name: Package macOS (${{ matrix.artifact_suffix }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-26
+            artifact_suffix: arm64
+          - runner: macos-26-intel
+            artifact_suffix: x86_64
+
+    env:
+      BUILD_CONFIGURATION: ${{ inputs.configuration || 'release' }}
+      RIGHTTOOL_VERSION: ${{ inputs.version || '' }}
+      ARTIFACT_SUFFIX: ${{ matrix.artifact_suffix }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Print toolchain
+        run: |
+          sw_vers
+          xcodebuild -version
+          swift --version
+
+      - name: Run Swift checks
+        run: scripts/ci-swift-check.sh "$BUILD_CONFIGURATION"
+
+      - name: Package macOS artifact
+        run: scripts/package-macos.sh "$BUILD_CONFIGURATION"
+
+      - name: Upload packaged artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: RightTool-${{ env.ARTIFACT_SUFFIX }}-${{ inputs.version || github.ref_name }}
+          path: dist/*.zip
+          if-no-files-found: error
+          compression-level: 0

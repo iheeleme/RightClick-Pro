@@ -1,0 +1,9 @@
+.build/
+.swiftpm/
+DerivedData/
+dist/
+*.xcresult
+*.xcarchive
+*.dSYM/
+*.zip
+.DS_Store
