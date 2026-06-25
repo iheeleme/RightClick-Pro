@@ -29,6 +29,14 @@ App Group Container
 
 Config writes use atomic file replacement via `Data.write(..., .atomic)`. Operation logs are stored as JSONL and capped to the latest 500 records by default.
 
+Unsigned/local preview builds may not have an App Group entitlement. In that case, the runtime falls back to:
+
+```text
+~/Library/Application Support/com.righttool.app
+```
+
+On machines where `group.com.righttool.app` is available, the app writes default preview configuration there. The bootstrapper injects existing Desktop, Downloads, Documents, and Code directories as monitored/common directories.
+
 ## Authorization Model
 
 The ActionRunner builds an `AuthorizedPathValidator` from monitored and common directory bookmarks. MVP file operations must target authorized paths only.

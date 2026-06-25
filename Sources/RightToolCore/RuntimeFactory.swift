@@ -1,6 +1,10 @@
 import Foundation
 
 public enum RightToolRuntimeFactory {
+    public static func defaultStoragePaths() -> RightToolStoragePaths {
+        RightToolStoragePaths.defaultForCurrentProcess()
+    }
+
     public static func makeActionRunner(paths: RightToolStoragePaths) -> ActionRunner {
         let configProvider = FileBackedRightToolConfigProvider(paths: paths)
         let operationLog = JSONLineOperationLog(url: paths.operationLogURL)

@@ -22,6 +22,11 @@ This session implemented the first code slice for the RightTool MVP:
 * `RightToolActionRunnerService` XPC service scaffold.
 * `RightToolAppPreview` SwiftUI/AppKit menu-bar/settings scaffold.
 * `RightToolFinderExtension` Finder Sync scaffold.
+* Default configuration bootstrap:
+  * App Group storage when available.
+  * Application Support fallback for unsigned/local preview builds.
+  * Auto-injected monitored/common directories for Desktop, Downloads, Documents, and Code when present.
+  * Auto-generated menu actions for common directories, file templates, and developer entrypoints.
 * XCTest test files for core behavior.
 * `docs/architecture.md` with process/storage/boundary notes.
 * GitHub Actions packaging workflow:
@@ -55,6 +60,11 @@ Because of that, verification used direct `swiftc` checks:
   * `RightToolActionRunnerService`;
   * `RightToolAppPreview`;
   * `RightToolFinderExtension`.
+* Local preview app was rebuilt and installed into `/Applications/RightTool.app`.
+* Runtime config injection was verified at:
+  * `/Users/iheeleme/Library/Group Containers/group.com.righttool.app/config.json`
+  * `/Users/iheeleme/Library/Group Containers/group.com.righttool.app/bookmarks.json`
+  * `/Users/iheeleme/Library/Group Containers/group.com.righttool.app/operation-log.jsonl`
 
 XCTest files are present but could not be run/typechecked directly because the Command Line Tools install does not expose an `XCTest` module and SwiftPM is blocked by the manifest-linking issue. Full XCTest execution should be done after installing/selecting Xcode.
 

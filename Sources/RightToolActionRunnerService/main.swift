@@ -20,9 +20,7 @@ let paths: RightToolStoragePaths
 if let override = ProcessInfo.processInfo.environment["RIGHTTOOL_STORAGE_PATH"] {
     paths = RightToolStoragePaths(baseURL: URL(fileURLWithPath: override))
 } else {
-    paths = (try? RightToolStoragePaths.appGroup()) ?? RightToolStoragePaths(
-        baseURL: FileManager.default.temporaryDirectory.appendingPathComponent("RightTool")
-    )
+    paths = RightToolStoragePaths.defaultForCurrentProcess()
 }
 
 let runner = RightToolRuntimeFactory.makeActionRunner(paths: paths)

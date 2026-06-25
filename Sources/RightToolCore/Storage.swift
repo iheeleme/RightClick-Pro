@@ -21,6 +21,28 @@ public struct RightToolStoragePaths: Equatable {
         }
         return RightToolStoragePaths(baseURL: baseURL)
     }
+
+    public static func applicationSupport(
+        fileManager: FileManager = .default,
+        bundleIdentifier: String = "com.righttool.app"
+    ) -> RightToolStoragePaths {
+        let baseURL = fileManager.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library")
+            .appendingPathComponent("Application Support")
+            .appendingPathComponent(bundleIdentifier)
+        return RightToolStoragePaths(baseURL: baseURL)
+    }
+
+    public static func defaultForCurrentProcess(
+        appGroupIdentifier: String = RightToolConstants.defaultAppGroupIdentifier,
+        fileManager: FileManager = .default
+    ) -> RightToolStoragePaths {
+        if let appGroupURL = fileManager.containerURL(forSecurityApplicationGroupIdentifier: appGroupIdentifier) {
+            return RightToolStoragePaths(baseURL: appGroupURL)
+        }
+
+        return applicationSupport(fileManager: fileManager)
+    }
 }
 
 public enum StorageError: Error, Equatable {

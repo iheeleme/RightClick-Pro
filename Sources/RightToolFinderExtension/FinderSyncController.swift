@@ -10,9 +10,7 @@ final class FinderSyncController: FIFinderSync {
     private let xpcClient = RightToolActionRunnerXPCClient()
 
     override init() {
-        let paths = (try? RightToolStoragePaths.appGroup()) ?? RightToolStoragePaths(
-            baseURL: FileManager.default.temporaryDirectory.appendingPathComponent("RightTool")
-        )
+        let paths = RightToolStoragePaths.defaultForCurrentProcess()
         self.configProvider = FileBackedRightToolConfigProvider(paths: paths)
         super.init()
         reloadMonitoredDirectories()
