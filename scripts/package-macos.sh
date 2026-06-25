@@ -215,6 +215,26 @@ write_entitlements_plist() {
   <array>
     <string>$APP_GROUP_IDENTIFIER</string>
   </array>
+  <key>com.apple.security.files.user-selected.read-write</key>
+  <true/>
+  <key>com.apple.security.files.bookmarks.app-scope</key>
+  <true/>
+</dict>
+</plist>
+PLIST
+}
+
+write_xpc_entitlements_plist() {
+  local plist_path="$1"
+  cat > "$plist_path" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>com.apple.security.application-groups</key>
+  <array>
+    <string>$APP_GROUP_IDENTIFIER</string>
+  </array>
 </dict>
 </plist>
 PLIST
@@ -332,9 +352,11 @@ build_preview_executables() {
 
 codesign_if_available() {
   local entitlements_path="$1"
-  local app_path="$2"
-  local xpc_path="$3"
-  local appex_path="$4"
+  local xpc_entitlements_path="$2"
+  local app_path="$3"
+  local xpc_path="$4"
+  local appex_path="$5"
+  local appex_xpc_path="$6"
 
   if ! command -v codesign >/dev/null 2>&1; then
     echo "codesign not found; leaving preview bundle unsigned." >&2
@@ -344,7 +366,9 @@ codesign_if_available() {
   codesign --force --sign "$CODE_SIGN_IDENTITY" "$app_path/Contents/Frameworks/libRightToolCore.dylib"
   codesign --force --sign "$CODE_SIGN_IDENTITY" "$xpc_path/Contents/Frameworks/libRightToolCore.dylib"
   codesign --force --sign "$CODE_SIGN_IDENTITY" "$appex_path/Contents/Frameworks/libRightToolCore.dylib"
-  codesign --force --sign "$CODE_SIGN_IDENTITY" --entitlements "$entitlements_path" "$xpc_path"
+  codesign --force --sign "$CODE_SIGN_IDENTITY" "$appex_xpc_path/Contents/Frameworks/libRightToolCore.dylib"
+  codesign --force --sign "$CODE_SIGN_IDENTITY" --entitlements "$xpc_entitlements_path" "$xpc_path"
+  codesign --force --sign "$CODE_SIGN_IDENTITY" --entitlements "$xpc_entitlements_path" "$appex_xpc_path"
   codesign --force --sign "$CODE_SIGN_IDENTITY" --entitlements "$entitlements_path" "$appex_path"
   codesign --force --sign "$CODE_SIGN_IDENTITY" --entitlements "$entitlements_path" "$app_path"
 }
@@ -353,15 +377,18 @@ validate_preview_bundle() {
   local app_path="$1"
   local xpc_path="$2"
   local appex_path="$3"
+  local appex_xpc_path="$4"
   local appex_executable="$appex_path/Contents/MacOS/RightToolFinderExtension"
   local extension_point
 
   test -x "$app_path/Contents/MacOS/$APP_NAME"
   test -x "$xpc_path/Contents/MacOS/RightToolActionRunner"
+  test -x "$appex_xpc_path/Contents/MacOS/RightToolActionRunner"
   test -x "$appex_executable"
   test -f "$app_path/Contents/Frameworks/libRightToolCore.dylib"
   test -f "$xpc_path/Contents/Frameworks/libRightToolCore.dylib"
   test -f "$appex_path/Contents/Frameworks/libRightToolCore.dylib"
+  test -f "$appex_xpc_path/Contents/Frameworks/libRightToolCore.dylib"
 
   extension_point="$(/usr/libexec/PlistBuddy -c "Print :NSExtension:NSExtensionPointIdentifier" "$appex_path/Contents/Info.plist")"
   if [[ "$extension_point" != "com.apple.FinderSync" ]]; then
@@ -375,6 +402,16 @@ validate_preview_bundle() {
   fi
 
   if command -v codesign >/dev/null 2>&1; then
+    local entitlements_dump
+    entitlements_dump="$(mktemp)"
+    codesign -d --entitlements :- "$appex_xpc_path" >"$entitlements_dump" 2>/dev/null || true
+    if /usr/libexec/PlistBuddy -c "Print :com.apple.security.app-sandbox" "$entitlements_dump" >/dev/null 2>&1; then
+      echo "Preview ActionRunner XPC must not be app-sandboxed." >&2
+      rm -f "$entitlements_dump"
+      exit 65
+    fi
+    rm -f "$entitlements_dump"
+
     codesign --verify --deep --strict --verbose=2 "$app_path"
   fi
 }
@@ -382,10 +419,12 @@ validate_preview_bundle() {
 package_swiftpm_preview_bundle() {
   local staging="$PWD/$DIST_DIR/staging"
   local app_path="$staging/$APP_NAME.app"
-  local xpc_path="$app_path/Contents/Library/XPCServices/RightToolActionRunner.xpc"
+  local xpc_path="$app_path/Contents/XPCServices/RightToolActionRunner.xpc"
   local appex_path="$app_path/Contents/PlugIns/RightToolFinderExtension.appex"
+  local appex_xpc_path="$appex_path/Contents/XPCServices/RightToolActionRunner.xpc"
   local manual_build_dir="$PWD/$DIST_DIR/manual-build"
   local entitlements_path="$manual_build_dir/RightTool.entitlements"
+  local xpc_entitlements_path="$manual_build_dir/RightToolActionRunner.entitlements"
 
   rm -rf "$staging" "$manual_build_dir"
   mkdir -p \
@@ -393,8 +432,11 @@ package_swiftpm_preview_bundle() {
     "$app_path/Contents/Frameworks" \
     "$app_path/Contents/PlugIns" \
     "$app_path/Contents/Resources" \
+    "$app_path/Contents/XPCServices" \
     "$xpc_path/Contents/MacOS" \
-    "$xpc_path/Contents/Frameworks"
+    "$xpc_path/Contents/Frameworks" \
+    "$appex_xpc_path/Contents/MacOS" \
+    "$appex_xpc_path/Contents/Frameworks"
 
   build_righttool_core_dylib "$manual_build_dir/core"
   build_preview_executables \
@@ -406,6 +448,7 @@ package_swiftpm_preview_bundle() {
   write_app_info_plist "$app_path/Contents/Info.plist"
   write_xpc_info_plist "$xpc_path/Contents/Info.plist"
   build_finder_extension_bundle "$manual_build_dir/core" "$appex_path"
+  ditto "$xpc_path" "$appex_xpc_path"
 
   cat > "$app_path/Contents/Resources/PACKAGING-NOTES.txt" <<'NOTES'
 RightTool SwiftPM preview bundle.
@@ -417,8 +460,9 @@ Developer ID signed or notarized.
 NOTES
 
   write_entitlements_plist "$entitlements_path"
-  codesign_if_available "$entitlements_path" "$app_path" "$xpc_path" "$appex_path"
-  validate_preview_bundle "$app_path" "$xpc_path" "$appex_path"
+  write_xpc_entitlements_plist "$xpc_entitlements_path"
+  codesign_if_available "$entitlements_path" "$xpc_entitlements_path" "$app_path" "$xpc_path" "$appex_path" "$appex_xpc_path"
+  validate_preview_bundle "$app_path" "$xpc_path" "$appex_path" "$appex_xpc_path"
 
   mkdir -p "$DIST_DIR"
   ditto -c -k --keepParent "$app_path" "$DIST_DIR/$APP_NAME-$(version_name)-$ARTIFACT_SUFFIX-preview.zip"

@@ -42,12 +42,15 @@ The preview bundle contains:
 RightTool.app
 ├── Contents/MacOS/RightTool
 ├── Contents/PlugIns/RightToolFinderExtension.appex
-├── Contents/Library/XPCServices/RightToolActionRunner.xpc
+│   └── Contents/XPCServices/RightToolActionRunner.xpc
+├── Contents/XPCServices/RightToolActionRunner.xpc
 ├── Contents/Frameworks/libRightToolCore.dylib
 └── Contents/Resources/PACKAGING-NOTES.txt
 ```
 
-The Finder Sync extension is manually linked with `_NSExtensionMain` so PlugInKit can discover it during local testing. The bundle is ad-hoc signed when `codesign` is available, but it is not Developer ID signed or notarized. Downloaded builds may still require removing quarantine before local testing.
+The Finder Sync extension is manually linked with `_NSExtensionMain` so PlugInKit can discover it during local testing. The ActionRunner XPC service is embedded in both the app and the Finder extension bundle so `NSXPCConnection(serviceName:)` can resolve it from either process. The bundle is ad-hoc signed when `codesign` is available, but it is not Developer ID signed or notarized. Downloaded builds may still require removing quarantine before local testing.
+
+The preview app and Finder Sync extension are sandboxed and include App Group, user-selected read/write, and app-scope bookmark entitlements. The preview ActionRunner XPC service is signed with the App Group entitlement but without app sandboxing so local smoke tests can exercise the auto-injected Desktop/Documents/Downloads/Code directories. Runtime authorization still rejects paths outside the configured monitored/common directory set.
 
 ## Switching to Full Xcode Packaging
 

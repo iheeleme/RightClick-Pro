@@ -36,6 +36,7 @@ public final class ActionRunner {
     private let cutClipboard: CutClipboardStoring
     private let urlOpener: URLOpening
     private let developerAppOpener: DeveloperAppOpening
+    private let bookmarkResolver: BookmarkResolving
 
     public init(
         configProvider: RightToolConfigProviding,
@@ -43,7 +44,8 @@ public final class ActionRunner {
         operationLog: OperationLogging,
         cutClipboard: CutClipboardStoring,
         urlOpener: URLOpening,
-        developerAppOpener: DeveloperAppOpening
+        developerAppOpener: DeveloperAppOpening,
+        bookmarkResolver: BookmarkResolving = SecurityScopedBookmarkResolver()
     ) {
         self.configProvider = configProvider
         self.fileService = fileService
@@ -51,6 +53,7 @@ public final class ActionRunner {
         self.cutClipboard = cutClipboard
         self.urlOpener = urlOpener
         self.developerAppOpener = developerAppOpener
+        self.bookmarkResolver = bookmarkResolver
     }
 
     public func run(_ request: ActionRequest) -> ActionResult {
@@ -61,12 +64,16 @@ public final class ActionRunner {
                 throw ActionRunnerError.actionNotFound(request.actionID)
             }
 
-            let authorizedURLs = bookmarks.urls(for: config.monitoredDirectoryIDs + config.commonDirectoryIDs)
-            let validator = AuthorizedPathValidator(authorizedDirectories: authorizedURLs)
+            let bookmarkAccess = try AuthorizedBookmarkAccess(
+                catalog: bookmarks,
+                ids: config.monitoredDirectoryIDs + config.commonDirectoryIDs,
+                resolver: bookmarkResolver
+            )
+            let validator = AuthorizedPathValidator(authorizedDirectories: bookmarkAccess.urls)
             let result = try execute(
                 action,
                 config: config,
-                bookmarks: bookmarks,
+                bookmarkAccess: bookmarkAccess,
                 validator: validator,
                 request: request
             )
@@ -95,26 +102,26 @@ public final class ActionRunner {
     private func execute(
         _ action: RightToolAction,
         config: RightToolConfig,
-        bookmarks: DirectoryBookmarkCatalog,
+        bookmarkAccess: AuthorizedBookmarkAccess,
         validator: AuthorizedPathValidator,
         request: ActionRequest
     ) throws -> ActionResult {
         switch action.kind {
         case .openDirectory:
-            let directory = try directoryURL(from: action, bookmarks: bookmarks)
+            let directory = try directoryURL(from: action, bookmarkAccess: bookmarkAccess)
             try validator.validate(directory)
             try urlOpener.open(directory)
             return ActionResult(requestID: request.id, status: .success, message: "已打开目录", affectedURLs: [directory])
 
         case .moveToDirectory:
-            let directory = try directoryURL(from: action, bookmarks: bookmarks)
+            let directory = try directoryURL(from: action, bookmarkAccess: bookmarkAccess)
             try validator.validate(request.context.selectedItems)
             try validator.validate(directory)
             let outcomes = try fileService.move(request.context.selectedItems, to: directory)
             return ActionResult(requestID: request.id, status: .success, message: "移动完成", affectedURLs: outcomes.map(\.destinationURL))
 
         case .copyToDirectory:
-            let directory = try directoryURL(from: action, bookmarks: bookmarks)
+            let directory = try directoryURL(from: action, bookmarkAccess: bookmarkAccess)
             try validator.validate(request.context.selectedItems)
             try validator.validate(directory)
             let outcomes = try fileService.copy(request.context.selectedItems, to: directory)
@@ -153,14 +160,17 @@ public final class ActionRunner {
         }
     }
 
-    private func directoryURL(from action: RightToolAction, bookmarks: DirectoryBookmarkCatalog) throws -> URL {
+    private func directoryURL(from action: RightToolAction, bookmarkAccess: AuthorizedBookmarkAccess) throws -> URL {
         guard let directoryID = action.payload.directoryID else {
             throw ActionRunnerError.missingPayload("directoryID")
         }
-        guard let bookmark = bookmarks.bookmark(id: directoryID) else {
+        do {
+            return try bookmarkAccess.url(for: directoryID)
+        } catch BookmarkError.missingBookmark(_) {
             throw ActionRunnerError.directoryNotFound(directoryID)
+        } catch {
+            throw error
         }
-        return bookmark.fallbackURL
     }
 
     private func fileTemplate(from action: RightToolAction, config: RightToolConfig) throws -> FileTemplate {

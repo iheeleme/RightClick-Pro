@@ -111,4 +111,49 @@ final class ActionRunnerTests: XCTestCase {
         XCTAssertTrue(FileManager.default.fileExists(atPath: targetDirectory.appendingPathComponent("draft.txt").path))
         XCTAssertNil(try clipboard.load())
     }
+
+    func testOpenDirectoryUsesResolvedBookmarkURL() throws {
+        let resolvedDirectory = try temporaryDirectory()
+        let staleFallbackDirectory = URL(fileURLWithPath: "/RightToolTests/stale")
+        let bookmark = DirectoryBookmark(id: "workspace", displayName: "Workspace", path: staleFallbackDirectory.path)
+        let action = RightToolAction(
+            id: "open-workspace",
+            title: "Open Workspace",
+            kind: .openDirectory,
+            visibility: [.container],
+            placement: .submenu,
+            group: .commonDirectories,
+            order: 1,
+            payload: ActionPayload(directoryID: "workspace")
+        )
+        let config = RightToolConfig(
+            monitoredDirectoryIDs: ["workspace"],
+            commonDirectoryIDs: ["workspace"],
+            actions: [action]
+        )
+        let log = InMemoryOperationLog()
+        let opener = RecordingURLOpener()
+        let runner = ActionRunner(
+            configProvider: StaticRightToolConfigProvider(
+                config: config,
+                bookmarkCatalog: DirectoryBookmarkCatalog(bookmarks: [bookmark])
+            ),
+            operationLog: log,
+            cutClipboard: InMemoryCutClipboardStore(),
+            urlOpener: opener,
+            developerAppOpener: opener,
+            bookmarkResolver: MappingBookmarkResolver(urlsByID: ["workspace": resolvedDirectory])
+        )
+
+        let result = runner.run(
+            ActionRequest(
+                actionID: "open-workspace",
+                context: FinderContext(invocation: .container, targetDirectory: resolvedDirectory)
+            )
+        )
+
+        XCTAssertEqual(result.status, .success)
+        XCTAssertEqual(opener.openedURLs, [resolvedDirectory])
+        XCTAssertEqual(result.affectedURLs, [resolvedDirectory])
+    }
 }

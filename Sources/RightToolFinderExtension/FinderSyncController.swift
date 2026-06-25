@@ -8,6 +8,8 @@ final class FinderSyncController: FIFinderSync {
     private let menuBuilder = MenuBuilder()
     private let configProvider: RightToolConfigProviding
     private let xpcClient = RightToolActionRunnerXPCClient()
+    private var pendingMenuActions: [Int: PendingMenuAction] = [:]
+    private var nextMenuActionTag = 1
 
     override init() {
         let paths = RightToolStoragePaths.defaultForCurrentProcess()
@@ -21,6 +23,9 @@ final class FinderSyncController: FIFinderSync {
         guard let config = try? configProvider.loadConfig() else {
             return nil
         }
+
+        pendingMenuActions.removeAll()
+        nextMenuActionTag = 1
 
         let presentation = menuBuilder.buildMenu(config: config, context: context)
         let menu = NSMenu(title: "RightTool")
@@ -83,22 +88,38 @@ final class FinderSyncController: FIFinderSync {
     }
 
     private func nsMenuItem(for item: MenuItemPresentation, context: FinderContext) -> NSMenuItem {
-        let menuItem = NSMenuItem(title: item.title, action: #selector(performAction(_:)), keyEquivalent: "")
+        let tag = nextMenuActionTag
+        nextMenuActionTag += 1
+        pendingMenuActions[tag] = PendingMenuAction(actionID: item.actionID, context: context)
+
+        let menuItem = NSMenuItem(title: item.title, action: #selector(performRightToolAction(_:)), keyEquivalent: "")
         menuItem.target = self
-        menuItem.representedObject = PendingMenuAction(actionID: item.actionID, context: context)
+        // Finder Sync does not reliably preserve representedObject when
+        // dispatching the copied menu item back to the extension process.
+        menuItem.tag = tag
         return menuItem
     }
 
-    @objc private func performAction(_ sender: NSMenuItem) {
-        guard let pending = sender.representedObject as? PendingMenuAction else {
+    @objc(performRightToolAction:)
+    func performRightToolAction(_ sender: NSMenuItem) {
+        guard let pending = pendingMenuActions[sender.tag] else {
+            NSLog("RightTool Finder extension received menu action without pending payload for tag: \(sender.tag)")
             return
         }
+        NSLog("RightTool Finder extension performing action: \(pending.actionID)")
         let request = ActionRequest(actionID: pending.actionID, context: pending.context)
         sendToActionRunner(request)
     }
 
     private func sendToActionRunner(_ request: ActionRequest) {
-        xpcClient.perform(request) { _ in }
+        xpcClient.perform(request) { result in
+            switch result {
+            case .success(let actionResult):
+                NSLog("RightTool ActionRunner result for \(request.actionID): \(actionResult.status.rawValue) \(actionResult.message)")
+            case .failure(let error):
+                NSLog("RightTool ActionRunner failed for \(request.actionID): \(error.localizedDescription)")
+            }
+        }
     }
 
     private func title(for group: MenuGroup) -> String {

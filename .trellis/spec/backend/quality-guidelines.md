@@ -79,14 +79,19 @@ Questions to answer:
   APP_GROUP_IDENTIFIER=group.com.righttool.app
   CODE_SIGN_IDENTITY=-
   ```
+- Preview app and Finder extension entitlements include app sandbox, App Group, user-selected read/write, and app-scope bookmarks.
+- Preview ActionRunner XPC entitlements include App Group but intentionally omit app sandbox for local smoke tests against auto-injected Desktop/Documents/Downloads/Code paths. Runtime authorization must still validate all file mutations against configured monitored/common directories.
 
 #### 3. Contracts
 
 - GitHub workflow must use explicit macOS runner labels, not `macos-latest`, to avoid packaging drift when GitHub changes aliases.
 - The default packaging path is SwiftPM preview bundling while no complete Xcode project exists.
 - The SwiftPM preview bundle must still include `Contents/PlugIns/RightToolFinderExtension.appex`.
+- The preview bundle must place `RightToolActionRunner.xpc` in `Contents/XPCServices/` and also inside `RightToolFinderExtension.appex/Contents/XPCServices/` so `NSXPCConnection(serviceName:)` can resolve the service from the main app and the Finder extension process.
 - The preview Finder Sync `.appex` must be a Mach-O `EXECUTE` binary linked with `_NSExtensionMain`; a Swift dylib inside an `.appex` is not a valid Finder Sync extension bundle for PlugInKit discovery.
 - The preview `.appex` Info.plist must contain `NSExtensionPointIdentifier=com.apple.FinderSync`.
+- Finder Sync menu leaf items must not rely on `representedObject` for action payloads after Finder copies menu items. Use a stable `tag` or another Finder-preserved primitive to map selected menu items back to pending actions.
+- The ActionRunner must resolve directory bookmarks and hold security-scoped access during request execution before creating the authorized-path validator.
 - The preview app, XPC service, Finder extension, and their embedded `libRightToolCore.dylib` copies must be signed before zipping. Ad-hoc signing is acceptable for local test artifacts; public distribution still requires Developer ID signing and notarization.
 - The packaging script must validate the preview bundle before upload so CI cannot publish an artifact that lacks a discoverable Finder Sync extension.
 - When both `RIGHTTOOL_XCODE_PROJECT` and `RIGHTTOOL_XCODE_SCHEME` are configured, packaging must use `xcodebuild archive`.
@@ -102,13 +107,15 @@ Questions to answer:
 - No Xcode variables are set -> build SwiftPM preview bundle.
 - Preview Finder Sync binary is not `EXECUTE` -> exit 65.
 - Preview Finder Sync extension point is not `com.apple.FinderSync` -> exit 65.
+- Preview bundle is missing app or extension-local `RightToolActionRunner.xpc` -> packaging fails before zip upload.
+- Preview XPC service has app sandbox entitlement -> local smoke tests against auto-injected protected folders may fail.
 - Preview deep code-sign verification fails -> packaging fails before zip upload.
 - No `dist/*.zip` output in GitHub Actions -> artifact upload must fail.
 
 #### 5. Good/Base/Bad Cases
 
 - Good: tag `v1.2.3` produces `RightTool-1.2.3-<arch>-preview.zip` containing `RightToolFinderExtension.appex` as an `_NSExtensionMain` executable, or an exported Xcode archive artifact.
-- Base: manual workflow dispatch with no Xcode env vars produces a SwiftPM preview bundle with App, XPC service, Finder extension, and shared core dylib.
+- Base: manual workflow dispatch with no Xcode env vars produces a SwiftPM preview bundle with App, app-local XPC service, extension-local XPC service, Finder extension, and shared core dylib.
 - Bad: `RIGHTTOOL_XCODE_PROJECT` set without `RIGHTTOOL_XCODE_SCHEME` silently falls back to preview bundling.
 - Bad: preview bundle contains `Contents/PlugIns/RightToolFinderExtension.appex` but the appex executable is a `DYLIB`.
 
@@ -127,6 +134,9 @@ Questions to answer:
   scripts/package-macos.sh debug
   codesign --verify --deep --strict --verbose=2 dist/staging/RightTool.app
   otool -hv dist/staging/RightTool.app/Contents/PlugIns/RightToolFinderExtension.appex/Contents/MacOS/RightToolFinderExtension
+  test -x dist/staging/RightTool.app/Contents/XPCServices/RightToolActionRunner.xpc/Contents/MacOS/RightToolActionRunner
+  test -x dist/staging/RightTool.app/Contents/PlugIns/RightToolFinderExtension.appex/Contents/XPCServices/RightToolActionRunner.xpc/Contents/MacOS/RightToolActionRunner
+  codesign -d --entitlements :- dist/staging/RightTool.app/Contents/PlugIns/RightToolFinderExtension.appex/Contents/XPCServices/RightToolActionRunner.xpc
   ```
 - Run Swift type checks or `swift test` where the local toolchain allows it.
 - For future Xcode project work, run at least one GitHub Actions workflow dispatch before calling packaging complete.
@@ -164,3 +174,30 @@ Correct:
 ```text
 RightToolFinderExtension.appex/Contents/MacOS/RightToolFinderExtension: Mach-O ... executable
 ```
+
+Wrong:
+```swift
+menuItem.representedObject = PendingMenuAction(actionID: item.actionID, context: context)
+```
+
+Correct:
+```swift
+menuItem.tag = tag
+pendingMenuActions[tag] = PendingMenuAction(actionID: item.actionID, context: context)
+```
+
+Wrong:
+```xml
+<key>com.apple.security.app-sandbox</key>
+<true/>
+```
+inside the preview ActionRunner XPC entitlement file.
+
+Correct:
+```xml
+<key>com.apple.security.application-groups</key>
+<array>
+  <string>group.com.righttool.app</string>
+</array>
+```
+for the preview ActionRunner XPC entitlement file, with path authorization enforced in `ActionRunner`.

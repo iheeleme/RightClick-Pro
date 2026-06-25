@@ -85,3 +85,51 @@ public struct SecurityScopedBookmarkResolver: BookmarkResolving {
         )
     }
 }
+
+public final class AuthorizedBookmarkAccess {
+    public let urlsByID: [String: URL]
+    private let accessedURLs: [URL]
+
+    public init(
+        catalog: DirectoryBookmarkCatalog,
+        ids: [String],
+        resolver: BookmarkResolving = SecurityScopedBookmarkResolver()
+    ) throws {
+        var seenIDs = Set<String>()
+        var resolvedURLs: [String: URL] = [:]
+        var scopedURLs: [URL] = []
+
+        for id in ids where seenIDs.insert(id).inserted {
+            guard let bookmark = catalog.bookmark(id: id) else {
+                continue
+            }
+
+            let url = try resolver.resolve(bookmark)
+            resolvedURLs[id] = url
+
+            if url.startAccessingSecurityScopedResource() {
+                scopedURLs.append(url)
+            }
+        }
+
+        self.urlsByID = resolvedURLs
+        self.accessedURLs = scopedURLs
+    }
+
+    deinit {
+        for url in accessedURLs {
+            url.stopAccessingSecurityScopedResource()
+        }
+    }
+
+    public var urls: [URL] {
+        Array(urlsByID.values)
+    }
+
+    public func url(for id: String) throws -> URL {
+        guard let url = urlsByID[id] else {
+            throw BookmarkError.missingBookmark(id)
+        }
+        return url
+    }
+}
