@@ -43,4 +43,12 @@ The ActionRunner builds an `AuthorizedPathValidator` from monitored and common d
 
 ## Current Build Note
 
-The current development machine has Swift Command Line Tools but no full Xcode installation selected, so SwiftPM tests cover the core module. Building and signing the final `.app` / `.appex` bundle requires opening the package/project in Xcode and wiring the Finder Sync extension and XPC service targets into a macOS app bundle.
+The current development machine has Swift Command Line Tools but no full Xcode installation selected, so SwiftPM tests cover the core module. The preview packaging script manually embeds:
+
+```text
+RightTool.app
+├── Contents/PlugIns/RightToolFinderExtension.appex
+└── Contents/Library/XPCServices/RightToolActionRunner.xpc
+```
+
+The preview `.appex` is linked as an `_NSExtensionMain` executable so PlugInKit can discover it for local Finder Sync testing. A complete Xcode project plus Developer ID signing and notarization are still required before treating the artifact as a normal public macOS download.

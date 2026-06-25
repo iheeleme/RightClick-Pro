@@ -2,6 +2,7 @@
 .swiftpm/
 DerivedData/
 dist/
+dist-*/
 *.xcresult
 *.xcarchive
 *.dSYM/

@@ -30,7 +30,7 @@ RightTool-x86_64-0.1.0-test.1
 
 ## Current Artifact
 
-The repository currently has a Swift Package scaffold, not a complete Xcode `.app` project with embedded Finder Sync and XPC targets. Because of that, the workflow produces a SwiftPM preview bundle:
+The repository currently has a Swift Package scaffold, not a complete Xcode `.app` project. Because of that, the workflow produces a SwiftPM preview bundle:
 
 ```text
 dist/RightTool-<version>-<arch>-preview.zip
@@ -41,11 +41,13 @@ The preview bundle contains:
 ```text
 RightTool.app
 ├── Contents/MacOS/RightTool
+├── Contents/PlugIns/RightToolFinderExtension.appex
 ├── Contents/Library/XPCServices/RightToolActionRunner.xpc
+├── Contents/Frameworks/libRightToolCore.dylib
 └── Contents/Resources/PACKAGING-NOTES.txt
 ```
 
-This artifact is unsigned and does not yet include a packaged Finder Sync `.appex`.
+The Finder Sync extension is manually linked with `_NSExtensionMain` so PlugInKit can discover it during local testing. The bundle is ad-hoc signed when `codesign` is available, but it is not Developer ID signed or notarized. Downloaded builds may still require removing quarantine before local testing.
 
 ## Switching to Full Xcode Packaging
 
@@ -66,7 +68,7 @@ If `RIGHTTOOL_EXPORT_OPTIONS_PLIST` points to an export options plist, the scrip
 
 ## Signing and Notarization
 
-The current workflow intentionally builds unsigned artifacts. For signed distribution, add the Apple certificate and provisioning material as GitHub Actions secrets, then import the certificate into a temporary keychain during the workflow before `xcodebuild archive`.
+The current workflow intentionally builds non-notarized test artifacts. For signed distribution, add the Apple certificate and provisioning material as GitHub Actions secrets, then import the certificate into a temporary keychain during the workflow before `xcodebuild archive`.
 
 Relevant official references:
 
