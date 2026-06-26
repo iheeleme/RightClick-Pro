@@ -567,7 +567,6 @@ private enum SettingsTheme {
     static let ink = Color(red: 0.07, green: 0.09, blue: 0.16)
     static let muted = Color(red: 0.36, green: 0.40, blue: 0.52)
     static let hairline = Color.black.opacity(0.08)
-    static let panelShadow = Color(red: 0.12, green: 0.16, blue: 0.36).opacity(0.08)
 
     static var windowBackground: LinearGradient {
         LinearGradient(
@@ -731,20 +730,13 @@ struct SettingsDetailShell<Content: View>: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            ViewThatFits(in: .horizontal) {
-                HStack(alignment: .center, spacing: 16) {
-                    titleBlock
-                        .layoutPriority(1)
+            HStack(alignment: .center, spacing: 16) {
+                titleBlock
+                    .layoutPriority(1)
 
-                    Spacer(minLength: 12)
+                Spacer(minLength: 12)
 
-                    headerActions
-                }
-
-                VStack(alignment: .leading, spacing: 12) {
-                    titleBlock
-                    headerActions
-                }
+                headerActions
             }
             .padding(.horizontal, 28)
             .padding(.top, 28)
@@ -785,7 +777,7 @@ struct SettingsDetailShell<Content: View>: View {
 
             SaveConfigButton(viewModel: viewModel)
         }
-        .frame(maxWidth: .infinity, alignment: .trailing)
+        .frame(alignment: .trailing)
     }
 }
 
@@ -843,7 +835,7 @@ struct DesignPageScroll<Content: View>: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
+            LazyVStack(alignment: .leading, spacing: 20) {
                 content
             }
             .padding(.horizontal, 28)
@@ -865,7 +857,6 @@ struct DesignPanel<Content: View>: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(.white.opacity(0.9), in: RoundedRectangle(cornerRadius: 8))
             .overlay(RoundedRectangle(cornerRadius: 8).stroke(SettingsTheme.hairline))
-            .shadow(color: SettingsTheme.panelShadow, radius: 18, x: 0, y: 10)
     }
 }
 
@@ -925,17 +916,10 @@ struct PageToolbar<Leading: View, Trailing: View>: View {
     @ViewBuilder var trailing: Trailing
 
     var body: some View {
-        ViewThatFits(in: .horizontal) {
-            HStack(alignment: .center, spacing: 16) {
-                leading
-                Spacer(minLength: 16)
-                trailing
-            }
-
-            VStack(alignment: .leading, spacing: 12) {
-                leading
-                trailing
-            }
+        HStack(alignment: .center, spacing: 16) {
+            leading
+            Spacer(minLength: 16)
+            trailing
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -961,31 +945,16 @@ struct PreviewSection<Intro: View>: View {
 
     var body: some View {
         DesignPanel {
-            ViewThatFits(in: .horizontal) {
-                HStack(alignment: .center, spacing: 24) {
-                    intro
-                        .frame(width: 260, alignment: .leading)
-                    FinderMenuPreview(
-                        title: nil,
-                        caption: nil,
-                        rootItems: rootItems,
-                        submenuTitle: submenuTitle,
-                        submenuItems: submenuItems,
-                        isFramed: false
-                    )
-                }
-
-                VStack(alignment: .leading, spacing: 18) {
-                    intro
-                    FinderMenuPreview(
-                        title: nil,
-                        caption: nil,
-                        rootItems: rootItems,
-                        submenuTitle: submenuTitle,
-                        submenuItems: submenuItems,
-                        isFramed: false
-                    )
-                }
+            VStack(alignment: .leading, spacing: 18) {
+                intro
+                FinderMenuPreview(
+                    title: nil,
+                    caption: nil,
+                    rootItems: rootItems,
+                    submenuTitle: submenuTitle,
+                    submenuItems: submenuItems,
+                    isFramed: false
+                )
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
@@ -1188,7 +1157,6 @@ struct OverviewFeatureCard: View {
             .frame(maxWidth: .infinity, minHeight: 154, alignment: .topLeading)
             .background(.white.opacity(0.92), in: RoundedRectangle(cornerRadius: 8))
             .overlay(RoundedRectangle(cornerRadius: 8).stroke(SettingsTheme.hairline))
-            .shadow(color: SettingsTheme.panelShadow, radius: 16, x: 0, y: 10)
         }
         .buttonStyle(.plain)
     }
@@ -1250,11 +1218,13 @@ struct DirectoryListView: View {
 
     private var previewItems: [FinderMenuItem] {
         Array(bookmarks.prefix(7)).map {
-            FinderMenuItem(title: $0.displayName, systemImage: directoryIcon(for: $0), tint: directoryTint(for: $0))
+            FinderMenuItem(title: $0.displayName, systemImage: directoryIcon(for: $0), tint: directoryTint(for: $0), id: $0.id)
         }
     }
 
     var body: some View {
+        let rows = filteredBookmarks
+
         DesignPageScroll {
             PageToolbar {
                 SearchField(placeholder: "搜索目录名称或路径", text: $searchText)
@@ -1265,15 +1235,15 @@ struct DirectoryListView: View {
             }
 
             DesignPanel(padding: 0) {
-                VStack(spacing: 0) {
+                LazyVStack(spacing: 0) {
                     DirectoryTableHeader()
-                    ForEach(filteredBookmarks) { bookmark in
+                    ForEach(Array(rows.enumerated()), id: \.element.id) { index, bookmark in
                         DirectoryTableRow(bookmark: bookmark)
-                        if bookmark.id != filteredBookmarks.last?.id {
+                        if index < rows.count - 1 {
                             Divider()
                         }
                     }
-                    if filteredBookmarks.isEmpty {
+                    if rows.isEmpty {
                         EmptyStateRow(title: "没有匹配的目录", systemImage: "folder.badge.questionmark")
                     }
                 }
@@ -1413,10 +1383,10 @@ struct ActionListView: View {
         viewModel.config.actions.sorted(by: { $0.order < $1.order })
     }
 
-    private var filteredActions: [RightToolAction] {
+    private func filteredActions(from actions: [RightToolAction]) -> [RightToolAction] {
         let keyword = searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        guard !keyword.isEmpty else { return sortedActions }
-        return sortedActions.filter { action in
+        guard !keyword.isEmpty else { return actions }
+        return actions.filter { action in
             action.title.lowercased().contains(keyword)
                 || action.kind.displayName.lowercased().contains(keyword)
                 || (action.group?.displayName.lowercased().contains(keyword) ?? false)
@@ -1424,6 +1394,9 @@ struct ActionListView: View {
     }
 
     var body: some View {
+        let actions = sortedActions
+        let rows = filteredActions(from: actions)
+
         DesignPageScroll {
             PageToolbar {
                 SearchField(placeholder: "筛选动作名称、类型或分组", text: $searchText)
@@ -1432,14 +1405,14 @@ struct ActionListView: View {
             }
 
             DesignPanel(padding: 0) {
-                VStack(spacing: 0) {
+                LazyVStack(spacing: 0) {
                     ActionTableHeader()
-                    if filteredActions.isEmpty {
-                        EmptyStateRow(title: sortedActions.isEmpty ? "暂无动作" : "没有匹配的动作", systemImage: "contextualmenu.and.cursorarrow")
+                    if rows.isEmpty {
+                        EmptyStateRow(title: actions.isEmpty ? "暂无动作" : "没有匹配的动作", systemImage: "contextualmenu.and.cursorarrow")
                     } else {
-                        ForEach(filteredActions) { action in
+                        ForEach(Array(rows.enumerated()), id: \.element.id) { index, action in
                             ActionEditorRow(action: action, viewModel: viewModel)
-                            if action.id != filteredActions.last?.id {
+                            if index < rows.count - 1 {
                                 Divider()
                             }
                         }
@@ -1448,9 +1421,9 @@ struct ActionListView: View {
             }
 
             PreviewSection(
-                    rootItems: previewRootItems,
+                    rootItems: previewRootItems(from: actions),
                     submenuTitle: "RightTool",
-                    submenuItems: previewSubmenuItems
+                    submenuItems: previewSubmenuItems(from: actions)
             ) {
                 VStack(alignment: .leading, spacing: 10) {
                     Text("右键菜单预览")
@@ -1468,23 +1441,23 @@ struct ActionListView: View {
         }
     }
 
-    private var previewRootItems: [FinderMenuItem] {
+    private func previewRootItems(from actions: [RightToolAction]) -> [FinderMenuItem] {
         let defaultItems = [
             FinderMenuItem(title: "新建文件夹"),
             FinderMenuItem(title: "显示简介"),
             FinderMenuItem(title: "排序方式", hasSubmenu: true)
         ]
-        let rootActions = sortedActions
+        let rootActions = actions
             .filter { $0.isEnabled && $0.placement == .rootMenu }
-            .map { FinderMenuItem(title: $0.title, systemImage: $0.kind.rowIcon, tint: tint(for: $0)) }
+            .map { FinderMenuItem(title: $0.title, systemImage: $0.kind.rowIcon, tint: tint(for: $0), id: $0.id) }
         return defaultItems + rootActions + [FinderMenuItem(title: "服务", hasSubmenu: true)]
     }
 
-    private var previewSubmenuItems: [FinderMenuItem] {
-        sortedActions
+    private func previewSubmenuItems(from actions: [RightToolAction]) -> [FinderMenuItem] {
+        actions
             .filter { $0.isEnabled && $0.placement == .submenu }
             .prefix(8)
-            .map { FinderMenuItem(title: $0.title, systemImage: $0.kind.rowIcon, tint: tint(for: $0), hasSubmenu: $0.group != nil) }
+            .map { FinderMenuItem(title: $0.title, systemImage: $0.kind.rowIcon, tint: tint(for: $0), hasSubmenu: $0.group != nil, id: $0.id) }
     }
 
     private func tint(for action: RightToolAction) -> Color {
@@ -1635,9 +1608,11 @@ struct TemplateListView: View {
     @State private var editingDraft: TemplateDraft?
 
     var body: some View {
+        let templates = viewModel.config.fileTemplates
+
         DesignPageScroll {
             PageToolbar {
-                Text("共 \(viewModel.config.fileTemplates.count) 个模板")
+                Text("共 \(templates.count) 个模板")
                     .font(.callout)
                     .foregroundStyle(SettingsTheme.muted)
             } trailing: {
@@ -1651,16 +1626,16 @@ struct TemplateListView: View {
             }
 
             DesignPanel(padding: 0) {
-                VStack(spacing: 0) {
+                LazyVStack(spacing: 0) {
                     TemplateTableHeader()
-                    if viewModel.config.fileTemplates.isEmpty {
+                    if templates.isEmpty {
                         EmptyStateRow(title: "暂无模板", systemImage: "doc.badge.plus")
                     } else {
-                        ForEach(viewModel.config.fileTemplates) { template in
+                        ForEach(Array(templates.enumerated()), id: \.element.id) { index, template in
                             TemplateTableRow(template: template, viewModel: viewModel) {
                                 editingDraft = TemplateDraft(template: template)
                             }
-                            if template.id != viewModel.config.fileTemplates.last?.id {
+                            if index < templates.count - 1 {
                                 Divider()
                             }
                         }
@@ -1705,7 +1680,7 @@ struct TemplateListView: View {
 
     private var templatePreviewItems: [FinderMenuItem] {
         viewModel.config.fileTemplates.prefix(8).map {
-            FinderMenuItem(title: $0.title, systemImage: templateIcon(for: $0), tint: SettingsTheme.accent)
+            FinderMenuItem(title: $0.title, systemImage: templateIcon(for: $0), tint: SettingsTheme.accent, id: $0.id)
         }
     }
 
@@ -1846,6 +1821,8 @@ struct DeveloperEntrypointListView: View {
     }
 
     var body: some View {
+        let rows = filteredEntrypoints
+
         DesignPageScroll {
             PageToolbar {
                 Picker("入口筛选", selection: $selectedFilter) {
@@ -1866,16 +1843,16 @@ struct DeveloperEntrypointListView: View {
             }
 
             DesignPanel(padding: 0) {
-                VStack(spacing: 0) {
+                LazyVStack(spacing: 0) {
                     DeveloperTableHeader()
-                    if filteredEntrypoints.isEmpty {
+                    if rows.isEmpty {
                         EmptyStateRow(title: "暂无开发者入口", systemImage: "terminal")
                     } else {
-                        ForEach(filteredEntrypoints) { entrypoint in
+                        ForEach(Array(rows.enumerated()), id: \.element.id) { index, entrypoint in
                             DeveloperTableRow(entrypoint: entrypoint, viewModel: viewModel) {
                                 editingDraft = DeveloperEntrypointDraft(entrypoint: entrypoint)
                             }
-                            if entrypoint.id != filteredEntrypoints.last?.id {
+                            if index < rows.count - 1 {
                                 Divider()
                             }
                         }
@@ -1917,7 +1894,7 @@ struct DeveloperEntrypointListView: View {
 
     private var developerPreviewItems: [FinderMenuItem] {
         viewModel.config.developerEntrypoints.prefix(10).map {
-            FinderMenuItem(title: $0.title, systemImage: developerIcon(for: $0), tint: SettingsTheme.accent)
+            FinderMenuItem(title: $0.title, systemImage: developerIcon(for: $0), tint: SettingsTheme.accent, id: $0.id)
         }
     }
 
@@ -2050,9 +2027,15 @@ struct OperationHistoryView: View {
     }
 
     var body: some View {
+        let allRecords = fileOperationRecords
+        let records = Array(allRecords.prefix(8))
+        let actions = fileOperationActions
+        let quickActions = Array(actions.prefix(4))
+        let previewActions = Array(actions.prefix(8))
+
         DesignPageScroll {
             PageToolbar {
-                Text("最近 \(fileOperationRecords.count) 条文件操作")
+                Text("最近 \(allRecords.count) 条文件操作")
                     .font(.callout)
                     .foregroundStyle(SettingsTheme.muted)
             } trailing: {
@@ -2065,14 +2048,14 @@ struct OperationHistoryView: View {
             }
 
             DesignPanel(padding: 0) {
-                VStack(spacing: 0) {
+                LazyVStack(spacing: 0) {
                     ClipboardHistoryHeader()
-                    if fileOperationRecords.isEmpty {
+                    if records.isEmpty {
                         EmptyStateRow(title: "暂无剪切或粘贴记录", systemImage: "clock")
                     } else {
-                        ForEach(fileOperationRecords.prefix(8)) { record in
+                        ForEach(Array(records.enumerated()), id: \.element.id) { index, record in
                             ClipboardHistoryRow(record: record)
-                            if record.id != fileOperationRecords.prefix(8).last?.id {
+                            if index < records.count - 1 {
                                 Divider()
                             }
                         }
@@ -2081,7 +2064,7 @@ struct OperationHistoryView: View {
             }
 
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 220), spacing: 14)], spacing: 14) {
-                ForEach(fileOperationActions.prefix(4)) { action in
+                ForEach(quickActions) { action in
                     FileOperationQuickAction(action: action, viewModel: viewModel)
                 }
             }
@@ -2095,8 +2078,8 @@ struct OperationHistoryView: View {
                         FinderMenuItem(title: "服务", hasSubmenu: true)
                     ],
                     submenuTitle: nil,
-                    submenuItems: fileOperationActions.map {
-                        FinderMenuItem(title: $0.title, systemImage: $0.kind.rowIcon, tint: SettingsTheme.accent)
+                    submenuItems: previewActions.map {
+                        FinderMenuItem(title: $0.title, systemImage: $0.kind.rowIcon, tint: SettingsTheme.accent, id: $0.id)
                     }
             ) {
                 VStack(alignment: .leading, spacing: 10) {
@@ -2261,12 +2244,28 @@ struct EmptyStateRow: View {
 }
 
 struct FinderMenuItem: Identifiable {
-    let id = UUID()
+    let id: String
     let title: String
     var systemImage: String? = nil
     var tint: Color = SettingsTheme.muted
     var isHighlighted = false
     var hasSubmenu = false
+
+    init(
+        title: String,
+        systemImage: String? = nil,
+        tint: Color = SettingsTheme.muted,
+        isHighlighted: Bool = false,
+        hasSubmenu: Bool = false,
+        id: String? = nil
+    ) {
+        self.title = title
+        self.systemImage = systemImage
+        self.tint = tint
+        self.isHighlighted = isHighlighted
+        self.hasSubmenu = hasSubmenu
+        self.id = id ?? "\(title)|\(systemImage ?? "none")|\(isHighlighted)|\(hasSubmenu)"
+    }
 }
 
 struct FinderMenuPreview: View {
@@ -2305,32 +2304,17 @@ struct FinderMenuPreview: View {
                 }
             }
 
-            ViewThatFits(in: .horizontal) {
-                HStack(alignment: .center, spacing: 12) {
-                    FinderMenuBox(items: rootItems)
+            HStack(alignment: .center, spacing: 12) {
+                FinderMenuBox(items: rootItems)
 
-                    if !submenuItems.isEmpty {
-                        Image(systemName: "arrow.right")
-                            .font(.headline)
-                            .foregroundStyle(SettingsTheme.accent)
-                        FinderMenuBox(title: submenuTitle, items: submenuItems)
-                    }
+                if !submenuItems.isEmpty {
+                    Image(systemName: "arrow.right")
+                        .font(.headline)
+                        .foregroundStyle(SettingsTheme.accent)
+                    FinderMenuBox(title: submenuTitle, items: submenuItems)
                 }
-                .frame(maxWidth: .infinity, alignment: .center)
-
-                VStack(alignment: .leading, spacing: 10) {
-                    FinderMenuBox(items: rootItems)
-
-                    if !submenuItems.isEmpty {
-                        Image(systemName: "arrow.down")
-                            .font(.headline)
-                            .foregroundStyle(SettingsTheme.accent)
-                            .padding(.leading, 72)
-                        FinderMenuBox(title: submenuTitle, items: submenuItems)
-                    }
-                }
-                .frame(maxWidth: .infinity, alignment: .center)
             }
+            .frame(maxWidth: .infinity, alignment: .center)
         }
     }
 }
@@ -2361,7 +2345,7 @@ struct FinderMenuBox: View {
         .frame(width: 166)
         .background(.white, in: RoundedRectangle(cornerRadius: 8))
         .overlay(RoundedRectangle(cornerRadius: 8).stroke(SettingsTheme.hairline))
-        .shadow(color: Color.black.opacity(0.12), radius: 18, x: 0, y: 10)
+        .shadow(color: Color.black.opacity(0.04), radius: 3, x: 0, y: 1)
     }
 }
 

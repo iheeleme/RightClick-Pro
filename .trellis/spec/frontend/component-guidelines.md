@@ -255,3 +255,38 @@ DispatchQueue.main.asyncAfter(deadline: .now() + 0.035) {
     viewModel.selectedSection = section
 }
 ```
+
+### Common Mistake: Heavy Settings Detail Rendering
+
+**Symptom**: The sidebar highlight responds quickly, but the right settings content still feels laggy while switching sections or scrolling.
+
+**Cause**: Detail pages rebuild too much work at once: repeated menu preview rows use fresh `UUID` identities, `ViewThatFits` builds multiple complete layout branches, large panel shadows force expensive repainting, and table rows are placed in eager `VStack`s inside a scroll view.
+
+**Fix**: Keep preview item identities stable, use `LazyVStack` for scroll-page and table rows, prefer one deterministic preview layout over nested `ViewThatFits`, and avoid large decorative shadows in repeated detail panels.
+
+Wrong:
+```swift
+struct FinderMenuItem: Identifiable {
+    let id = UUID()
+    let title: String
+}
+
+ViewThatFits(in: .horizontal) {
+    HorizontalPreview()
+    VerticalPreview()
+}
+```
+
+Correct:
+```swift
+struct FinderMenuItem: Identifiable {
+    let id: String
+    let title: String
+}
+
+LazyVStack(spacing: 0) {
+    ForEach(items) { item in
+        SettingsTableRow(item: item)
+    }
+}
+```
