@@ -1,6 +1,7 @@
 import AppKit
 import RightToolCore
 import SwiftUI
+import UniformTypeIdentifiers
 
 @main
 struct RightToolAppPreview: App {
@@ -1833,11 +1834,14 @@ struct OverviewContextMenuRow: View {
 
     var body: some View {
         HStack(spacing: 10) {
-            if let systemImage = item.systemImage {
-                Image(systemName: systemImage)
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(item.tint)
-                    .frame(width: 17)
+            if let icon = item.icon {
+                MenuIconView(
+                    icon: icon,
+                    tint: item.tint,
+                    isHighlighted: item.isHighlighted,
+                    size: 17,
+                    font: .system(size: 13, weight: .medium)
+                )
             }
 
             Text(item.title)
@@ -1930,7 +1934,7 @@ struct DirectoryListView: View {
     private var previewItems: [FinderMenuItem] {
         let enabledBookmarks = bookmarks.filter { viewModel.isDirectoryBookmarkEnabled($0.id) }
         return Array(enabledBookmarks.prefix(7)).map {
-            FinderMenuItem(title: $0.displayName, systemImage: directoryIcon(for: $0), tint: directoryTint(for: $0), id: $0.id)
+            FinderMenuItem(title: $0.displayName, icon: .filePath($0.path), tint: directoryTint(for: $0), id: $0.id)
         }
     }
 
@@ -1972,16 +1976,6 @@ struct DirectoryListView: View {
 
             DirectoryHintBanner()
         }
-    }
-
-    private func directoryIcon(for bookmark: DirectoryBookmark) -> String {
-        let lowercased = bookmark.path.lowercased()
-        if lowercased.contains("download") { return "arrow.down.to.line.compact" }
-        if lowercased.contains("desktop") { return "display" }
-        if lowercased.contains("document") { return "doc.text" }
-        if lowercased.contains("picture") { return "photo" }
-        if lowercased.contains("server") || lowercased.contains("smb://") { return "server.rack" }
-        return "folder"
     }
 
     private func directoryTint(for bookmark: DirectoryBookmark) -> Color {
@@ -2380,7 +2374,9 @@ struct ActionListView: View {
                         if metrics.previewWidth > 0 {
                             ActionMenuPreviewCard(
                                 selectedContext: $previewContext,
-                                actions: actions
+                                actions: actions,
+                                config: viewModel.config,
+                                bookmarks: viewModel.bookmarks
                             )
                             .frame(width: metrics.previewWidth)
                         }
@@ -2389,7 +2385,9 @@ struct ActionListView: View {
                     if metrics.previewWidth == 0 {
                         ActionMenuPreviewCard(
                             selectedContext: $previewContext,
-                            actions: actions
+                            actions: actions,
+                            config: viewModel.config,
+                            bookmarks: viewModel.bookmarks
                         )
                         .frame(width: metrics.contentWidth)
                     }
@@ -2580,10 +2578,13 @@ struct ActionEditorRow: View {
                 .frame(width: 20)
 
             HStack(spacing: 12) {
-                Image(systemName: action.kind.rowIcon)
-                    .font(.system(size: 22, weight: .semibold))
-                    .foregroundStyle(action.isEnabled ? action.managementTint : Color.secondary.opacity(0.5))
-                    .frame(width: 30, alignment: .center)
+                MenuIconView(
+                    icon: MenuIconResolver.icon(for: action, config: viewModel.config, bookmarks: viewModel.bookmarks),
+                    tint: action.isEnabled ? action.managementTint : Color.secondary.opacity(0.5),
+                    size: 24,
+                    font: .system(size: 22, weight: .semibold)
+                )
+                .frame(width: 30, alignment: .center)
 
                 VStack(alignment: .leading, spacing: 4) {
                     Text(action.title)
@@ -2904,6 +2905,8 @@ struct ActionManagementHintBar: View {
 struct ActionMenuPreviewCard: View {
     @Binding var selectedContext: ActionPreviewContext
     let actions: [RightToolAction]
+    let config: RightToolConfig
+    let bookmarks: DirectoryBookmarkCatalog
 
     private var visibleActions: [RightToolAction] {
         actions
@@ -2932,7 +2935,7 @@ struct ActionMenuPreviewCard: View {
 
                 ActionPreviewContextPicker(selectedContext: $selectedContext)
 
-                FinderContextMenuMock(actions: visibleActions)
+                FinderContextMenuMock(actions: visibleActions, config: config, bookmarks: bookmarks)
                     .frame(maxWidth: .infinity, alignment: .center)
                     .padding(.top, 6)
 
@@ -2979,6 +2982,8 @@ struct ActionPreviewContextPicker: View {
 
 struct FinderContextMenuMock: View {
     let actions: [RightToolAction]
+    let config: RightToolConfig
+    let bookmarks: DirectoryBookmarkCatalog
 
     var body: some View {
         VStack(spacing: 0) {
@@ -2999,7 +3004,7 @@ struct FinderContextMenuMock: View {
                 FinderContextMenuStaticRow(title: "暂无启用菜单项")
             } else {
                 ForEach(actions) { action in
-                    FinderContextActionRow(action: action)
+                    FinderContextActionRow(action: action, config: config, bookmarks: bookmarks)
                 }
             }
 
@@ -3051,13 +3056,17 @@ struct FinderContextMenuStaticRow: View {
 
 struct FinderContextActionRow: View {
     let action: RightToolAction
+    let config: RightToolConfig
+    let bookmarks: DirectoryBookmarkCatalog
 
     var body: some View {
         HStack(spacing: 9) {
-            Image(systemName: action.kind.rowIcon)
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(action.managementTint)
-                .frame(width: 16)
+            MenuIconView(
+                icon: MenuIconResolver.icon(for: action, config: config, bookmarks: bookmarks),
+                tint: action.managementTint,
+                size: 16,
+                font: .system(size: 13, weight: .semibold)
+            )
             Text(action.title)
                 .font(.system(size: 13))
                 .foregroundStyle(SettingsTheme.ink)
@@ -3148,7 +3157,7 @@ struct TemplateListView: View {
 
             return FinderMenuItem(
                 title: action.title,
-                systemImage: templateSystemIcon(for: template),
+                icon: templateIconDescriptor(for: template),
                 tint: templateTint(for: template),
                 id: action.id
             )
@@ -3268,9 +3277,12 @@ struct TemplateIconTile: View {
     let template: FileTemplate
 
     var body: some View {
-        Image(systemName: templateSystemIcon(for: template))
-            .font(.system(size: 18, weight: .medium))
-            .foregroundStyle(templateTint(for: template))
+        MenuIconView(
+            icon: templateIconDescriptor(for: template),
+            tint: templateTint(for: template),
+            size: 20,
+            font: .system(size: 18, weight: .medium)
+        )
             .frame(width: 28, height: 28)
             .background(templateTint(for: template).opacity(0.1), in: RoundedRectangle(cornerRadius: 6))
     }
@@ -3363,16 +3375,9 @@ private func templateExtensionText(for template: FileTemplate) -> String {
     return ext.isEmpty ? "—" : ".\(ext)"
 }
 
-private func templateSystemIcon(for template: FileTemplate) -> String {
-    switch templateExtensionText(for: template).lowercased() {
-    case ".md": return "m.square.fill"
-    case ".json": return "curlybraces.square"
-    case ".sh": return "terminal.fill"
-    case ".swift": return "swift"
-    case ".py": return "chevron.left.forwardslash.chevron.right"
-    case ".txt": return "doc.text"
-    default: return "doc"
-    }
+private func templateIconDescriptor(for template: FileTemplate) -> MenuIconDescriptor {
+    let ext = templateExtensionText(for: template)
+    return ext == "—" ? .systemSymbol("doc") : .fileExtension(ext)
 }
 
 private func templateTint(for template: FileTemplate) -> Color {
@@ -3456,7 +3461,7 @@ struct DeveloperEntrypointListView: View {
             }
             return FinderMenuItem(
                 title: entrypoint.title,
-                systemImage: developerEntryIcon(for: entrypoint),
+                icon: .appBundleIdentifier(entrypoint.bundleIdentifier),
                 tint: developerEntryTint(for: entrypoint),
                 id: action.id
             )
@@ -3644,9 +3649,12 @@ struct DeveloperEntryIcon: View {
     let entrypoint: DeveloperEntrypoint
 
     var body: some View {
-        Image(systemName: developerEntryIcon(for: entrypoint))
-            .font(.system(size: 16, weight: .semibold))
-            .foregroundStyle(developerEntryTint(for: entrypoint))
+        MenuIconView(
+            icon: .appBundleIdentifier(entrypoint.bundleIdentifier),
+            tint: developerEntryTint(for: entrypoint),
+            size: 22,
+            font: .system(size: 16, weight: .semibold)
+        )
             .frame(width: 28, height: 28)
             .background(developerEntryTint(for: entrypoint).opacity(0.1), in: RoundedRectangle(cornerRadius: 7))
     }
@@ -3734,19 +3742,6 @@ struct DeveloperHintBanner: View {
         .background(SettingsTheme.accent.opacity(0.055), in: RoundedRectangle(cornerRadius: 8))
         .overlay(RoundedRectangle(cornerRadius: 8).stroke(SettingsTheme.accent.opacity(0.18)))
     }
-}
-
-private func developerEntryIcon(for entrypoint: DeveloperEntrypoint) -> String {
-    let value = "\(entrypoint.title) \(entrypoint.bundleIdentifier)".lowercased()
-    if value.contains("terminal") || value.contains("iterm") || value.contains("warp") { return "terminal.fill" }
-    if value.contains("github") || value.contains("gitlab") { return "globe" }
-    if value.contains("docker") { return "shippingbox.fill" }
-    if value.contains("postman") { return "paperplane.fill" }
-    if value.hasPrefix("/") || value.hasPrefix("~") || value.contains("folder") || value.contains("目录") { return "folder.fill" }
-    if value.contains("vscode") || value.contains("webstorm") || value.contains("cursor") || value.contains("xcode") || value.contains("code") {
-        return "chevron.left.forwardslash.chevron.right"
-    }
-    return "app.fill"
 }
 
 private func developerEntryTint(for entrypoint: DeveloperEntrypoint) -> Color {
@@ -3854,7 +3849,12 @@ struct OperationHistoryView: View {
                     ],
                     submenuTitle: nil,
                     submenuItems: previewActions.map {
-                        FinderMenuItem(title: $0.title, systemImage: $0.kind.rowIcon, tint: SettingsTheme.accent, id: $0.id)
+                        FinderMenuItem(
+                            title: $0.title,
+                            icon: MenuIconResolver.icon(for: $0, config: viewModel.config, bookmarks: viewModel.bookmarks),
+                            tint: SettingsTheme.accent,
+                            id: $0.id
+                        )
                     }
             ) {
                 VStack(alignment: .leading, spacing: 10) {
@@ -3897,10 +3897,13 @@ struct ClipboardHistoryRow: View {
     var body: some View {
         HStack(spacing: 16) {
             HStack(spacing: 12) {
-                Image(systemName: iconName)
-                    .font(.title3)
-                    .foregroundStyle(record.status.color)
-                    .frame(width: 28)
+                MenuIconView(
+                    icon: iconDescriptor,
+                    tint: record.status.color,
+                    size: 24,
+                    font: .title3
+                )
+                .frame(width: 28)
                 Text(title)
                     .font(.callout.weight(.semibold))
                     .foregroundStyle(SettingsTheme.ink)
@@ -3967,6 +3970,13 @@ struct ClipboardHistoryRow: View {
             return "doc"
         }
     }
+
+    private var iconDescriptor: MenuIconDescriptor {
+        if let path = record.sourcePaths.first ?? record.destinationPaths.first {
+            return .filePath(path)
+        }
+        return .systemSymbol(iconName)
+    }
 }
 
 struct FileOperationQuickAction: View {
@@ -3976,10 +3986,13 @@ struct FileOperationQuickAction: View {
     var body: some View {
         DesignPanel {
             HStack(spacing: 12) {
-                Image(systemName: action.kind.rowIcon)
-                    .font(.title3)
-                    .foregroundStyle(SettingsTheme.accent)
-                    .frame(width: 30)
+                MenuIconView(
+                    icon: MenuIconResolver.icon(for: action, config: viewModel.config, bookmarks: viewModel.bookmarks),
+                    tint: SettingsTheme.accent,
+                    size: 24,
+                    font: .title3
+                )
+                .frame(width: 30)
                 VStack(alignment: .leading, spacing: 3) {
                     Text(action.title)
                         .font(.headline)
@@ -4018,10 +4031,37 @@ struct EmptyStateRow: View {
     }
 }
 
+struct MenuIconView: View {
+    let icon: MenuIconDescriptor
+    var tint: Color = SettingsTheme.muted
+    var isHighlighted = false
+    var size: CGFloat = 16
+    var font: Font = .caption.weight(.semibold)
+
+    var body: some View {
+        Group {
+            if case let .systemSymbol(systemImage) = icon {
+                Image(systemName: systemImage)
+                    .font(font)
+                    .foregroundStyle(isHighlighted ? .white : tint)
+            } else if let image = icon.resolvedNSImage {
+                Image(nsImage: image)
+                    .resizable()
+                    .scaledToFit()
+            } else {
+                Image(systemName: icon.fallbackSystemImage)
+                    .font(font)
+                    .foregroundStyle(isHighlighted ? .white : tint)
+            }
+        }
+        .frame(width: size, height: size)
+    }
+}
+
 struct FinderMenuItem: Identifiable {
     let id: String
     let title: String
-    var systemImage: String? = nil
+    var icon: MenuIconDescriptor? = nil
     var tint: Color = SettingsTheme.muted
     var isHighlighted = false
     var hasSubmenu = false
@@ -4029,17 +4069,87 @@ struct FinderMenuItem: Identifiable {
     init(
         title: String,
         systemImage: String? = nil,
+        icon: MenuIconDescriptor? = nil,
         tint: Color = SettingsTheme.muted,
         isHighlighted: Bool = false,
         hasSubmenu: Bool = false,
         id: String? = nil
     ) {
         self.title = title
-        self.systemImage = systemImage
+        self.icon = icon ?? systemImage.map(MenuIconDescriptor.systemSymbol)
         self.tint = tint
         self.isHighlighted = isHighlighted
         self.hasSubmenu = hasSubmenu
-        self.id = id ?? "\(title)|\(systemImage ?? "none")|\(isHighlighted)|\(hasSubmenu)"
+        self.id = id ?? "\(title)|\(Self.iconIdentity(self.icon))|\(isHighlighted)|\(hasSubmenu)"
+    }
+
+    private static func iconIdentity(_ icon: MenuIconDescriptor?) -> String {
+        guard let icon else {
+            return "none"
+        }
+        switch icon {
+        case .systemSymbol(let name):
+            return "system:\(name)"
+        case .appBundleIdentifier(let bundleIdentifier):
+            return "app:\(bundleIdentifier)"
+        case .filePath(let path):
+            return "path:\(path)"
+        case .fileExtension(let fileExtension):
+            return "extension:\(fileExtension)"
+        case .folder:
+            return "folder"
+        }
+    }
+}
+
+private extension MenuIconDescriptor {
+    var fallbackSystemImage: String {
+        switch self {
+        case .systemSymbol(let name):
+            return name
+        case .appBundleIdentifier:
+            return "app.fill"
+        case .filePath:
+            return "folder.fill"
+        case .fileExtension:
+            return "doc"
+        case .folder:
+            return "folder.fill"
+        }
+    }
+
+    var resolvedNSImage: NSImage? {
+        let image: NSImage?
+        switch self {
+        case .systemSymbol:
+            return nil
+        case .appBundleIdentifier(let bundleIdentifier):
+            if let appURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleIdentifier) {
+                image = NSWorkspace.shared.icon(forFile: appURL.path)
+            } else {
+                image = NSWorkspace.shared.icon(for: .applicationBundle)
+            }
+        case .filePath(let path):
+            if FileManager.default.fileExists(atPath: path) {
+                image = NSWorkspace.shared.icon(forFile: path)
+            } else if !URL(fileURLWithPath: path).pathExtension.isEmpty {
+                image = nsImageForFileExtension(URL(fileURLWithPath: path).pathExtension)
+            } else {
+                image = NSWorkspace.shared.icon(for: .folder)
+            }
+        case .fileExtension(let fileExtension):
+            image = nsImageForFileExtension(fileExtension)
+        case .folder:
+            image = NSWorkspace.shared.icon(for: .folder)
+        }
+        image?.size = NSSize(width: 48, height: 48)
+        return image
+    }
+
+    private func nsImageForFileExtension(_ fileExtension: String) -> NSImage {
+        let normalized = fileExtension.trimmingCharacters(in: CharacterSet(charactersIn: "."))
+        let contentType = UTType(filenameExtension: normalized) ?? .data
+        return NSWorkspace.shared.icon(for: contentType)
     }
 }
 
@@ -4113,7 +4223,7 @@ struct FinderMenuBox: View {
                 FinderMenuRow(item: item)
                 if item.id != items.last?.id {
                     Divider()
-                        .padding(.leading, item.systemImage == nil ? 0 : 32)
+                        .padding(.leading, item.icon == nil ? 0 : 32)
                 }
             }
         }
@@ -4129,11 +4239,14 @@ struct FinderMenuRow: View {
 
     var body: some View {
         HStack(spacing: 9) {
-            if let systemImage = item.systemImage {
-                Image(systemName: systemImage)
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(item.isHighlighted ? .white : item.tint)
-                    .frame(width: 16)
+            if let icon = item.icon {
+                MenuIconView(
+                    icon: icon,
+                    tint: item.tint,
+                    isHighlighted: item.isHighlighted,
+                    size: 16,
+                    font: .caption.weight(.semibold)
+                )
             }
 
             Text(item.title)
@@ -4425,28 +4538,6 @@ private extension ActionKind {
         }
     }
 
-    var rowIcon: String {
-        switch self {
-        case .openDirectory:
-            return "folder"
-        case .moveToDirectory:
-            return "tray.and.arrow.up"
-        case .copyToDirectory:
-            return "tray.and.arrow.down"
-        case .cut:
-            return "scissors"
-        case .paste:
-            return "doc.on.clipboard"
-        case .createFile:
-            return "doc.badge.plus"
-        case .openInApp:
-            return "terminal"
-        case .runCommand:
-            return "terminal"
-        case .undoOperation:
-            return "arrow.uturn.backward"
-        }
-    }
 }
 
 private extension ActionPlacement {

@@ -49,4 +49,66 @@ final class MenuBuilderTests: XCTestCase {
 
         XCTAssertEqual(menu.groupedSubmenuItems[.fileOperations]?.map(\.id), ["selection"])
     }
+
+    func testMenuAssignsDeveloperAppIcon() {
+        let entrypoint = DeveloperEntrypoint(
+            id: "cursor",
+            title: "Cursor",
+            bundleIdentifier: "com.todesktop.230313mzl4w4u92"
+        )
+        let action = RightToolAction(
+            id: "open-cursor",
+            title: "Open Cursor",
+            kind: .openInApp,
+            visibility: [.container],
+            placement: .rootMenu,
+            order: 1,
+            payload: ActionPayload(developerEntrypointID: entrypoint.id)
+        )
+        let config = RightToolConfig(actions: [action], developerEntrypoints: [entrypoint])
+        let context = FinderContext(invocation: .container, targetDirectory: URL(fileURLWithPath: "/tmp"))
+
+        let menu = MenuBuilder().buildMenu(config: config, context: context)
+
+        XCTAssertEqual(menu.rootItems.first?.icon, .appBundleIdentifier(entrypoint.bundleIdentifier))
+    }
+
+    func testMenuAssignsTemplateFileTypeIcon() {
+        let template = FileTemplate(id: "markdown", title: "Markdown", defaultFileName: "Note.md")
+        let action = RightToolAction(
+            id: "new-markdown",
+            title: "New Markdown",
+            kind: .createFile,
+            visibility: [.container],
+            placement: .rootMenu,
+            order: 1,
+            payload: ActionPayload(templateID: template.id)
+        )
+        let config = RightToolConfig(actions: [action], fileTemplates: [template])
+        let context = FinderContext(invocation: .container, targetDirectory: URL(fileURLWithPath: "/tmp"))
+
+        let menu = MenuBuilder().buildMenu(config: config, context: context)
+
+        XCTAssertEqual(menu.rootItems.first?.icon, .fileExtension("md"))
+    }
+
+    func testMenuAssignsDirectoryPathIcon() {
+        let bookmark = DirectoryBookmark(id: "code", displayName: "Code", path: "/Users/test/Code")
+        let action = RightToolAction(
+            id: "open-code",
+            title: "Open Code",
+            kind: .openDirectory,
+            visibility: [.container],
+            placement: .rootMenu,
+            order: 1,
+            payload: ActionPayload(directoryID: bookmark.id)
+        )
+        let config = RightToolConfig(actions: [action])
+        let bookmarks = DirectoryBookmarkCatalog(bookmarks: [bookmark])
+        let context = FinderContext(invocation: .container, targetDirectory: URL(fileURLWithPath: "/tmp"))
+
+        let menu = MenuBuilder().buildMenu(config: config, context: context, bookmarks: bookmarks)
+
+        XCTAssertEqual(menu.rootItems.first?.icon, .filePath(bookmark.path))
+    }
 }

@@ -256,3 +256,91 @@ Correct:
 </array>
 ```
 for the preview ActionRunner XPC entitlement file, with path authorization enforced in `ActionRunner`.
+
+### Scenario: Finder Menu Icon Presentation
+
+#### 1. Scope / Trigger
+
+- Trigger: changes to `Sources/RightToolCore/MenuBuilder.swift`, `Sources/RightToolFinderExtension/FinderSyncController.swift`, `DeveloperEntrypoint`, `FileTemplate`, directory actions, or Finder menu presentation.
+- This is a cross-layer contract because Core decides icon semantics while the Finder extension renders them as AppKit `NSImage` values.
+
+#### 2. Signatures
+
+- Menu presentation carries a semantic icon descriptor:
+  ```swift
+  public enum MenuIconDescriptor: Equatable {
+      case systemSymbol(String)
+      case appBundleIdentifier(String)
+      case filePath(String)
+      case fileExtension(String)
+      case folder
+  }
+  ```
+- Action-to-icon mapping lives in Core:
+  ```swift
+  public enum MenuIconResolver {
+      public static func icon(
+          for action: RightToolAction,
+          config: RightToolConfig,
+          bookmarks: DirectoryBookmarkCatalog = DirectoryBookmarkCatalog()
+      ) -> MenuIconDescriptor
+  }
+  ```
+- `MenuBuilder.buildMenu` must accept bookmarks so directory actions can resolve path icons:
+  ```swift
+  buildMenu(config: RightToolConfig, context: FinderContext, bookmarks: DirectoryBookmarkCatalog)
+  ```
+
+#### 3. Contracts
+
+- `.openInApp` actions must use `.appBundleIdentifier(entrypoint.bundleIdentifier)` when the entrypoint exists.
+- `.createFile` actions must use `.fileExtension(template.defaultFileName.pathExtension)` when the template has an extension.
+- Directory actions must use `.filePath(bookmark.path)` when the bookmark exists, otherwise `.folder`.
+- Finder extension must render descriptors with `NSWorkspace.shared.icon(for:)`, `NSWorkspace.shared.icon(forFile:)`, or `NSImage(systemSymbolName:)`.
+- Core must not import AppKit; it only emits semantic descriptors.
+
+#### 4. Validation & Error Matrix
+
+- Missing developer entrypoint -> fallback to `.systemSymbol("app")`.
+- Missing template -> fallback to `.systemSymbol("doc.badge.plus")`.
+- Missing bookmark -> fallback to `.folder`.
+- Unknown file extension -> render the system `.data` type icon.
+- Missing installed app for bundle identifier -> render the generic application icon.
+
+#### 5. Good/Base/Bad Cases
+
+- Good: Cursor action shows Cursor's installed app icon in the Finder menu.
+- Good: `Note.md` template shows the system Markdown/document type icon.
+- Base: a custom shell command shows a terminal symbol.
+- Bad: Finder menu item hard-codes `"terminal"` for every `.openInApp` action.
+- Bad: Finder extension rebuilds icon semantics independently from `MenuIconResolver`.
+
+#### 6. Tests Required
+
+- Unit-test `MenuBuilder` icon descriptors for developer, template, and directory actions.
+- Run:
+  ```bash
+  git diff --check
+  scripts/package-macos.sh debug
+  scripts/ci-swift-check.sh debug
+  ```
+- Manually smoke-test the installed Finder menu when local packaging succeeds.
+
+#### 7. Wrong vs Correct
+
+Wrong:
+```swift
+MenuItemPresentation(id: action.id, title: action.title, actionID: action.id, group: action.group, order: action.order)
+```
+
+Correct:
+```swift
+MenuItemPresentation(
+    id: action.id,
+    title: action.title,
+    actionID: action.id,
+    group: action.group,
+    order: action.order,
+    icon: MenuIconResolver.icon(for: action, config: config, bookmarks: bookmarks)
+)
+```

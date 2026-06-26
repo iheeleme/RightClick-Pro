@@ -164,6 +164,7 @@ Button("保存配置") {
 - Do not make a preview imply that an edit/add/delete operation is available unless there is a matching `SettingsViewModel` command.
 - Read-only visual affordances such as disabled toggles or static edit icons are acceptable only when they reflect current model state.
 - Rule controls that visually look clickable, such as menu rows or toggles in settings cards, must have backing state and update the visible table or preview they describe.
+- Settings menu rows must render `MenuIconDescriptor` through `MenuIconView`; application actions use installed app icons, templates use file type icons, directories use path/folder icons, and unsupported cases fall back to semantic SF Symbols.
 
 #### 4. Validation & Error Matrix
 
@@ -171,6 +172,7 @@ Button("保存配置") {
 - Toggle changes a template/developer entrypoint but bypasses `setActionEnabled` or upsert/delete commands -> persistence contract violation.
 - Table displays an edit/delete control with no backing command -> either wire it to a ViewModel command or render it as static/read-only.
 - A grouping/sorting card renders chevrons or switches but does not change the action table -> wire it to local state and the table's filtered/sorted data pipeline.
+- Developer, template, or directory rows hard-code SF Symbols instead of using `MenuIconResolver` / `MenuIconView` -> icons drift from the real Finder menu and app icons disappear.
 
 #### 5. Good/Base/Bad Cases
 
@@ -195,7 +197,7 @@ FinderMenuItem(title: "VS Code", systemImage: "app")
 Correct:
 ```swift
 config.developerEntrypoints.map {
-    FinderMenuItem(title: $0.title, systemImage: developerIcon(for: $0))
+    FinderMenuItem(title: $0.title, icon: .appBundleIdentifier($0.bundleIdentifier))
 }
 ```
 
