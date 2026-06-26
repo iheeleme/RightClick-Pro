@@ -13,53 +13,53 @@ struct RightToolAppPreview: App {
 
         Window("RightTool 设置", id: "settings") {
             SettingsRootView(viewModel: viewModel)
-                .frame(minWidth: 940, minHeight: 640)
+                .frame(minWidth: 1120, minHeight: 760)
         }
     }
 }
 
 final class SettingsViewModel: ObservableObject {
     enum Section: String, CaseIterable, Identifiable {
-        case onboarding = "首次引导"
-        case directories = "生效目录"
-        case actions = "菜单动作"
+        case onboarding = "概览"
+        case actions = "右键菜单管理"
+        case directories = "常用目录快捷直达"
+        case developer = "开发者快捷入口"
+        case history = "剪切 / 粘贴文件"
         case templates = "新建文件模板"
-        case developer = "开发者入口"
-        case history = "最近操作"
 
         var id: String { rawValue }
 
         var systemImage: String {
             switch self {
             case .onboarding:
-                return "wand.and.stars"
+                return "house"
+            case .actions:
+                return "list.bullet.indent"
             case .directories:
                 return "folder"
-            case .actions:
-                return "contextualmenu.and.cursorarrow"
-            case .templates:
-                return "doc.badge.plus"
             case .developer:
-                return "terminal"
+                return "chevron.left.forwardslash.chevron.right"
             case .history:
-                return "clock.arrow.circlepath"
+                return "scissors"
+            case .templates:
+                return "doc"
             }
         }
 
         var subtitle: String {
             switch self {
             case .onboarding:
-                return "检查当前配置，并在需要时恢复默认预览配置。"
-            case .directories:
-                return "查看 Finder 右键菜单当前生效的目录范围。"
+                return "管理和自定义 Finder 右键菜单，提升操作效率。"
             case .actions:
                 return "控制动作是否启用，以及显示在一级菜单还是 RightTool 子菜单中。"
-            case .templates:
-                return "维护右键新建文件使用的文本模板。"
+            case .directories:
+                return "管理常用目录，快速访问，提高工作效率。"
             case .developer:
-                return "维护从 Finder 上下文打开开发者工具的入口。"
+                return "管理开发者常用工具、仓库与目录的快捷入口。"
             case .history:
-                return "查看 ActionRunner 写入的最近操作记录。"
+                return "查看剪切、复制、粘贴等文件操作记录与菜单入口。"
+            case .templates:
+                return "管理 Finder 右键菜单中的新建文件类型、排序与启用状态。"
             }
         }
     }
@@ -107,6 +107,46 @@ final class SettingsViewModel: ObservableObject {
 
     var rootMenuActionCount: Int {
         config.actions.filter { $0.isEnabled && $0.placement == .rootMenu }.count
+    }
+
+    var disabledActionCount: Int {
+        config.actions.filter { !$0.isEnabled }.count
+    }
+
+    var rootMenuActionProgress: Double {
+        guard config.maxRootMenuActions > 0 else { return 0 }
+        let ratio = Double(rootMenuActionCount) / Double(config.maxRootMenuActions)
+        return min(max(ratio, 0), 1)
+    }
+
+    /// Section-level count shown as a sidebar badge.
+    func sectionBadge(for section: Section) -> String? {
+        let count: Int
+        switch section {
+        case .directories: count = bookmarks.bookmarks.count
+        case .actions: count = enabledActionCount
+        case .templates: count = config.fileTemplates.count
+        case .developer: count = config.developerEntrypoints.count
+        case .history: count = recentOperations.count
+        default: return nil
+        }
+        return count > 0 ? "\(count)" : nil
+    }
+
+    /// Sidebar groupings for visual scanning.
+    enum SidebarGroup: String, CaseIterable, Identifiable {
+        case guided = "概览"
+        case editing = "配置"
+        case records = "记录"
+
+        var id: String { rawValue }
+        var sections: [Section] {
+            switch self {
+            case .guided: return [.onboarding]
+            case .editing: return [.actions, .directories, .developer, .history, .templates]
+            case .records: return [.history]
+            }
+        }
     }
 
     func loadOrBootstrap() {
@@ -446,13 +486,10 @@ struct SettingsRootView: View {
     @ObservedObject var viewModel: SettingsViewModel
 
     var body: some View {
-        NavigationSplitView {
-            List(SettingsViewModel.Section.allCases, selection: $viewModel.selectedSection) { section in
-                Label(section.rawValue, systemImage: section.systemImage)
-                    .tag(section)
-            }
-            .navigationSplitViewColumnWidth(220)
-        } detail: {
+        HStack(spacing: 0) {
+            SettingsSidebar(viewModel: viewModel)
+                .frame(width: 252)
+
             SettingsDetailShell(viewModel: viewModel) {
                 switch viewModel.selectedSection {
                 case .onboarding:
@@ -469,7 +506,167 @@ struct SettingsRootView: View {
                     OperationHistoryView(viewModel: viewModel)
                 }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+        .background(SettingsTheme.windowBackground)
+    }
+}
+
+private enum SettingsTheme {
+    static let accent = Color(red: 0.24, green: 0.32, blue: 0.98)
+    static let accentSoft = Color(red: 0.93, green: 0.92, blue: 1.0)
+    static let ink = Color(red: 0.07, green: 0.09, blue: 0.16)
+    static let muted = Color(red: 0.36, green: 0.40, blue: 0.52)
+    static let hairline = Color.black.opacity(0.08)
+    static let panelShadow = Color(red: 0.12, green: 0.16, blue: 0.36).opacity(0.08)
+
+    static var windowBackground: LinearGradient {
+        LinearGradient(
+            colors: [
+                Color(red: 0.96, green: 0.97, blue: 1.0),
+                Color.white
+            ],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
+
+    static var brandGradient: LinearGradient {
+        LinearGradient(
+            colors: [
+                Color(red: 0.45, green: 0.55, blue: 1.0),
+                Color(red: 0.31, green: 0.22, blue: 0.95)
+            ],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
+}
+
+struct SettingsSidebar: View {
+    @ObservedObject var viewModel: SettingsViewModel
+
+    private let sections: [SettingsViewModel.Section] = [
+        .onboarding,
+        .actions,
+        .directories,
+        .developer,
+        .history,
+        .templates
+    ]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 26) {
+            WindowControlDots()
+
+            HStack(spacing: 12) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(SettingsTheme.brandGradient)
+                    Image(systemName: "cursorarrow")
+                        .font(.title2.weight(.bold))
+                        .foregroundStyle(.white)
+                        .rotationEffect(.degrees(-18))
+                }
+                .frame(width: 44, height: 44)
+                .shadow(color: SettingsTheme.accent.opacity(0.25), radius: 14, x: 0, y: 8)
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("RightTool Pro")
+                        .font(.headline.weight(.semibold))
+                        .foregroundStyle(SettingsTheme.ink)
+                    Text("Mac 右键效率工具")
+                        .font(.callout)
+                        .foregroundStyle(SettingsTheme.muted)
+                }
+            }
+
+            VStack(spacing: 8) {
+                ForEach(sections) { section in
+                    SidebarNavigationRow(
+                        section: section,
+                        badge: viewModel.sectionBadge(for: section),
+                        isSelected: viewModel.selectedSection == section
+                    ) {
+                        viewModel.selectedSection = section
+                    }
+                }
+            }
+
+            Spacer(minLength: 16)
+
+            VStack(alignment: .leading, spacing: 8) {
+                Label("\(viewModel.enabledActionCount) 个动作启用", systemImage: "checkmark.circle")
+                Label("\(viewModel.rootMenuActionCount)/\(viewModel.config.maxRootMenuActions) 个一级菜单", systemImage: "menubar.rectangle")
+            }
+            .font(.caption)
+            .foregroundStyle(SettingsTheme.muted)
+            .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(.white.opacity(0.62), in: RoundedRectangle(cornerRadius: 8))
+        }
+        .padding(.horizontal, 24)
+        .padding(.vertical, 24)
+        .background(.white.opacity(0.58))
+        .overlay(alignment: .trailing) {
+            Rectangle()
+                .fill(SettingsTheme.hairline)
+                .frame(width: 1)
+        }
+    }
+}
+
+struct WindowControlDots: View {
+    var body: some View {
+        HStack(spacing: 8) {
+            Circle().fill(Color(red: 1.0, green: 0.36, blue: 0.30))
+            Circle().fill(Color(red: 1.0, green: 0.75, blue: 0.22))
+            Circle().fill(Color(red: 0.21, green: 0.78, blue: 0.28))
+        }
+        .frame(width: 54, height: 12)
+    }
+}
+
+struct SidebarNavigationRow: View {
+    let section: SettingsViewModel.Section
+    let badge: String?
+    let isSelected: Bool
+    let onSelect: () -> Void
+
+    var body: some View {
+        Button(action: onSelect) {
+            HStack(spacing: 12) {
+                Image(systemName: section.systemImage)
+                    .font(.system(size: 17, weight: .medium))
+                    .frame(width: 22)
+                    .foregroundStyle(isSelected ? SettingsTheme.accent : SettingsTheme.muted)
+
+                Text(section.rawValue)
+                    .font(.system(size: 15, weight: isSelected ? .semibold : .regular))
+                    .foregroundStyle(isSelected ? SettingsTheme.accent : SettingsTheme.ink)
+                    .lineLimit(1)
+
+                Spacer(minLength: 8)
+
+                if let badge {
+                    Text(badge)
+                        .font(.caption2.weight(.semibold))
+                        .monospacedDigit()
+                        .foregroundStyle(isSelected ? SettingsTheme.accent : SettingsTheme.muted)
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 3)
+                        .background(.white.opacity(0.72), in: Capsule())
+                }
+            }
+            .padding(.horizontal, 12)
+            .frame(height: 42)
+            .frame(maxWidth: .infinity)
+            .background(
+                isSelected ? SettingsTheme.accentSoft : Color.clear,
+                in: RoundedRectangle(cornerRadius: 8)
+            )
+        }
+        .buttonStyle(.plain)
     }
 }
 
@@ -482,10 +679,11 @@ struct SettingsDetailShell<Content: View>: View {
             HStack(alignment: .center, spacing: 16) {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(viewModel.selectedSection.rawValue)
-                        .font(.title2.bold())
+                        .font(.system(size: 28, weight: .bold))
+                        .foregroundStyle(SettingsTheme.ink)
                     Text(viewModel.selectedSection.subtitle)
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
+                        .font(.system(size: 15))
+                        .foregroundStyle(SettingsTheme.muted)
                 }
 
                 Spacer()
@@ -496,19 +694,16 @@ struct SettingsDetailShell<Content: View>: View {
                     isDirty: viewModel.hasUnsavedChanges
                 )
 
-                Button {
-                    viewModel.saveConfig()
-                } label: {
-                    Label("保存配置", systemImage: "square.and.arrow.down")
-                }
-                .keyboardShortcut("s", modifiers: [.command])
-                .disabled(!viewModel.hasUnsavedChanges)
+                SaveConfigButton(viewModel: viewModel)
             }
-            .padding(.horizontal, 24)
-            .padding(.vertical, 18)
-            .background(.regularMaterial)
+            .padding(.horizontal, 34)
+            .padding(.top, 34)
+            .padding(.bottom, 18)
+            .background(.white.opacity(0.72))
 
-            Divider()
+            Rectangle()
+                .fill(SettingsTheme.hairline)
+                .frame(height: 1)
 
             content
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -530,9 +725,130 @@ struct StatusBadge: View {
         }
         .font(.caption)
         .foregroundStyle(tone.color)
-        .padding(.horizontal, 10)
-        .padding(.vertical, 6)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 7)
         .background(tone.color.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
+        .overlay(RoundedRectangle(cornerRadius: 8).stroke(tone.color.opacity(0.16)))
+    }
+}
+
+struct SaveConfigButton: View {
+    @ObservedObject var viewModel: SettingsViewModel
+
+    var body: some View {
+        if viewModel.hasUnsavedChanges {
+            Button {
+                viewModel.saveConfig()
+            } label: {
+                Label("保存配置", systemImage: "square.and.arrow.down")
+                    .frame(minWidth: 86)
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.large)
+            .keyboardShortcut("s", modifiers: [.command])
+        } else {
+            Button {
+                viewModel.saveConfig()
+            } label: {
+                Label("已保存", systemImage: "checkmark")
+                    .frame(minWidth: 86)
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.large)
+            .disabled(true)
+        }
+    }
+}
+
+struct DesignPageScroll<Content: View>: View {
+    @ViewBuilder var content: Content
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 20) {
+                content
+            }
+            .padding(34)
+            .frame(maxWidth: 1060, alignment: .leading)
+        }
+        .background(.white.opacity(0.34))
+    }
+}
+
+struct DesignPanel<Content: View>: View {
+    var padding: CGFloat = 18
+    @ViewBuilder var content: Content
+
+    var body: some View {
+        content
+            .padding(padding)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(.white.opacity(0.9), in: RoundedRectangle(cornerRadius: 8))
+            .overlay(RoundedRectangle(cornerRadius: 8).stroke(SettingsTheme.hairline))
+            .shadow(color: SettingsTheme.panelShadow, radius: 18, x: 0, y: 10)
+    }
+}
+
+struct HintBanner: View {
+    let text: String
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "lightbulb")
+                .font(.title3)
+                .foregroundStyle(SettingsTheme.accent)
+            Text("提示：")
+                .font(.headline)
+                .foregroundStyle(SettingsTheme.accent)
+            Text(text)
+                .foregroundStyle(SettingsTheme.muted)
+            Spacer(minLength: 0)
+        }
+        .font(.callout)
+        .padding(.horizontal, 18)
+        .padding(.vertical, 15)
+        .background(SettingsTheme.accent.opacity(0.07), in: RoundedRectangle(cornerRadius: 8))
+        .overlay(RoundedRectangle(cornerRadius: 8).stroke(SettingsTheme.accent.opacity(0.18)))
+    }
+}
+
+struct SearchField: View {
+    let placeholder: String
+    @Binding var text: String
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "magnifyingglass")
+                .foregroundStyle(SettingsTheme.muted)
+            TextField(placeholder, text: $text)
+                .textFieldStyle(.plain)
+            if !text.isEmpty {
+                Button {
+                    text = ""
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(.tertiary)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(.horizontal, 12)
+        .frame(width: 360, height: 36)
+        .background(.white, in: RoundedRectangle(cornerRadius: 8))
+        .overlay(RoundedRectangle(cornerRadius: 8).stroke(SettingsTheme.hairline))
+    }
+}
+
+struct IconBadge: View {
+    let systemImage: String
+    var tint: Color = SettingsTheme.accent
+
+    var body: some View {
+        Image(systemName: systemImage)
+            .font(.system(size: 20, weight: .semibold))
+            .foregroundStyle(tint)
+            .frame(width: 54, height: 54)
+            .background(tint.opacity(0.09), in: RoundedRectangle(cornerRadius: 8))
     }
 }
 
@@ -541,37 +857,83 @@ struct OnboardingView: View {
     @State private var isShowingResetConfirmation = false
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                SettingsSummaryGrid(viewModel: viewModel)
-
-                VStack(alignment: .leading, spacing: 12) {
-                    OnboardingStep(index: 1, title: "启用 Finder 扩展", detail: "在系统设置中启用 RightTool Finder Extension。")
-                    OnboardingStep(index: 2, title: "检查生效目录", detail: "预览版会自动注入桌面、下载、文稿和代码目录中存在的项目。")
-                    OnboardingStep(index: 3, title: "编辑动作和模板", detail: "在菜单动作、模板和开发者入口分区调整右键菜单内容。")
-                    OnboardingStep(index: 4, title: "保存并试用", detail: "保存配置后重新打开 Finder 右键菜单即可看到变化。")
-                }
-                .padding(16)
-                .background(.background, in: RoundedRectangle(cornerRadius: 8))
-
-                HStack {
-                    Button {
-                        isShowingResetConfirmation = true
-                    } label: {
-                        Label("恢复默认预览配置", systemImage: "arrow.counterclockwise")
+        DesignPageScroll {
+            HStack(alignment: .top, spacing: 28) {
+                VStack(spacing: 14) {
+                    OverviewFeatureCard(
+                        systemImage: "folder",
+                        title: "常用目录快捷直达",
+                        detail: "在右键菜单中快速打开常用目录和文件夹",
+                        meta: "已启用 \(viewModel.bookmarks.bookmarks.count) 个目录",
+                        isOn: !viewModel.bookmarks.bookmarks.isEmpty
+                    ) {
+                        viewModel.selectedSection = .directories
                     }
-                    .buttonStyle(.bordered)
 
-                    Button {
-                        viewModel.reloadRecentOperations()
+                    OverviewFeatureCard(
+                        systemImage: "chevron.left.forwardslash.chevron.right",
+                        title: "开发者快捷入口",
+                        detail: "快速打开常用开发工具和项目",
+                        meta: "已启用 \(enabledDeveloperCount) 个入口",
+                        isOn: enabledDeveloperCount > 0
+                    ) {
+                        viewModel.selectedSection = .developer
+                    }
+
+                    OverviewFeatureCard(
+                        systemImage: "scissors",
+                        title: "剪切 / 粘贴文件",
+                        detail: "增强版剪切、粘贴与历史记录",
+                        meta: "剪贴板中有 \(fileOperationActionCount) 项内容",
+                        isOn: fileOperationActionCount > 0
+                    ) {
                         viewModel.selectedSection = .history
-                    } label: {
-                        Label("查看最近操作", systemImage: "clock.arrow.circlepath")
                     }
-                    .buttonStyle(.bordered)
+
+                    OverviewFeatureCard(
+                        systemImage: "doc.badge.plus",
+                        title: "新建文件模板",
+                        detail: "在右键菜单中新建常用文件类型",
+                        meta: "已启用 \(enabledTemplateCount) 个模板",
+                        isOn: enabledTemplateCount > 0
+                    ) {
+                        viewModel.selectedSection = .templates
+                    }
                 }
+                .frame(minWidth: 470)
+
+                VStack(alignment: .leading, spacing: 18) {
+                    FinderMenuPreview(
+                        title: "Finder 右键菜单",
+                        caption: "在 Finder 右键菜单中快速访问这些功能",
+                        rootItems: overviewRootMenuItems,
+                        submenuTitle: "RightTool",
+                        submenuItems: overviewSubmenuItems
+                    )
+                }
+                .frame(width: 310)
             }
-            .padding(24)
+
+            HintBanner(text: "所有功能均可在右键菜单中使用，支持按需启用与自定义配置。")
+
+            OverviewMetricStrip(viewModel: viewModel)
+
+            HStack(spacing: 12) {
+                Button {
+                    isShowingResetConfirmation = true
+                } label: {
+                    Label("恢复默认预览配置", systemImage: "arrow.counterclockwise")
+                }
+                .buttonStyle(.bordered)
+
+                Button {
+                    viewModel.reloadRecentOperations()
+                    viewModel.selectedSection = .history
+                } label: {
+                    Label("查看最近操作", systemImage: "clock.arrow.circlepath")
+                }
+                .buttonStyle(.bordered)
+            }
         }
         .confirmationDialog("恢复默认预览配置？", isPresented: $isShowingResetConfirmation) {
             Button("恢复默认配置", role: .destructive) {
@@ -582,114 +944,449 @@ struct OnboardingView: View {
             Text("这会覆盖当前菜单动作、模板、开发者入口和自动注入目录配置。")
         }
     }
+
+    private var enabledDeveloperCount: Int {
+        viewModel.config.actions.filter {
+            $0.group == .developerEntrypoints && $0.isEnabled
+        }.count
+    }
+
+    private var enabledTemplateCount: Int {
+        viewModel.config.actions.filter {
+            $0.kind == .createFile && $0.isEnabled
+        }.count
+    }
+
+    private var fileOperationActionCount: Int {
+        viewModel.config.actions.filter {
+            $0.group == .fileOperations && $0.isEnabled
+        }.count
+    }
+
+    private var overviewRootMenuItems: [FinderMenuItem] {
+        [
+            FinderMenuItem(title: "新建文件夹", systemImage: nil, hasSubmenu: true),
+            FinderMenuItem(title: "显示简介", systemImage: nil),
+            FinderMenuItem(title: "排序方式", systemImage: nil, hasSubmenu: true),
+            FinderMenuItem(title: "整理方式", systemImage: nil, hasSubmenu: true)
+        ]
+    }
+
+    private var overviewSubmenuItems: [FinderMenuItem] {
+        [
+            FinderMenuItem(title: "常用目录", systemImage: "folder", tint: .blue, hasSubmenu: true),
+            FinderMenuItem(title: "开发者工具", systemImage: "chevron.left.forwardslash.chevron.right", tint: SettingsTheme.accent, hasSubmenu: true),
+            FinderMenuItem(title: "剪切 / 粘贴文件", systemImage: "scissors", tint: SettingsTheme.accent, hasSubmenu: true),
+            FinderMenuItem(title: "新建文件", systemImage: "doc", tint: SettingsTheme.accent, hasSubmenu: true)
+        ]
+    }
 }
 
-struct SettingsSummaryGrid: View {
+struct OverviewFeatureCard: View {
+    let systemImage: String
+    let title: String
+    let detail: String
+    let meta: String
+    let isOn: Bool
+    let onOpen: () -> Void
+
+    var body: some View {
+        Button(action: onOpen) {
+            HStack(spacing: 18) {
+                IconBadge(systemImage: systemImage)
+
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(title)
+                        .font(.title3.weight(.semibold))
+                        .foregroundStyle(SettingsTheme.ink)
+                    Text(detail)
+                        .font(.callout)
+                        .foregroundStyle(SettingsTheme.muted)
+                }
+
+                Spacer(minLength: 16)
+
+                Text(meta)
+                    .font(.callout)
+                    .foregroundStyle(SettingsTheme.muted)
+
+                Image(systemName: "chevron.right")
+                    .font(.callout.weight(.semibold))
+                    .foregroundStyle(SettingsTheme.muted)
+
+                Toggle("", isOn: .constant(isOn))
+                    .toggleStyle(.switch)
+                    .labelsHidden()
+                    .disabled(true)
+            }
+            .padding(20)
+            .frame(maxWidth: .infinity, minHeight: 104, alignment: .leading)
+            .background(.white.opacity(0.92), in: RoundedRectangle(cornerRadius: 8))
+            .overlay(RoundedRectangle(cornerRadius: 8).stroke(SettingsTheme.hairline))
+            .shadow(color: SettingsTheme.panelShadow, radius: 16, x: 0, y: 10)
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+struct OverviewMetricStrip: View {
     @ObservedObject var viewModel: SettingsViewModel
 
     var body: some View {
-        LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), spacing: 12)], spacing: 12) {
-            SummaryTile(title: "生效目录", value: "\(viewModel.bookmarks.bookmarks.count)", systemImage: "folder")
-            SummaryTile(title: "启用动作", value: "\(viewModel.enabledActionCount)", systemImage: "switch.2")
-            SummaryTile(title: "一级菜单", value: "\(viewModel.rootMenuActionCount)/\(viewModel.config.maxRootMenuActions)", systemImage: "menubar.rectangle")
-            SummaryTile(title: "模板", value: "\(viewModel.config.fileTemplates.count)", systemImage: "doc.badge.plus")
-            SummaryTile(title: "开发入口", value: "\(viewModel.config.developerEntrypoints.count)", systemImage: "terminal")
-            SummaryTile(title: "操作记录", value: "\(viewModel.recentOperations.count)", systemImage: "clock")
+        DesignPanel(padding: 0) {
+            HStack(spacing: 0) {
+                OverviewMetric(systemImage: "clock", title: "高效便捷", subtitle: "常用功能一步直达")
+                Divider().frame(height: 42)
+                OverviewMetric(systemImage: "shield.checkered", title: "安全可靠", subtitle: "本地运行，保护隐私")
+                Divider().frame(height: 42)
+                OverviewMetric(systemImage: "bolt", title: "轻量稳定", subtitle: "占用资源少，运行流畅")
+                Divider().frame(height: 42)
+                OverviewMetric(systemImage: "slider.horizontal.3", title: "高度可自定义", subtitle: "\(viewModel.enabledActionCount) 个动作按需启用")
+            }
+            .padding(.vertical, 14)
         }
     }
 }
 
-struct SummaryTile: View {
-    let title: String
-    let value: String
+struct OverviewMetric: View {
     let systemImage: String
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Image(systemName: systemImage)
-                .font(.title3)
-                .foregroundStyle(.blue)
-            Text(value)
-                .font(.title2.bold())
-            Text(title)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(14)
-        .background(.background, in: RoundedRectangle(cornerRadius: 8))
-    }
-}
-
-struct OnboardingStep: View {
-    let index: Int
     let title: String
-    let detail: String
+    let subtitle: String
 
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
-            Text("\(index)")
-                .font(.headline)
-                .frame(width: 28, height: 28)
-                .background(.quaternary, in: Circle())
-            VStack(alignment: .leading, spacing: 4) {
-                Text(title).font(.headline)
-                Text(detail).foregroundStyle(.secondary)
+        HStack(spacing: 12) {
+            Image(systemName: systemImage)
+                .font(.title2)
+                .foregroundStyle(SettingsTheme.accent)
+                .frame(width: 36)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .font(.headline)
+                    .foregroundStyle(SettingsTheme.ink)
+                Text(subtitle)
+                    .font(.caption)
+                    .foregroundStyle(SettingsTheme.muted)
             }
         }
+        .frame(maxWidth: .infinity, alignment: .center)
+        .padding(.horizontal, 16)
     }
 }
 
 struct DirectoryListView: View {
     let bookmarks: [DirectoryBookmark]
     let storagePath: String
+    @State private var searchText = ""
+
+    private var filteredBookmarks: [DirectoryBookmark] {
+        let keyword = searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !keyword.isEmpty else { return bookmarks }
+        return bookmarks.filter {
+            $0.displayName.lowercased().contains(keyword) || $0.path.lowercased().contains(keyword)
+        }
+    }
+
+    private var previewItems: [FinderMenuItem] {
+        Array(bookmarks.prefix(7)).map {
+            FinderMenuItem(title: $0.displayName, systemImage: directoryIcon(for: $0), tint: directoryTint(for: $0))
+        }
+    }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            List {
-                Section("当前目录") {
-                    ForEach(bookmarks) { bookmark in
-                        SettingsRow(
-                            systemImage: "folder",
-                            title: bookmark.displayName,
-                            subtitle: bookmark.path,
-                            trailing: bookmark.bookmarkDataBase64 == nil ? "路径模式" : "书签模式"
-                        )
+        DesignPageScroll {
+            HStack {
+                SearchField(placeholder: "搜索目录名称或路径", text: $searchText)
+                Spacer()
+                Text("共 \(bookmarks.count) 个目录")
+                    .font(.callout)
+                    .foregroundStyle(SettingsTheme.muted)
+            }
+
+            DesignPanel(padding: 0) {
+                VStack(spacing: 0) {
+                    DirectoryTableHeader()
+                    ForEach(filteredBookmarks) { bookmark in
+                        DirectoryTableRow(bookmark: bookmark)
+                        if bookmark.id != filteredBookmarks.last?.id {
+                            Divider()
+                        }
+                    }
+                    if filteredBookmarks.isEmpty {
+                        EmptyStateRow(title: "没有匹配的目录", systemImage: "folder.badge.questionmark")
                     }
                 }
+            }
 
-                Section("配置位置") {
-                    Text(storagePath)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .textSelection(.enabled)
+            DesignPanel {
+                HStack(alignment: .center, spacing: 30) {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("右键菜单预览")
+                            .font(.headline)
+                            .foregroundStyle(SettingsTheme.ink)
+                        Text("在 Finder 中右键时，启用的目录将出现在常用目录子菜单中，方便快速访问。")
+                            .font(.callout)
+                            .foregroundStyle(SettingsTheme.muted)
+                            .lineLimit(4)
+                    }
+                    .frame(width: 250, alignment: .leading)
+
+                    FinderMenuPreview(
+                        title: nil,
+                        caption: nil,
+                        rootItems: [
+                            FinderMenuItem(title: "新建文件夹"),
+                            FinderMenuItem(title: "显示简介"),
+                            FinderMenuItem(title: "常用目录", systemImage: "folder", tint: SettingsTheme.accent, isHighlighted: true, hasSubmenu: true),
+                            FinderMenuItem(title: "快速操作", hasSubmenu: true),
+                            FinderMenuItem(title: "服务", hasSubmenu: true)
+                        ],
+                        submenuTitle: nil,
+                        submenuItems: previewItems,
+                        isFramed: false
+                    )
                 }
             }
+
+            HintBanner(text: "配置目录：\(storagePath)")
+                .textSelection(.enabled)
         }
+    }
+
+    private func directoryIcon(for bookmark: DirectoryBookmark) -> String {
+        let lowercased = bookmark.path.lowercased()
+        if lowercased.contains("download") { return "arrow.down.to.line.compact" }
+        if lowercased.contains("desktop") { return "display" }
+        if lowercased.contains("document") { return "doc.text" }
+        if lowercased.contains("picture") { return "photo" }
+        if lowercased.contains("server") || lowercased.contains("smb://") { return "server.rack" }
+        return "folder"
+    }
+
+    private func directoryTint(for bookmark: DirectoryBookmark) -> Color {
+        let lowercased = bookmark.path.lowercased()
+        if lowercased.contains("workspace") || lowercased.contains("project") { return .orange }
+        if lowercased.contains("server") || lowercased.contains("smb://") { return SettingsTheme.accent }
+        return .blue
+    }
+}
+
+struct DirectoryTableHeader: View {
+    var body: some View {
+        HStack(spacing: 16) {
+            Text("排序").frame(width: 46, alignment: .leading)
+            Text("名称").frame(width: 230, alignment: .leading)
+            Text("路径").frame(maxWidth: .infinity, alignment: .leading)
+            Text("启用").frame(width: 72, alignment: .center)
+            Text("操作").frame(width: 86, alignment: .center)
+        }
+        .font(.caption.weight(.semibold))
+        .foregroundStyle(SettingsTheme.muted)
+        .padding(.horizontal, 18)
+        .frame(height: 44)
+        .background(Color.black.opacity(0.015))
+    }
+}
+
+struct DirectoryTableRow: View {
+    let bookmark: DirectoryBookmark
+
+    var body: some View {
+        HStack(spacing: 16) {
+            Image(systemName: "grip.vertical")
+                .foregroundStyle(SettingsTheme.muted.opacity(0.55))
+                .frame(width: 46, alignment: .leading)
+
+            HStack(spacing: 12) {
+                Image(systemName: iconName)
+                    .font(.title3)
+                    .foregroundStyle(tint)
+                    .frame(width: 24)
+                Text(bookmark.displayName)
+                    .font(.callout.weight(.semibold))
+                    .foregroundStyle(SettingsTheme.ink)
+                    .lineLimit(1)
+            }
+            .frame(width: 230, alignment: .leading)
+
+            Text(bookmark.path)
+                .font(.callout)
+                .foregroundStyle(SettingsTheme.muted)
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            Toggle("", isOn: .constant(true))
+                .toggleStyle(.switch)
+                .labelsHidden()
+                .disabled(true)
+                .frame(width: 72)
+
+            HStack(spacing: 16) {
+                Image(systemName: "pencil")
+                Image(systemName: "trash")
+            }
+            .font(.callout)
+            .foregroundStyle(SettingsTheme.muted)
+            .frame(width: 86)
+        }
+        .padding(.horizontal, 18)
+        .frame(height: 54)
+    }
+
+    private var iconName: String {
+        let lowercased = bookmark.path.lowercased()
+        if lowercased.contains("download") { return "arrow.down.to.line.compact" }
+        if lowercased.contains("desktop") { return "display" }
+        if lowercased.contains("document") { return "doc.text" }
+        if lowercased.contains("picture") { return "photo" }
+        if lowercased.contains("server") || lowercased.contains("smb://") { return "server.rack" }
+        return "folder"
+    }
+
+    private var tint: Color {
+        let lowercased = bookmark.path.lowercased()
+        if lowercased.contains("workspace") || lowercased.contains("project") { return .orange }
+        if lowercased.contains("server") || lowercased.contains("smb://") { return SettingsTheme.accent }
+        return .blue
     }
 }
 
 struct ActionListView: View {
     @ObservedObject var viewModel: SettingsViewModel
+    @State private var searchText = ""
+
+    private var sortedActions: [RightToolAction] {
+        viewModel.config.actions.sorted(by: { $0.order < $1.order })
+    }
+
+    private var filteredActions: [RightToolAction] {
+        let keyword = searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !keyword.isEmpty else { return sortedActions }
+        return sortedActions.filter { action in
+            action.title.lowercased().contains(keyword)
+                || action.kind.displayName.lowercased().contains(keyword)
+                || (action.group?.displayName.lowercased().contains(keyword) ?? false)
+        }
+    }
 
     var body: some View {
-        List {
-            Section {
-                HStack {
-                    Label("一级菜单容量", systemImage: "menubar.rectangle")
-                    Spacer()
-                    Text("\(viewModel.rootMenuActionCount)/\(viewModel.config.maxRootMenuActions)")
-                        .font(.headline.monospacedDigit())
-                        .foregroundStyle(viewModel.rootMenuActionCount >= viewModel.config.maxRootMenuActions ? .orange : .secondary)
+        DesignPageScroll {
+            HStack(alignment: .center, spacing: 16) {
+                SearchField(placeholder: "筛选动作名称、类型或分组", text: $searchText)
+                Spacer()
+                RootMenuCapacityBadge(viewModel: viewModel)
+            }
+
+            DesignPanel(padding: 0) {
+                VStack(spacing: 0) {
+                    ActionTableHeader()
+                    if filteredActions.isEmpty {
+                        EmptyStateRow(title: sortedActions.isEmpty ? "暂无动作" : "没有匹配的动作", systemImage: "contextualmenu.and.cursorarrow")
+                    } else {
+                        ForEach(filteredActions) { action in
+                            ActionEditorRow(action: action, viewModel: viewModel)
+                            if action.id != filteredActions.last?.id {
+                                Divider()
+                            }
+                        }
+                    }
                 }
             }
 
-            Section("动作") {
-                ForEach(viewModel.config.actions.sorted(by: { $0.order < $1.order })) { action in
-                    ActionEditorRow(action: action, viewModel: viewModel)
+            HStack(alignment: .top, spacing: 20) {
+                FinderMenuPreview(
+                    title: "右键菜单预览",
+                    caption: "一级菜单动作会直接出现在 Finder 右键菜单中，其他动作收纳到 RightTool 子菜单。",
+                    rootItems: previewRootItems,
+                    submenuTitle: "RightTool",
+                    submenuItems: previewSubmenuItems
+                )
+                .frame(width: 360)
+
+                HintBanner(text: "一级菜单最多 \(viewModel.config.maxRootMenuActions) 个动作；超过后请放入 RightTool 子菜单。")
+                    .frame(maxWidth: .infinity, alignment: .top)
+            }
+        }
+    }
+
+    private var previewRootItems: [FinderMenuItem] {
+        let defaultItems = [
+            FinderMenuItem(title: "新建文件夹"),
+            FinderMenuItem(title: "显示简介"),
+            FinderMenuItem(title: "排序方式", hasSubmenu: true)
+        ]
+        let rootActions = sortedActions
+            .filter { $0.isEnabled && $0.placement == .rootMenu }
+            .map { FinderMenuItem(title: $0.title, systemImage: $0.kind.rowIcon, tint: tint(for: $0)) }
+        return defaultItems + rootActions + [FinderMenuItem(title: "服务", hasSubmenu: true)]
+    }
+
+    private var previewSubmenuItems: [FinderMenuItem] {
+        sortedActions
+            .filter { $0.isEnabled && $0.placement == .submenu }
+            .prefix(8)
+            .map { FinderMenuItem(title: $0.title, systemImage: $0.kind.rowIcon, tint: tint(for: $0), hasSubmenu: $0.group != nil) }
+    }
+
+    private func tint(for action: RightToolAction) -> Color {
+        switch action.group {
+        case .commonDirectories, .moveToCommonDirectory, .copyToCommonDirectory:
+            return .blue
+        case .createFile:
+            return SettingsTheme.accent
+        case .developerEntrypoints:
+            return SettingsTheme.accent
+        case .fileOperations:
+            return .cyan
+        case .none:
+            return SettingsTheme.muted
+        }
+    }
+}
+
+struct RootMenuCapacityBadge: View {
+    @ObservedObject var viewModel: SettingsViewModel
+
+    var body: some View {
+        DesignPanel(padding: 14) {
+            HStack(spacing: 14) {
+                Image(systemName: "menubar.rectangle")
+                    .font(.title3)
+                    .foregroundStyle(SettingsTheme.accent)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("一级菜单容量")
+                        .font(.caption)
+                        .foregroundStyle(SettingsTheme.muted)
+                    HStack(spacing: 8) {
+                        Text("\(viewModel.rootMenuActionCount)/\(viewModel.config.maxRootMenuActions)")
+                            .font(.headline.monospacedDigit())
+                            .foregroundStyle(SettingsTheme.ink)
+                        ProgressView(value: viewModel.rootMenuActionProgress)
+                            .frame(width: 110)
+                            .tint(viewModel.rootMenuActionCount >= viewModel.config.maxRootMenuActions ? .orange : SettingsTheme.accent)
+                    }
                 }
             }
         }
+        .frame(width: 250)
+    }
+}
+
+struct ActionTableHeader: View {
+    var body: some View {
+        HStack(spacing: 16) {
+            Text("动作").frame(width: 260, alignment: .leading)
+            Text("分组").frame(width: 150, alignment: .leading)
+            Text("可见范围").frame(maxWidth: .infinity, alignment: .leading)
+            Text("启用").frame(width: 64, alignment: .center)
+            Text("菜单层级").frame(width: 220, alignment: .center)
+        }
+        .font(.caption.weight(.semibold))
+        .foregroundStyle(SettingsTheme.muted)
+        .padding(.horizontal, 18)
+        .frame(height: 44)
+        .background(Color.black.opacity(0.015))
     }
 }
 
@@ -697,25 +1394,57 @@ struct ActionEditorRow: View {
     let action: RightToolAction
     @ObservedObject var viewModel: SettingsViewModel
 
+    private var groupTint: Color {
+        switch action.group {
+        case .commonDirectories, .moveToCommonDirectory, .copyToCommonDirectory:
+            return .blue
+        case .createFile:
+            return .pink
+        case .developerEntrypoints:
+            return .purple
+        case .fileOperations:
+            return .teal
+        case .none:
+            return .secondary
+        }
+    }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .firstTextBaseline) {
+        HStack(spacing: 16) {
+            HStack(spacing: 12) {
+                Image(systemName: action.kind.rowIcon)
+                    .font(.title3)
+                    .foregroundStyle(action.isEnabled ? groupTint : Color.secondary.opacity(0.5))
+                    .frame(width: 28, alignment: .center)
+
                 VStack(alignment: .leading, spacing: 4) {
                     Text(action.title)
-                        .font(.headline)
-                    Text("\(action.kind.displayName) · \(action.group?.displayName ?? "未分组") · \(action.visibility.displayName)")
+                        .font(.callout.weight(.semibold))
+                        .foregroundStyle(action.isEnabled ? .primary : .secondary)
+                        .lineLimit(1)
+                    Text(action.kind.displayName)
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SettingsTheme.muted)
                 }
-
-                Spacer()
-
-                Toggle("启用", isOn: Binding(
-                    get: { action.isEnabled },
-                    set: { viewModel.setActionEnabled($0, actionID: action.id) }
-                ))
-                .toggleStyle(.switch)
             }
+            .frame(width: 260, alignment: .leading)
+
+            labelPill(action.group?.displayName ?? "未分组", systemImage: "tag", tint: groupTint)
+                .frame(width: 150, alignment: .leading)
+
+            Text(action.visibility.displayName)
+                .font(.callout)
+                .foregroundStyle(SettingsTheme.muted)
+                .lineLimit(1)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            Toggle("启用", isOn: Binding(
+                get: { action.isEnabled },
+                set: { viewModel.setActionEnabled($0, actionID: action.id) }
+            ))
+            .toggleStyle(.switch)
+            .labelsHidden()
+            .frame(width: 64)
 
             Picker("菜单层级", selection: Binding(
                 get: { action.placement },
@@ -726,8 +1455,20 @@ struct ActionEditorRow: View {
             }
             .pickerStyle(.segmented)
             .disabled(!action.isEnabled)
+            .frame(width: 220)
         }
-        .padding(.vertical, 6)
+        .padding(.horizontal, 18)
+        .frame(height: 66)
+        .opacity(action.isEnabled ? 1 : 0.6)
+    }
+
+    private func labelPill(_ text: String, systemImage: String, tint: Color) -> some View {
+        Label(text, systemImage: systemImage)
+            .font(.caption2.weight(.semibold))
+            .foregroundStyle(tint)
+            .padding(.horizontal, 7)
+            .padding(.vertical, 3)
+            .background(tint.opacity(0.12), in: Capsule())
     }
 }
 
@@ -736,48 +1477,57 @@ struct TemplateListView: View {
     @State private var editingDraft: TemplateDraft?
 
     var body: some View {
-        VStack(spacing: 0) {
+        DesignPageScroll {
             HStack {
                 Text("共 \(viewModel.config.fileTemplates.count) 个模板")
                     .font(.callout)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SettingsTheme.muted)
                 Spacer()
                 Button {
                     editingDraft = TemplateDraft()
                 } label: {
-                    Label("新增模板", systemImage: "plus")
+                    Label("添加模板", systemImage: "plus")
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+            }
+
+            DesignPanel(padding: 0) {
+                VStack(spacing: 0) {
+                    TemplateTableHeader()
+                    if viewModel.config.fileTemplates.isEmpty {
+                        EmptyStateRow(title: "暂无模板", systemImage: "doc.badge.plus")
+                    } else {
+                        ForEach(viewModel.config.fileTemplates) { template in
+                            TemplateTableRow(template: template, viewModel: viewModel) {
+                                editingDraft = TemplateDraft(template: template)
+                            }
+                            if template.id != viewModel.config.fileTemplates.last?.id {
+                                Divider()
+                            }
+                        }
+                    }
                 }
             }
-            .padding(.horizontal, 20)
-            .padding(.vertical, 12)
 
-            Divider()
+            HStack(alignment: .top, spacing: 20) {
+                FinderMenuPreview(
+                    title: "右键菜单预览",
+                    caption: "在 Finder 中右键查看效果",
+                    rootItems: [
+                        FinderMenuItem(title: "打开"),
+                        FinderMenuItem(title: "打开方式", hasSubmenu: true),
+                        FinderMenuItem(title: "快速查看"),
+                        FinderMenuItem(title: "新建文件", systemImage: "doc", tint: SettingsTheme.accent, isHighlighted: true, hasSubmenu: true),
+                        FinderMenuItem(title: "服务", hasSubmenu: true)
+                    ],
+                    submenuTitle: nil,
+                    submenuItems: templatePreviewItems
+                )
+                .frame(width: 520)
 
-            List {
-                ForEach(viewModel.config.fileTemplates) { template in
-                    SettingsRow(
-                        systemImage: "doc.text",
-                        title: template.title,
-                        subtitle: template.defaultFileName,
-                        trailing: template.contents.isEmpty ? "空文件" : "\(template.contents.count) 字符"
-                    )
-                    .contextMenu {
-                        Button("编辑") {
-                            editingDraft = TemplateDraft(template: template)
-                        }
-                        Button("删除", role: .destructive) {
-                            viewModel.deleteTemplate(template)
-                        }
-                    }
-                    .swipeActions {
-                        Button("删除", role: .destructive) {
-                            viewModel.deleteTemplate(template)
-                        }
-                    }
-                    .onTapGesture {
-                        editingDraft = TemplateDraft(template: template)
-                    }
-                }
+                HintBanner(text: "可通过拖拽调整顺序，右键菜单将按此顺序显示。")
+                    .frame(maxWidth: .infinity, alignment: .top)
             }
         }
         .sheet(item: $editingDraft) { draft in
@@ -789,56 +1539,208 @@ struct TemplateListView: View {
             }
         }
     }
+
+    private var templatePreviewItems: [FinderMenuItem] {
+        viewModel.config.fileTemplates.prefix(8).map {
+            FinderMenuItem(title: $0.title, systemImage: templateIcon(for: $0), tint: SettingsTheme.accent)
+        }
+    }
+
+    private func templateIcon(for template: FileTemplate) -> String {
+        let ext = URL(fileURLWithPath: template.defaultFileName).pathExtension.lowercased()
+        switch ext {
+        case "md": return "doc.richtext"
+        case "json": return "curlybraces"
+        case "sh": return "terminal"
+        case "swift": return "swift"
+        case "txt": return "doc.text"
+        default: return "doc"
+        }
+    }
+}
+
+struct TemplateTableHeader: View {
+    var body: some View {
+        HStack(spacing: 16) {
+            Text("模板名称").frame(maxWidth: .infinity, alignment: .leading)
+            Text("扩展名").frame(width: 120, alignment: .leading)
+            Text("启用").frame(width: 72, alignment: .center)
+            Text("排序").frame(width: 120, alignment: .center)
+            Text("操作").frame(width: 72, alignment: .center)
+        }
+        .font(.caption.weight(.semibold))
+        .foregroundStyle(SettingsTheme.muted)
+        .padding(.horizontal, 18)
+        .frame(height: 44)
+        .background(Color.black.opacity(0.015))
+    }
+}
+
+struct TemplateTableRow: View {
+    let template: FileTemplate
+    @ObservedObject var viewModel: SettingsViewModel
+    let onEdit: () -> Void
+
+    private var matchingAction: RightToolAction? {
+        viewModel.config.actions.first {
+            $0.kind == .createFile && $0.payload.templateID == template.id
+        }
+    }
+
+    var body: some View {
+        HStack(spacing: 16) {
+            Button(action: onEdit) {
+                HStack(spacing: 12) {
+                    Image(systemName: iconName)
+                        .font(.title3)
+                        .foregroundStyle(SettingsTheme.accent)
+                        .frame(width: 28)
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(template.title)
+                            .font(.callout.weight(.semibold))
+                            .foregroundStyle(SettingsTheme.ink)
+                        Text(template.defaultFileName)
+                            .font(.caption)
+                            .foregroundStyle(SettingsTheme.muted)
+                    }
+                }
+            }
+            .buttonStyle(.plain)
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            Text(extensionText)
+                .font(.callout)
+                .foregroundStyle(SettingsTheme.muted)
+                .frame(width: 120, alignment: .leading)
+
+            Toggle("", isOn: Binding(
+                get: { matchingAction?.isEnabled ?? false },
+                set: { isEnabled in
+                    guard let actionID = matchingAction?.id else { return }
+                    viewModel.setActionEnabled(isEnabled, actionID: actionID)
+                }
+            ))
+            .toggleStyle(.switch)
+            .labelsHidden()
+            .disabled(matchingAction == nil)
+            .frame(width: 72)
+
+            HStack(spacing: 20) {
+                Image(systemName: "arrow.up")
+                Image(systemName: "arrow.down")
+            }
+            .foregroundStyle(SettingsTheme.muted)
+            .frame(width: 120)
+
+            Menu {
+                Button("编辑", action: onEdit)
+                Button("删除", role: .destructive) {
+                    viewModel.deleteTemplate(template)
+                }
+            } label: {
+                Image(systemName: "ellipsis")
+                    .font(.title3)
+                    .frame(width: 32, height: 32)
+            }
+            .menuStyle(.borderlessButton)
+            .frame(width: 72)
+        }
+        .padding(.horizontal, 18)
+        .frame(height: 58)
+    }
+
+    private var extensionText: String {
+        let ext = URL(fileURLWithPath: template.defaultFileName).pathExtension
+        return ext.isEmpty ? "—" : ".\(ext)"
+    }
+
+    private var iconName: String {
+        switch extensionText.lowercased() {
+        case ".md": return "doc.richtext"
+        case ".json": return "curlybraces"
+        case ".sh": return "terminal"
+        case ".swift": return "swift"
+        case ".txt": return "doc.text"
+        default: return "doc"
+        }
+    }
 }
 
 struct DeveloperEntrypointListView: View {
     @ObservedObject var viewModel: SettingsViewModel
     @State private var editingDraft: DeveloperEntrypointDraft?
+    @State private var selectedFilter: DeveloperEntrypointFilter = .all
+
+    private var filteredEntrypoints: [DeveloperEntrypoint] {
+        switch selectedFilter {
+        case .all:
+            return viewModel.config.developerEntrypoints
+        case .currentDirectory:
+            return viewModel.config.developerEntrypoints.filter { $0.targetMode == .currentDirectory }
+        case .selectedItem:
+            return viewModel.config.developerEntrypoints.filter { $0.targetMode != .currentDirectory }
+        }
+    }
 
     var body: some View {
-        VStack(spacing: 0) {
+        DesignPageScroll {
             HStack {
-                Text("共 \(viewModel.config.developerEntrypoints.count) 个入口")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
+                Picker("入口筛选", selection: $selectedFilter) {
+                    ForEach(DeveloperEntrypointFilter.allCases) { filter in
+                        Text(filter.rawValue).tag(filter)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .frame(width: 360)
+
                 Spacer()
+
                 Button {
                     editingDraft = DeveloperEntrypointDraft()
                 } label: {
-                    Label("新增入口", systemImage: "plus")
+                    Label("添加快捷入口", systemImage: "plus")
                 }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
             }
-            .padding(.horizontal, 20)
-            .padding(.vertical, 12)
 
-            Divider()
-
-            List {
-                ForEach(viewModel.config.developerEntrypoints) { entrypoint in
-                    SettingsRow(
-                        systemImage: "terminal",
-                        title: entrypoint.title,
-                        subtitle: entrypoint.bundleIdentifier,
-                        trailing: entrypoint.targetMode.displayName
-                    )
-                    .contextMenu {
-                        Button("编辑") {
-                            editingDraft = DeveloperEntrypointDraft(entrypoint: entrypoint)
+            HStack(alignment: .top, spacing: 24) {
+                DesignPanel(padding: 0) {
+                    VStack(spacing: 0) {
+                        DeveloperTableHeader()
+                        if filteredEntrypoints.isEmpty {
+                            EmptyStateRow(title: "暂无开发者入口", systemImage: "terminal")
+                        } else {
+                            ForEach(filteredEntrypoints) { entrypoint in
+                                DeveloperTableRow(entrypoint: entrypoint, viewModel: viewModel) {
+                                    editingDraft = DeveloperEntrypointDraft(entrypoint: entrypoint)
+                                }
+                                if entrypoint.id != filteredEntrypoints.last?.id {
+                                    Divider()
+                                }
+                            }
                         }
-                        Button("删除", role: .destructive) {
-                            viewModel.deleteDeveloperEntrypoint(entrypoint)
-                        }
-                    }
-                    .swipeActions {
-                        Button("删除", role: .destructive) {
-                            viewModel.deleteDeveloperEntrypoint(entrypoint)
-                        }
-                    }
-                    .onTapGesture {
-                        editingDraft = DeveloperEntrypointDraft(entrypoint: entrypoint)
                     }
                 }
+                .frame(minWidth: 610)
+
+                FinderMenuPreview(
+                    title: "右键菜单预览",
+                    caption: "在 Finder 中右键时，将在开发者工具子菜单中显示以下内容。",
+                    rootItems: [
+                        FinderMenuItem(title: "新建文件夹"),
+                        FinderMenuItem(title: "显示简介"),
+                        FinderMenuItem(title: "开发者工具", systemImage: "chevron.left.forwardslash.chevron.right", tint: SettingsTheme.accent, isHighlighted: true, hasSubmenu: true),
+                        FinderMenuItem(title: "快速操作", hasSubmenu: true),
+                        FinderMenuItem(title: "拷贝")
+                    ],
+                    submenuTitle: nil,
+                    submenuItems: developerPreviewItems
+                )
+                .frame(width: 300)
             }
+
+            HintBanner(text: "在 Finder 中右键任意位置，选择「开发者工具」，即可看到以上快捷入口。")
         }
         .sheet(item: $editingDraft) { draft in
             DeveloperEntrypointEditorSheet(draft: draft) { savedDraft in
@@ -849,78 +1751,470 @@ struct DeveloperEntrypointListView: View {
             }
         }
     }
+
+    private var developerPreviewItems: [FinderMenuItem] {
+        viewModel.config.developerEntrypoints.prefix(10).map {
+            FinderMenuItem(title: $0.title, systemImage: developerIcon(for: $0), tint: SettingsTheme.accent)
+        }
+    }
+
+    private func developerIcon(for entrypoint: DeveloperEntrypoint) -> String {
+        let id = entrypoint.bundleIdentifier.lowercased()
+        if id.contains("terminal") || id.contains("iterm") { return "terminal" }
+        if id.contains("github") { return "globe" }
+        if id.contains("docker") { return "shippingbox" }
+        return "app"
+    }
+}
+
+enum DeveloperEntrypointFilter: String, CaseIterable, Identifiable {
+    case all = "全部"
+    case currentDirectory = "当前目录"
+    case selectedItem = "选中项目"
+
+    var id: String { rawValue }
+}
+
+struct DeveloperTableHeader: View {
+    var body: some View {
+        HStack(spacing: 16) {
+            Text("名称").frame(width: 210, alignment: .leading)
+            Text("Bundle Identifier").frame(maxWidth: .infinity, alignment: .leading)
+            Text("目标").frame(width: 120, alignment: .leading)
+            Text("启用").frame(width: 72, alignment: .center)
+            Text("操作").frame(width: 72, alignment: .center)
+        }
+        .font(.caption.weight(.semibold))
+        .foregroundStyle(SettingsTheme.muted)
+        .padding(.horizontal, 18)
+        .frame(height: 44)
+        .background(Color.black.opacity(0.015))
+    }
+}
+
+struct DeveloperTableRow: View {
+    let entrypoint: DeveloperEntrypoint
+    @ObservedObject var viewModel: SettingsViewModel
+    let onEdit: () -> Void
+
+    private var matchingAction: RightToolAction? {
+        viewModel.config.actions.first {
+            $0.kind == .openInApp && $0.payload.developerEntrypointID == entrypoint.id
+        }
+    }
+
+    var body: some View {
+        HStack(spacing: 16) {
+            Button(action: onEdit) {
+                HStack(spacing: 12) {
+                    Image(systemName: iconName)
+                        .font(.title3)
+                        .foregroundStyle(SettingsTheme.accent)
+                        .frame(width: 28)
+                    Text(entrypoint.title)
+                        .font(.callout.weight(.semibold))
+                        .foregroundStyle(SettingsTheme.ink)
+                        .lineLimit(1)
+                }
+            }
+            .buttonStyle(.plain)
+            .frame(width: 210, alignment: .leading)
+
+            Text(entrypoint.bundleIdentifier)
+                .font(.callout)
+                .foregroundStyle(SettingsTheme.muted)
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            Text(entrypoint.targetMode.displayName)
+                .font(.callout)
+                .foregroundStyle(SettingsTheme.muted)
+                .frame(width: 120, alignment: .leading)
+
+            Toggle("", isOn: Binding(
+                get: { matchingAction?.isEnabled ?? false },
+                set: { isEnabled in
+                    guard let actionID = matchingAction?.id else { return }
+                    viewModel.setActionEnabled(isEnabled, actionID: actionID)
+                }
+            ))
+            .toggleStyle(.switch)
+            .labelsHidden()
+            .disabled(matchingAction == nil)
+            .frame(width: 72)
+
+            Menu {
+                Button("编辑", action: onEdit)
+                Button("删除", role: .destructive) {
+                    viewModel.deleteDeveloperEntrypoint(entrypoint)
+                }
+            } label: {
+                Image(systemName: "ellipsis")
+                    .font(.title3)
+                    .frame(width: 32, height: 32)
+            }
+            .menuStyle(.borderlessButton)
+            .frame(width: 72)
+        }
+        .padding(.horizontal, 18)
+        .frame(height: 58)
+    }
+
+    private var iconName: String {
+        let id = entrypoint.bundleIdentifier.lowercased()
+        if id.contains("terminal") || id.contains("iterm") { return "terminal" }
+        if id.contains("github") { return "globe" }
+        if id.contains("docker") { return "shippingbox" }
+        return "app"
+    }
 }
 
 struct OperationHistoryView: View {
     @ObservedObject var viewModel: SettingsViewModel
 
+    private var fileOperationRecords: [OperationRecord] {
+        viewModel.recentOperations.filter {
+            [.move, .copy, .cut, .paste].contains($0.kind)
+        }
+    }
+
+    private var fileOperationActions: [RightToolAction] {
+        viewModel.config.actions
+            .filter { $0.group == .fileOperations || [.cut, .paste, .moveToDirectory, .copyToDirectory].contains($0.kind) }
+            .sorted { $0.order < $1.order }
+    }
+
     var body: some View {
-        VStack(spacing: 0) {
+        DesignPageScroll {
             HStack {
-                Text("最近 \(viewModel.recentOperations.count) 条")
+                Text("最近 \(fileOperationRecords.count) 条文件操作")
                     .font(.callout)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SettingsTheme.muted)
                 Spacer()
                 Button {
                     viewModel.reloadRecentOperations()
                 } label: {
                     Label("刷新", systemImage: "arrow.clockwise")
                 }
+                .buttonStyle(.bordered)
             }
-            .padding(.horizontal, 20)
-            .padding(.vertical, 12)
 
-            Divider()
-
-            if viewModel.recentOperations.isEmpty {
-                ContentUnavailableView("暂无操作记录", systemImage: "clock", description: Text("执行右键动作后会在这里出现记录。"))
-            } else {
-                List(viewModel.recentOperations) { record in
-                    SettingsRow(
-                        systemImage: record.status.systemImage,
-                        title: record.message ?? record.kind.displayName,
-                        subtitle: "\(record.kind.displayName) · \(operationDateFormatter.string(from: record.createdAt))",
-                        trailing: record.status.displayName
-                    )
-                    .foregroundStyle(record.status.color)
+            DesignPanel(padding: 0) {
+                VStack(spacing: 0) {
+                    ClipboardHistoryHeader()
+                    if fileOperationRecords.isEmpty {
+                        EmptyStateRow(title: "暂无剪切或粘贴记录", systemImage: "clock")
+                    } else {
+                        ForEach(fileOperationRecords.prefix(8)) { record in
+                            ClipboardHistoryRow(record: record)
+                            if record.id != fileOperationRecords.prefix(8).last?.id {
+                                Divider()
+                            }
+                        }
+                    }
                 }
+            }
+
+            HStack(spacing: 18) {
+                ForEach(fileOperationActions.prefix(4)) { action in
+                    FileOperationQuickAction(action: action, viewModel: viewModel)
+                }
+            }
+
+            HStack(alignment: .top, spacing: 20) {
+                FinderMenuPreview(
+                    title: "右键菜单预览",
+                    caption: "在 Finder 中右键即可使用这些文件操作。",
+                    rootItems: [
+                        FinderMenuItem(title: "打开"),
+                        FinderMenuItem(title: "打开方式", hasSubmenu: true),
+                        FinderMenuItem(title: "移动到废纸篓"),
+                        FinderMenuItem(title: "文件操作", systemImage: "folder", tint: SettingsTheme.accent, isHighlighted: true, hasSubmenu: true),
+                        FinderMenuItem(title: "服务", hasSubmenu: true)
+                    ],
+                    submenuTitle: nil,
+                    submenuItems: fileOperationActions.map {
+                        FinderMenuItem(title: $0.title, systemImage: $0.kind.rowIcon, tint: SettingsTheme.accent)
+                    }
+                )
+                .frame(width: 520)
+
+                HintBanner(text: "支持剪切、复制文件与文件夹，并记录最近操作历史。")
+                    .frame(maxWidth: .infinity, alignment: .top)
             }
         }
     }
 }
 
-struct SettingsRow: View {
-    let systemImage: String
-    let title: String
-    let subtitle: String
-    let trailing: String
+struct ClipboardHistoryHeader: View {
+    var body: some View {
+        HStack(spacing: 16) {
+            Text("文件名称").frame(width: 220, alignment: .leading)
+            Text("来源路径").frame(maxWidth: .infinity, alignment: .leading)
+            Text("状态").frame(width: 80, alignment: .leading)
+            Text("时间").frame(width: 130, alignment: .leading)
+            Text("操作").frame(width: 130, alignment: .center)
+        }
+        .font(.caption.weight(.semibold))
+        .foregroundStyle(SettingsTheme.muted)
+        .padding(.horizontal, 18)
+        .frame(height: 44)
+        .background(Color.black.opacity(0.015))
+    }
+}
+
+struct ClipboardHistoryRow: View {
+    let record: OperationRecord
 
     var body: some View {
-        HStack(spacing: 12) {
-            Image(systemName: systemImage)
-                .frame(width: 24)
-                .foregroundStyle(.blue)
-
-            VStack(alignment: .leading, spacing: 3) {
+        HStack(spacing: 16) {
+            HStack(spacing: 12) {
+                Image(systemName: iconName)
+                    .font(.title3)
+                    .foregroundStyle(record.status.color)
+                    .frame(width: 28)
                 Text(title)
-                    .font(.headline)
-                Text(subtitle)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(2)
-                    .textSelection(.enabled)
+                    .font(.callout.weight(.semibold))
+                    .foregroundStyle(SettingsTheme.ink)
+                    .lineLimit(1)
+            }
+            .frame(width: 220, alignment: .leading)
+
+            Text(sourcePath)
+                .font(.callout)
+                .foregroundStyle(SettingsTheme.muted)
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            Text(record.status.displayName)
+                .font(.callout)
+                .foregroundStyle(record.status.color)
+                .frame(width: 80, alignment: .leading)
+
+            Text(operationDateFormatter.string(from: record.createdAt))
+                .font(.caption)
+                .foregroundStyle(SettingsTheme.muted)
+                .frame(width: 130, alignment: .leading)
+
+            HStack(spacing: 18) {
+                Image(systemName: "scissors")
+                Image(systemName: "doc.on.doc")
+                Image(systemName: "doc.on.clipboard")
+                Image(systemName: "ellipsis")
+            }
+            .foregroundStyle(SettingsTheme.muted)
+            .frame(width: 130)
+        }
+        .padding(.horizontal, 18)
+        .frame(height: 58)
+    }
+
+    private var title: String {
+        if let message = record.message, !message.isEmpty {
+            return message
+        }
+        if let path = record.sourcePaths.first {
+            return URL(fileURLWithPath: path).lastPathComponent
+        }
+        return record.kind.displayName
+    }
+
+    private var sourcePath: String {
+        record.sourcePaths.first ?? record.destinationPaths.first ?? "—"
+    }
+
+    private var iconName: String {
+        switch record.kind {
+        case .move:
+            return "folder"
+        case .copy:
+            return "doc.on.doc"
+        case .cut:
+            return "scissors"
+        case .paste:
+            return "doc.on.clipboard"
+        default:
+            return "doc"
+        }
+    }
+}
+
+struct FileOperationQuickAction: View {
+    let action: RightToolAction
+    @ObservedObject var viewModel: SettingsViewModel
+
+    var body: some View {
+        DesignPanel {
+            HStack(spacing: 12) {
+                Image(systemName: action.kind.rowIcon)
+                    .font(.title3)
+                    .foregroundStyle(SettingsTheme.accent)
+                    .frame(width: 30)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(action.title)
+                        .font(.headline)
+                        .foregroundStyle(SettingsTheme.ink)
+                    Text(action.placement.displayName)
+                        .font(.caption)
+                        .foregroundStyle(SettingsTheme.muted)
+                }
+                Spacer()
+                Toggle("", isOn: Binding(
+                    get: { action.isEnabled },
+                    set: { viewModel.setActionEnabled($0, actionID: action.id) }
+                ))
+                .toggleStyle(.switch)
+                .labelsHidden()
+            }
+        }
+    }
+}
+
+struct EmptyStateRow: View {
+    let title: String
+    let systemImage: String
+
+    var body: some View {
+        VStack(spacing: 10) {
+            Image(systemName: systemImage)
+                .font(.title2)
+                .foregroundStyle(SettingsTheme.muted)
+            Text(title)
+                .font(.callout)
+                .foregroundStyle(SettingsTheme.muted)
+        }
+        .frame(maxWidth: .infinity)
+        .frame(height: 140)
+    }
+}
+
+struct FinderMenuItem: Identifiable {
+    let id = UUID()
+    let title: String
+    var systemImage: String? = nil
+    var tint: Color = SettingsTheme.muted
+    var isHighlighted = false
+    var hasSubmenu = false
+}
+
+struct FinderMenuPreview: View {
+    let title: String?
+    let caption: String?
+    let rootItems: [FinderMenuItem]
+    let submenuTitle: String?
+    let submenuItems: [FinderMenuItem]
+    var isFramed = true
+
+    var body: some View {
+        if isFramed {
+            DesignPanel {
+                previewBody
+            }
+        } else {
+            previewBody
+        }
+    }
+
+    private var previewBody: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            if title != nil || caption != nil {
+                VStack(alignment: .leading, spacing: 6) {
+                    if let title {
+                        Text(title)
+                            .font(.headline)
+                            .foregroundStyle(SettingsTheme.ink)
+                    }
+                    if let caption {
+                        Text(caption)
+                            .font(.callout)
+                            .foregroundStyle(SettingsTheme.muted)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
             }
 
-            Spacer(minLength: 16)
+            HStack(alignment: .center, spacing: 14) {
+                FinderMenuBox(items: rootItems)
 
-            Text(trailing)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 4)
-                .background(.quaternary, in: RoundedRectangle(cornerRadius: 6))
+                if !submenuItems.isEmpty {
+                    Image(systemName: "arrow.right")
+                        .font(.headline)
+                        .foregroundStyle(SettingsTheme.accent)
+                    FinderMenuBox(title: submenuTitle, items: submenuItems)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .center)
         }
-        .padding(.vertical, 5)
+    }
+}
+
+struct FinderMenuBox: View {
+    var title: String?
+    let items: [FinderMenuItem]
+
+    var body: some View {
+        VStack(spacing: 0) {
+            if let title {
+                Text(title)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(SettingsTheme.muted)
+                    .padding(.horizontal, 12)
+                    .frame(maxWidth: .infinity, minHeight: 28, alignment: .leading)
+                Divider()
+            }
+
+            ForEach(items) { item in
+                FinderMenuRow(item: item)
+                if item.id != items.last?.id {
+                    Divider()
+                        .padding(.leading, item.systemImage == nil ? 0 : 32)
+                }
+            }
+        }
+        .frame(width: 178)
+        .background(.white, in: RoundedRectangle(cornerRadius: 8))
+        .overlay(RoundedRectangle(cornerRadius: 8).stroke(SettingsTheme.hairline))
+        .shadow(color: Color.black.opacity(0.12), radius: 18, x: 0, y: 10)
+    }
+}
+
+struct FinderMenuRow: View {
+    let item: FinderMenuItem
+
+    var body: some View {
+        HStack(spacing: 9) {
+            if let systemImage = item.systemImage {
+                Image(systemName: systemImage)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(item.isHighlighted ? .white : item.tint)
+                    .frame(width: 16)
+            }
+
+            Text(item.title)
+                .font(.caption)
+                .foregroundStyle(item.isHighlighted ? .white : SettingsTheme.ink)
+                .lineLimit(1)
+
+            Spacer(minLength: 8)
+
+            if item.hasSubmenu {
+                Image(systemName: "chevron.right")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(item.isHighlighted ? .white : SettingsTheme.muted)
+            }
+        }
+        .padding(.horizontal, 12)
+        .frame(height: 30)
+        .background(
+            item.isHighlighted ? SettingsTheme.accent : Color.clear,
+            in: RoundedRectangle(cornerRadius: 6)
+        )
+        .padding(.horizontal, item.isHighlighted ? 5 : 0)
+        .padding(.vertical, item.isHighlighted ? 4 : 0)
     }
 }
 
@@ -1120,6 +2414,29 @@ private extension ActionKind {
             return "运行命令"
         case .undoOperation:
             return "撤销操作"
+        }
+    }
+
+    var rowIcon: String {
+        switch self {
+        case .openDirectory:
+            return "folder"
+        case .moveToDirectory:
+            return "tray.and.arrow.up"
+        case .copyToDirectory:
+            return "tray.and.arrow.down"
+        case .cut:
+            return "scissors"
+        case .paste:
+            return "doc.on.clipboard"
+        case .createFile:
+            return "doc.badge.plus"
+        case .openInApp:
+            return "terminal"
+        case .runCommand:
+            return "terminal"
+        case .undoOperation:
+            return "arrow.uturn.backward"
         }
     }
 }

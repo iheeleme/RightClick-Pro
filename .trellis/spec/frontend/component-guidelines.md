@@ -139,3 +139,60 @@ Button("保存配置") {
     viewModel.saveConfig()
 }
 ```
+
+### Scenario: SwiftUI Settings Presentation Refactors
+
+#### 1. Scope / Trigger
+
+- Trigger: redesigning or refactoring `Sources/RightToolAppPreview/RightToolAppPreview.swift` presentation components, especially dashboards, tables, menu previews, and section navigation.
+
+#### 2. Signatures
+
+- Keep persistence mutations behind `SettingsViewModel` commands already listed in the settings editing surface contract.
+- Presentation-only helpers may accept read-only model values:
+  ```swift
+  FinderMenuItem(title: action.title, systemImage: action.kind.rowIcon)
+  Toggle("", isOn: Binding(
+      get: { action.isEnabled },
+      set: { viewModel.setActionEnabled($0, actionID: action.id) }
+  ))
+  ```
+
+#### 3. Contracts
+
+- Menu previews must be derived from `RightToolConfig`, `DirectoryBookmarkCatalog`, `FileTemplate`, `DeveloperEntrypoint`, or `OperationRecord` values.
+- Do not make a preview imply that an edit/add/delete operation is available unless there is a matching `SettingsViewModel` command.
+- Read-only visual affordances such as disabled toggles or static edit icons are acceptable only when they reflect current model state.
+
+#### 4. Validation & Error Matrix
+
+- Preview shows an action as enabled but `RightToolAction.isEnabled == false` -> bug; derive enabled state from the action.
+- Toggle changes a template/developer entrypoint but bypasses `setActionEnabled` or upsert/delete commands -> persistence contract violation.
+- Table displays an edit/delete control with no backing command -> either wire it to a ViewModel command or render it as static/read-only.
+
+#### 5. Good/Base/Bad Cases
+
+- Good: template enable switches locate the matching `.createFile` action and call `setActionEnabled`.
+- Base: a directory table renders bookmark rows as active because directory editing is not yet exposed by the ViewModel.
+- Bad: a Finder menu preview hard-codes "VS Code" even when `config.developerEntrypoints` does not contain that entry.
+
+#### 6. Tests Required
+
+- Run `swift build --target RightToolAppPreview`.
+- Run `scripts/ci-swift-check.sh debug`.
+- Run `scripts/package-macos.sh debug` after SwiftUI settings changes.
+- Run `git diff --check`.
+
+#### 7. Wrong vs Correct
+
+Wrong:
+```swift
+FinderMenuItem(title: "VS Code", systemImage: "app")
+```
+
+Correct:
+```swift
+config.developerEntrypoints.map {
+    FinderMenuItem(title: $0.title, systemImage: developerIcon(for: $0))
+}
+```
