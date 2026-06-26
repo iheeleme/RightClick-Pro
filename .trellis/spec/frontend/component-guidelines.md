@@ -56,4 +56,86 @@ Questions to answer:
 
 <!-- Component-related mistakes your team has made -->
 
-(To be filled by the team)
+### Scenario: SwiftUI Settings Editing Surfaces
+
+#### 1. Scope / Trigger
+
+- Trigger: changes to `Sources/RightToolAppPreview/RightToolAppPreview.swift` or future SwiftUI settings screens that edit `RightToolConfig`.
+- This is a frontend contract with persistence consequences because the settings UI writes JSON config that Finder Sync and ActionRunner later consume.
+
+#### 2. Signatures
+
+- Settings screens should mutate config through `SettingsViewModel` methods, not by scattering persistence writes through child views:
+  ```swift
+  func saveConfig()
+  func setActionEnabled(_ isEnabled: Bool, actionID: String)
+  func setActionPlacement(_ placement: ActionPlacement, actionID: String)
+  func upsertTemplate(_ template: FileTemplate, replacing originalID: String?)
+  func deleteTemplate(_ template: FileTemplate)
+  func upsertDeveloperEntrypoint(_ entrypoint: DeveloperEntrypoint, replacing originalID: String?)
+  func deleteDeveloperEntrypoint(_ entrypoint: DeveloperEntrypoint)
+  ```
+
+#### 3. Contracts
+
+- Child views may hold local draft state for sheets/forms.
+- Child views call ViewModel commands on save/delete/toggle.
+- `saveConfig()` is the only operation that persists `RightToolConfig` to disk.
+- Adding a `FileTemplate` must also create or update its matching `.createFile` action.
+- Adding a `DeveloperEntrypoint` must also create or update its matching `.openInApp` action.
+- Deleting a template or developer entrypoint must remove its associated action so Finder menus do not reference missing payloads.
+- Promoting actions to `rootMenu` must enforce `RightToolConfig.maxRootMenuActions`.
+
+#### 4. Validation & Error Matrix
+
+- More than `maxRootMenuActions` enabled root actions -> block promotion or fail save with a visible status message.
+- Empty template ID/title/default filename -> fail save with a visible status message.
+- Duplicate template or developer entrypoint ID -> fail save with a visible status message.
+- Empty developer title or bundle identifier -> fail save with a visible status message.
+- Operation log read failure -> show an empty history state and visible error status.
+
+#### 5. Good/Base/Bad Cases
+
+- Good: user adds a Markdown template, saves, and a submenu create-file action appears in the config.
+- Base: user toggles an existing action off, saves, and Finder no longer shows that action on the next menu open.
+- Bad: user adds a template but no action references it, making the template unreachable from Finder.
+- Bad: child views write `config.json` directly, bypassing central validation.
+
+#### 6. Tests Required
+
+- Run preview packaging after SwiftUI settings changes:
+  ```bash
+  scripts/package-macos.sh debug
+  ```
+- Run `git diff --check`.
+- Run SwiftPM checks where the local toolchain can compile the manifest:
+  ```bash
+  scripts/ci-swift-check.sh debug
+  ```
+- Manually open the settings window and smoke-test toggles, add/edit/delete sheets, save feedback, and recent-operation reload.
+
+#### 7. Wrong vs Correct
+
+Wrong:
+```swift
+config.fileTemplates.append(template)
+```
+
+Correct:
+```swift
+viewModel.upsertTemplate(template, replacing: originalID)
+```
+
+Wrong:
+```swift
+Button("保存") {
+    try? JSONFileStore<RightToolConfig>(url: url).save(config)
+}
+```
+
+Correct:
+```swift
+Button("保存配置") {
+    viewModel.saveConfig()
+}
+```
