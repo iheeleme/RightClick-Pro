@@ -754,9 +754,10 @@ struct SettingsDetailShell<Content: View>: View {
                     headerActions
                 }
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 28)
-            .padding(.top, 28)
-            .padding(.bottom, 16)
+            .padding(.top, section == .onboarding ? 22 : 28)
+            .padding(.bottom, section == .onboarding ? 8 : 16)
             .background(.white.opacity(0.72))
 
             if section != .onboarding {
@@ -874,6 +875,25 @@ struct DesignPageScroll<Content: View>: View {
             .frame(maxWidth: 1040, alignment: .leading)
             .frame(maxWidth: .infinity, alignment: .topLeading)
         }
+        .background(.white.opacity(0.34))
+    }
+}
+
+struct OverviewPageScroll<Content: View>: View {
+    @ViewBuilder var content: Content
+
+    var body: some View {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 16) {
+                content
+            }
+            .padding(.horizontal, 28)
+            .padding(.top, 8)
+            .padding(.bottom, 16)
+            .frame(maxWidth: 1040, alignment: .leading)
+            .frame(maxWidth: .infinity, alignment: .topLeading)
+        }
+        .scrollIndicators(.hidden)
         .background(.white.opacity(0.34))
     }
 }
@@ -1000,7 +1020,7 @@ struct IconBadge: View {
         Image(systemName: systemImage)
             .font(.system(size: 20, weight: .semibold))
             .foregroundStyle(tint)
-            .frame(width: 54, height: 54)
+            .frame(width: 46, height: 46)
             .background(tint.opacity(0.09), in: RoundedRectangle(cornerRadius: 8))
     }
 }
@@ -1009,14 +1029,14 @@ struct OnboardingView: View {
     @ObservedObject var viewModel: SettingsViewModel
 
     var body: some View {
-        DesignPageScroll {
-            HStack(alignment: .top, spacing: 52) {
-                VStack(alignment: .leading, spacing: 20) {
+        OverviewPageScroll {
+            HStack(alignment: .top, spacing: 40) {
+                VStack(alignment: .leading, spacing: 16) {
                     Text("功能总览")
                         .font(.system(size: 18, weight: .semibold))
                         .foregroundStyle(SettingsTheme.ink)
 
-                    VStack(spacing: 18) {
+                    VStack(spacing: 14) {
                         OverviewFeatureRow(
                             systemImage: "folder",
                             title: "常用目录快捷直达",
@@ -1059,13 +1079,13 @@ struct OnboardingView: View {
                     }
 
                     OverviewHintBanner()
-                        .padding(.top, 6)
+                        .padding(.top, 2)
                 }
-                .padding(.top, 36)
+                .padding(.top, 8)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
                 OverviewFinderMenuCallout(items: overviewSubmenuItems)
-                    .frame(width: 280)
+                    .frame(width: 262)
             }
 
             OverviewMetricStrip(viewModel: viewModel)
@@ -1119,26 +1139,29 @@ struct OverviewFeatureRow: View {
 
     var body: some View {
         Button(action: onOpen) {
-            HStack(alignment: .center, spacing: 18) {
+            HStack(alignment: .center, spacing: 16) {
                 IconBadge(systemImage: systemImage)
 
                 VStack(alignment: .leading, spacing: 6) {
                     Text(title)
-                        .font(.system(size: 16, weight: .semibold))
+                        .font(.system(size: 15, weight: .semibold))
                         .foregroundStyle(SettingsTheme.ink)
                         .lineLimit(1)
                     Text(detail)
                         .font(.system(size: 12))
                         .foregroundStyle(SettingsTheme.muted)
                         .lineLimit(1)
+                        .minimumScaleFactor(0.9)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
+                .layoutPriority(1)
 
                 Text(meta)
                     .font(.system(size: 12))
                     .foregroundStyle(SettingsTheme.muted)
                     .lineLimit(1)
-                    .frame(width: 118, alignment: .trailing)
+                    .minimumScaleFactor(0.9)
+                    .frame(width: 112, alignment: .trailing)
 
                 Image(systemName: "chevron.right")
                     .font(.caption.weight(.semibold))
@@ -1150,8 +1173,8 @@ struct OverviewFeatureRow: View {
                     .labelsHidden()
                     .allowsHitTesting(false)
             }
-            .padding(.horizontal, 18)
-            .frame(maxWidth: .infinity, minHeight: 78, alignment: .leading)
+            .padding(.horizontal, 16)
+            .frame(maxWidth: .infinity, minHeight: 68, alignment: .leading)
             .background(.white.opacity(0.86), in: RoundedRectangle(cornerRadius: 8))
             .overlay(RoundedRectangle(cornerRadius: 8).stroke(SettingsTheme.hairline))
         }
@@ -1163,9 +1186,9 @@ struct OverviewHintBanner: View {
     var body: some View {
         HStack(alignment: .center, spacing: 16) {
             Image(systemName: "lightbulb")
-                .font(.system(size: 24, weight: .regular))
+                .font(.system(size: 22, weight: .regular))
                 .foregroundStyle(SettingsTheme.accent)
-                .frame(width: 34)
+                .frame(width: 32)
 
             Text("提示")
                 .font(.system(size: 14, weight: .semibold))
@@ -1175,11 +1198,12 @@ struct OverviewHintBanner: View {
                 .font(.system(size: 12))
                 .foregroundStyle(SettingsTheme.muted)
                 .lineLimit(1)
+                .minimumScaleFactor(0.9)
 
             Spacer(minLength: 0)
         }
-        .padding(.horizontal, 20)
-        .frame(maxWidth: .infinity, minHeight: 70)
+        .padding(.horizontal, 18)
+        .frame(maxWidth: .infinity, minHeight: 58)
         .background(SettingsTheme.accent.opacity(0.055), in: RoundedRectangle(cornerRadius: 8))
         .overlay(RoundedRectangle(cornerRadius: 8).stroke(SettingsTheme.accent.opacity(0.18)))
     }
@@ -1189,26 +1213,33 @@ struct OverviewFinderMenuCallout: View {
     let items: [FinderMenuItem]
 
     var body: some View {
-        VStack(alignment: .trailing, spacing: 12) {
+        VStack(alignment: .trailing, spacing: 8) {
             OverviewContextMenu(items: items)
 
-            HStack(alignment: .top, spacing: 8) {
-                OverviewCalloutArrow()
-                    .stroke(
-                        SettingsTheme.accent,
-                        style: StrokeStyle(lineWidth: 1.4, lineCap: .round, dash: [5, 5])
-                    )
-                    .frame(width: 46, height: 64)
-                    .padding(.top, 2)
+            HStack(alignment: .top, spacing: 6) {
+                ZStack(alignment: .topTrailing) {
+                    OverviewCalloutArrow()
+                        .stroke(
+                            SettingsTheme.accent,
+                            style: StrokeStyle(lineWidth: 1.35, lineCap: .round, dash: [5, 5])
+                        )
+                    Image(systemName: "arrow.up")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(SettingsTheme.accent)
+                        .rotationEffect(.degrees(28))
+                        .offset(x: 4, y: -3)
+                }
+                .frame(width: 40, height: 52)
+                .padding(.top, 0)
 
                 Text("在 Finder 右键菜单中\n快速访问常用功能")
-                    .font(.system(size: 17, weight: .semibold, design: .rounded))
+                    .font(.system(size: 15, weight: .semibold, design: .rounded))
                     .foregroundStyle(SettingsTheme.accent)
-                    .lineSpacing(8)
+                    .lineSpacing(5)
                     .rotationEffect(.degrees(-2))
-                    .padding(.top, 40)
+                    .padding(.top, 28)
             }
-            .padding(.trailing, 4)
+            .padding(.trailing, 0)
         }
         .frame(maxWidth: .infinity, alignment: .trailing)
     }
@@ -1251,11 +1282,11 @@ struct OverviewContextMenu: View {
             Divider().padding(.horizontal, 12)
             OverviewContextMenuRow(item: FinderMenuItem(title: "服务", hasSubmenu: true))
         }
-        .padding(.vertical, 8)
-        .frame(width: 252)
+        .padding(.vertical, 6)
+        .frame(width: 238)
         .background(.white.opacity(0.96), in: RoundedRectangle(cornerRadius: 8))
         .overlay(RoundedRectangle(cornerRadius: 8).stroke(SettingsTheme.hairline))
-        .shadow(color: Color.black.opacity(0.09), radius: 14, x: 0, y: 10)
+        .shadow(color: Color.black.opacity(0.08), radius: 10, x: 0, y: 7)
     }
 }
 
@@ -1266,13 +1297,13 @@ struct OverviewContextMenuRow: View {
         HStack(spacing: 10) {
             if let systemImage = item.systemImage {
                 Image(systemName: systemImage)
-                    .font(.system(size: 14, weight: .medium))
+                    .font(.system(size: 13, weight: .medium))
                     .foregroundStyle(item.tint)
-                    .frame(width: 18)
+                    .frame(width: 17)
             }
 
             Text(item.title)
-                .font(.system(size: 14))
+                .font(.system(size: 13))
                 .foregroundStyle(SettingsTheme.ink)
                 .lineLimit(1)
 
@@ -1280,12 +1311,12 @@ struct OverviewContextMenuRow: View {
 
             if item.hasSubmenu {
                 Image(systemName: "chevron.right")
-                    .font(.system(size: 11, weight: .semibold))
+                    .font(.system(size: 10, weight: .semibold))
                     .foregroundStyle(SettingsTheme.muted)
             }
         }
-        .padding(.horizontal, 16)
-        .frame(height: 33)
+        .padding(.horizontal, 14)
+        .frame(height: 26)
     }
 }
 
@@ -1301,16 +1332,16 @@ struct OverviewMetricStrip: View {
                 metricDivider
                 OverviewMetric(systemImage: "bolt", title: "轻量稳定", subtitle: "占用资源少，运行流畅")
                 metricDivider
-                OverviewMetric(systemImage: "slider.horizontal.3", title: "高度可自定义", subtitle: "\(viewModel.enabledActionCount) 个动作按需启用")
+                OverviewMetric(systemImage: "slider.horizontal.3", title: "高度可自定义", subtitle: "按需启用，自由配置")
             }
-            .frame(height: 82)
+            .frame(height: 70)
         }
     }
 
     private var metricDivider: some View {
         Rectangle()
             .fill(SettingsTheme.hairline)
-            .frame(width: 1, height: 42)
+            .frame(width: 1, height: 38)
     }
 }
 
@@ -1322,21 +1353,23 @@ struct OverviewMetric: View {
     var body: some View {
         HStack(spacing: 12) {
             Image(systemName: systemImage)
-                .font(.system(size: 28, weight: .regular))
+                .font(.system(size: 24, weight: .regular))
                 .foregroundStyle(SettingsTheme.accent)
-                .frame(width: 42)
+                .frame(width: 38)
             VStack(alignment: .leading, spacing: 3) {
                 Text(title)
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(SettingsTheme.ink)
                 Text(subtitle)
-                    .font(.system(size: 12))
+                    .font(.system(size: 11))
                     .foregroundStyle(SettingsTheme.muted)
                     .lineLimit(1)
+                    .minimumScaleFactor(0.82)
             }
+            .layoutPriority(1)
         }
         .frame(maxWidth: .infinity, alignment: .center)
-        .padding(.horizontal, 18)
+        .padding(.horizontal, 14)
     }
 }
 
