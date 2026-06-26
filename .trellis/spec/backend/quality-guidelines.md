@@ -298,6 +298,9 @@ for the preview ActionRunner XPC entitlement file, with path authorization enfor
 - Directory actions must use `.filePath(bookmark.path)` when the bookmark exists, otherwise `.folder`.
 - Finder extension must render descriptors with `NSWorkspace.shared.icon(for:)`, `NSWorkspace.shared.icon(forFile:)`, or `NSImage(systemSymbolName:)`.
 - Core must not import AppKit; it only emits semantic descriptors.
+- Finder extension menus must not wrap submenu groups in a visible branded container such as `"RightTool"`; root actions and functional group submenus should be added directly to the returned `NSMenu`.
+- When both root actions and functional group submenus exist, insert one separator between those two blocks. When no actions are visible, return `nil` instead of an empty menu.
+- Visible group names must describe the function, such as `"前往常用目录"`, `"新建文件"`, `"开发者工具"`, or `"文件操作"`, and settings previews should use matching labels.
 
 #### 4. Validation & Error Matrix
 
@@ -306,14 +309,19 @@ for the preview ActionRunner XPC entitlement file, with path authorization enfor
 - Missing bookmark -> fallback to `.folder`.
 - Unknown file extension -> render the system `.data` type icon.
 - Missing installed app for bundle identifier -> render the generic application icon.
+- Finder menu contains a visible `"RightTool"` submenu container -> presentation bug; show functional group submenus directly.
+- No visible actions for the current Finder invocation -> return `nil` so Finder does not show an empty extension menu.
+- Settings placement copy says `"RightTool 子菜单"` -> copy drift; use `"功能分组菜单"` or another non-branded functional label.
 
 #### 5. Good/Base/Bad Cases
 
 - Good: Cursor action shows Cursor's installed app icon in the Finder menu.
 - Good: `Note.md` template shows the system Markdown/document type icon.
+- Good: Finder context menu shows `"新建文件"` and `"开发者工具"` group submenus directly, without an intermediate `"RightTool"` submenu.
 - Base: a custom shell command shows a terminal symbol.
 - Bad: Finder menu item hard-codes `"terminal"` for every `.openInApp` action.
 - Bad: Finder extension rebuilds icon semantics independently from `MenuIconResolver`.
+- Bad: Finder menu shows a top-level `"RightTool"` submenu that only contains functional groups.
 
 #### 6. Tests Required
 
@@ -343,4 +351,22 @@ MenuItemPresentation(
     order: action.order,
     icon: MenuIconResolver.icon(for: action, config: config, bookmarks: bookmarks)
 )
+```
+
+Wrong:
+```swift
+let rightToolMenu = NSMenu(title: "RightTool")
+let container = NSMenuItem(title: "RightTool", action: nil, keyEquivalent: "")
+container.submenu = rightToolMenu
+menu.addItem(container)
+```
+
+Correct:
+```swift
+for group in MenuGroup.allCases {
+    let groupItem = NSMenuItem(title: title(for: group), action: nil, keyEquivalent: "")
+    groupItem.submenu = submenu
+    menu.addItem(groupItem)
+}
+return menu.items.isEmpty ? nil : menu
 ```

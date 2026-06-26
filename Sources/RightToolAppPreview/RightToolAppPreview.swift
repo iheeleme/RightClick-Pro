@@ -2945,7 +2945,7 @@ struct ActionEditorRow: View {
                     Button {
                         viewModel.setActionPlacement(.submenu, actionID: action.id)
                     } label: {
-                        Label("放入 RightTool 子菜单", systemImage: action.placement == .submenu ? "checkmark.circle.fill" : "rectangle")
+                        Label("放入功能分组菜单", systemImage: action.placement == .submenu ? "checkmark.circle.fill" : "rectangle")
                     }
 
                     Button {
@@ -5170,7 +5170,7 @@ private extension ActionPlacement {
         case .rootMenu:
             return "一级菜单"
         case .submenu:
-            return "子菜单"
+            return "分组菜单"
         }
     }
 }
@@ -5187,7 +5187,7 @@ private extension MenuGroup {
         case .createFile:
             return "新建文件"
         case .developerEntrypoints:
-            return "开发者入口"
+            return "开发者工具"
         case .fileOperations:
             return "文件操作"
         }

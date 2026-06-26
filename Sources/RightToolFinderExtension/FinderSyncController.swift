@@ -31,7 +31,7 @@ final class FinderSyncController: FIFinderSync {
         nextMenuActionTag = 1
 
         let presentation = menuBuilder.buildMenu(config: config, context: context, bookmarks: bookmarks)
-        let menu = NSMenu(title: "RightTool")
+        let menu = NSMenu(title: "快捷操作")
 
         for item in presentation.rootItems {
             menu.addItem(nsMenuItem(for: item, context: context))
@@ -41,7 +41,6 @@ final class FinderSyncController: FIFinderSync {
             menu.addItem(.separator())
         }
 
-        let rightToolMenu = NSMenu(title: "RightTool")
         for group in MenuGroup.allCases {
             guard let items = presentation.groupedSubmenuItems[group], !items.isEmpty else {
                 continue
@@ -51,16 +50,10 @@ final class FinderSyncController: FIFinderSync {
             let submenu = NSMenu(title: title(for: group))
             items.forEach { submenu.addItem(nsMenuItem(for: $0, context: context)) }
             groupItem.submenu = submenu
-            rightToolMenu.addItem(groupItem)
+            menu.addItem(groupItem)
         }
 
-        if !rightToolMenu.items.isEmpty {
-            let container = NSMenuItem(title: "RightTool", action: nil, keyEquivalent: "")
-            container.submenu = rightToolMenu
-            menu.addItem(container)
-        }
-
-        return menu
+        return menu.items.isEmpty ? nil : menu
     }
 
     private func bootstrapConfiguration(paths: RightToolStoragePaths) {
@@ -202,7 +195,7 @@ final class FinderSyncController: FIFinderSync {
         case .createFile:
             return "新建文件"
         case .developerEntrypoints:
-            return "开发者入口"
+            return "开发者工具"
         case .fileOperations:
             return "文件操作"
         }
