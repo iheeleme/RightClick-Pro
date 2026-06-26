@@ -13,7 +13,7 @@ struct RightToolAppPreview: App {
 
         Window("RightTool 设置", id: "settings") {
             SettingsRootView(viewModel: viewModel)
-                .frame(minWidth: 1180, minHeight: 760)
+                .frame(minWidth: 1180, idealWidth: 1448, maxWidth: 1448, minHeight: 760, idealHeight: 980)
         }
     }
 }
@@ -40,9 +40,9 @@ final class SettingsViewModel: ObservableObject {
             case .developer:
                 return "开发者快捷入口"
             case .history:
-                return "剪贴板助手"
+                return "文件操作"
             case .templates:
-                return "新建文件模板"
+                return "新建文件"
             }
         }
 
@@ -68,7 +68,7 @@ final class SettingsViewModel: ObservableObject {
             case .onboarding:
                 return "管理和自定义 Finder 右键菜单，提升操作效率。"
             case .actions:
-                return "控制动作是否启用，以及显示在一级菜单还是 RightTool 子菜单中。"
+                return "管理 Finder 右键菜单项的显示、排序与可用范围。"
             case .directories:
                 return "管理常用目录，快速访问，提高工作效率。"
             case .developer:
@@ -111,6 +111,7 @@ final class SettingsViewModel: ObservableObject {
     @Published var recentOperations: [OperationRecord] = []
     @Published var developerEntrypointAddRequest = 0
     @Published var templateAddRequest = 0
+    @Published var actionSearchText = ""
 
     private var paths = RightToolStoragePaths.defaultForCurrentProcess()
 
@@ -793,9 +794,6 @@ struct SettingsRootView: View {
             SettingsSidebar(
                 selectedSection: visualSelection,
                 badges: sidebarBadges,
-                enabledActionCount: viewModel.enabledActionCount,
-                rootMenuActionCount: viewModel.rootMenuActionCount,
-                maxRootMenuActions: viewModel.config.maxRootMenuActions,
                 onSelect: selectSection
             )
                 .frame(width: 280)
@@ -959,18 +957,15 @@ struct RightToolBrandIcon: View {
 struct SettingsSidebar: View {
     let selectedSection: SettingsViewModel.Section
     let badges: [SettingsViewModel.Section: String]
-    let enabledActionCount: Int
-    let rootMenuActionCount: Int
-    let maxRootMenuActions: Int
     let onSelect: (SettingsViewModel.Section) -> Void
 
     private let sections: [SettingsViewModel.Section] = [
         .onboarding,
-        .actions,
         .directories,
         .developer,
         .history,
-        .templates
+        .templates,
+        .actions
     ]
 
     var body: some View {
@@ -1003,15 +998,7 @@ struct SettingsSidebar: View {
 
             Spacer(minLength: 16)
 
-            VStack(alignment: .leading, spacing: 8) {
-                Label("\(enabledActionCount) 个动作启用", systemImage: "checkmark.circle")
-                Label("\(rootMenuActionCount)/\(maxRootMenuActions) 个一级菜单", systemImage: "menubar.rectangle")
-            }
-            .font(.caption)
-            .foregroundStyle(SettingsTheme.muted)
-            .padding(12)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(.white.opacity(0.62), in: RoundedRectangle(cornerRadius: 8))
+            SidebarHintCard()
         }
         .padding(.horizontal, 24)
         .padding(.vertical, 24)
@@ -1021,6 +1008,32 @@ struct SettingsSidebar: View {
                 .fill(SettingsTheme.hairline)
                 .frame(width: 1)
         }
+    }
+}
+
+struct SidebarHintCard: View {
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: "lightbulb")
+                .font(.system(size: 19, weight: .regular))
+                .foregroundStyle(SettingsTheme.muted)
+                .frame(width: 24, alignment: .center)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text("小提示")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(SettingsTheme.ink)
+                Text("拖拽调整顺序，启用/禁用快速定制你的右键菜单。")
+                    .font(.system(size: 11))
+                    .foregroundStyle(SettingsTheme.muted)
+                    .lineLimit(3)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.white.opacity(0.62), in: RoundedRectangle(cornerRadius: 8))
+        .overlay(RoundedRectangle(cornerRadius: 8).stroke(SettingsTheme.hairline))
     }
 }
 
@@ -1191,6 +1204,9 @@ struct SettingsDetailShell<Content: View>: View {
                         .fixedSize(horizontal: true, vertical: false)
                 }
 
+                SearchField(placeholder: "搜索菜单项或功能...", text: $viewModel.actionSearchText)
+                    .frame(width: 270)
+
                 ActionHeaderAddMenu(viewModel: viewModel)
             } else {
                 StatusBadge(
@@ -1203,7 +1219,7 @@ struct SettingsDetailShell<Content: View>: View {
             }
         }
         .frame(alignment: .trailing)
-        .layoutPriority((section == .developer || section == .templates) ? 2 : 0)
+        .layoutPriority((section == .actions || section == .developer || section == .templates) ? 2 : 0)
     }
 
     private var titleSize: CGFloat {
@@ -2211,7 +2227,6 @@ enum ActionPreviewContext: String, CaseIterable, Identifiable {
 
 struct ActionListView: View {
     @ObservedObject var viewModel: SettingsViewModel
-    @State private var searchText = ""
     @State private var selectedFilter: ActionManagementFilter = .all
     @State private var previewContext: ActionPreviewContext = .fileFolder
 
@@ -2229,7 +2244,7 @@ struct ActionListView: View {
 
     private func filteredActions(from actions: [RightToolAction]) -> [RightToolAction] {
         let categoryRows = actions.filter { selectedFilter.matches($0) }
-        let keyword = searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let keyword = viewModel.actionSearchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         guard !keyword.isEmpty else { return categoryRows }
         return categoryRows.filter { action in
             action.title.lowercased().contains(keyword)
@@ -2248,12 +2263,6 @@ struct ActionListView: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
-                    PageToolbar {
-                        SearchField(placeholder: "搜索菜单项或功能...", text: $searchText)
-                    } trailing: {
-                        RootMenuCapacityBadge(viewModel: viewModel)
-                    }
-
                     HStack(alignment: .top, spacing: metrics.previewWidth > 0 ? 18 : 0) {
                         VStack(alignment: .leading, spacing: 14) {
                             ActionManagementTable(
@@ -2297,10 +2306,10 @@ struct ActionListView: View {
     }
 
     private func layoutMetrics(for availableWidth: CGFloat) -> (contentWidth: CGFloat, tableWidth: CGFloat, previewWidth: CGFloat) {
-        let contentWidth = min(max(availableWidth - 56, 760), 1220)
-        let previewWidth: CGFloat = contentWidth >= 1050 ? 286 : 0
-        let spacing: CGFloat = previewWidth > 0 ? 18 : 0
-        let tableWidth = max(720, contentWidth - previewWidth - spacing)
+        let contentWidth = min(max(availableWidth - 56, 760), 1080)
+        let previewWidth: CGFloat = contentWidth >= 980 ? 322 : 0
+        let spacing: CGFloat = previewWidth > 0 ? 22 : 0
+        let tableWidth = max(690, contentWidth - previewWidth - spacing)
         return (contentWidth, tableWidth, previewWidth)
     }
 }
@@ -2395,34 +2404,6 @@ struct ActionFilterTabs: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
-    }
-}
-
-struct RootMenuCapacityBadge: View {
-    @ObservedObject var viewModel: SettingsViewModel
-
-    var body: some View {
-        DesignPanel(padding: 14) {
-            HStack(spacing: 14) {
-                Image(systemName: "menubar.rectangle")
-                    .font(.title3)
-                    .foregroundStyle(SettingsTheme.accent)
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("一级菜单容量")
-                        .font(.caption)
-                        .foregroundStyle(SettingsTheme.muted)
-                    HStack(spacing: 8) {
-                        Text("\(viewModel.rootMenuActionCount)/\(viewModel.config.maxRootMenuActions)")
-                            .font(.headline.monospacedDigit())
-                            .foregroundStyle(SettingsTheme.ink)
-                        ProgressView(value: viewModel.rootMenuActionProgress)
-                            .frame(width: 110)
-                            .tint(viewModel.rootMenuActionCount >= viewModel.config.maxRootMenuActions ? .orange : SettingsTheme.accent)
-                    }
-                }
-            }
-        }
-        .frame(width: 250)
     }
 }
 
