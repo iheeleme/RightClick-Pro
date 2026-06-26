@@ -110,6 +110,7 @@ final class SettingsViewModel: ObservableObject {
     @Published var hasUnsavedChanges = false
     @Published var recentOperations: [OperationRecord] = []
     @Published var developerEntrypointAddRequest = 0
+    @Published var templateAddRequest = 0
 
     private var paths = RightToolStoragePaths.defaultForCurrentProcess()
 
@@ -268,6 +269,27 @@ final class SettingsViewModel: ObservableObject {
         markUnsaved("模板已删除，关联动作已移除")
     }
 
+    func requestAddTemplate() {
+        templateAddRequest += 1
+    }
+
+    func moveTemplate(_ template: FileTemplate, offset: Int) {
+        guard
+            let sourceIndex = config.fileTemplates.firstIndex(where: { $0.id == template.id })
+        else {
+            return
+        }
+
+        let targetIndex = sourceIndex + offset
+        guard config.fileTemplates.indices.contains(targetIndex) else {
+            return
+        }
+
+        config.fileTemplates.swapAt(sourceIndex, targetIndex)
+        normalizeCreateFileActionOrder()
+        markUnsaved("模板顺序已更新")
+    }
+
     func upsertDeveloperEntrypoint(_ entrypoint: DeveloperEntrypoint, replacing originalID: String?) {
         if let originalID, let index = config.developerEntrypoints.firstIndex(where: { $0.id == originalID }) {
             config.developerEntrypoints[index] = entrypoint
@@ -417,6 +439,22 @@ final class SettingsViewModel: ObservableObject {
                 payload: ActionPayload(templateID: template.id)
             )
         )
+    }
+
+    private func normalizeCreateFileActionOrder() {
+        let baseOrder = config.actions
+            .filter { $0.kind == .createFile }
+            .map(\.order)
+            .min() ?? nextActionOrder
+
+        for (index, template) in config.fileTemplates.enumerated() {
+            guard let actionIndex = config.actions.firstIndex(where: {
+                $0.kind == .createFile && $0.payload.templateID == template.id
+            }) else {
+                continue
+            }
+            config.actions[actionIndex].order = baseOrder + index * 10
+        }
     }
 
     private func syncDeveloperAction(for entrypoint: DeveloperEntrypoint, originalID: String?) {
@@ -1068,6 +1106,21 @@ struct SettingsDetailShell<Content: View>: View {
                 DeveloperHeaderAddButton {
                     viewModel.requestAddDeveloperEntrypoint()
                 }
+            } else if section == .templates {
+                if viewModel.hasUnsavedChanges {
+                    StatusBadge(
+                        message: viewModel.statusMessage,
+                        tone: viewModel.statusTone,
+                        isDirty: viewModel.hasUnsavedChanges
+                    )
+                    .frame(maxWidth: 92)
+
+                    SaveConfigButton(viewModel: viewModel)
+                        .fixedSize(horizontal: true, vertical: false)
+                }
+                TemplateHeaderAddButton {
+                    viewModel.requestAddTemplate()
+                }
             } else {
                 StatusBadge(
                     message: viewModel.statusMessage,
@@ -1079,7 +1132,7 @@ struct SettingsDetailShell<Content: View>: View {
             }
         }
         .frame(alignment: .trailing)
-        .layoutPriority(section == .developer ? 2 : 0)
+        .layoutPriority((section == .developer || section == .templates) ? 2 : 0)
     }
 
     private var titleSize: CGFloat {
@@ -1124,6 +1177,24 @@ struct DeveloperHeaderAddButton: View {
         .buttonStyle(.plain)
         .fixedSize(horizontal: true, vertical: false)
         .accessibilityLabel("添加开发者快捷入口")
+    }
+}
+
+struct TemplateHeaderAddButton: View {
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Label("添加模板", systemImage: "plus")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(.white)
+                .lineLimit(1)
+                .frame(width: 112, height: 38)
+                .background(SettingsTheme.accent, in: RoundedRectangle(cornerRadius: 8))
+        }
+        .buttonStyle(.plain)
+        .fixedSize(horizontal: true, vertical: false)
+        .accessibilityLabel("添加新建文件模板")
     }
 }
 
@@ -2209,20 +2280,6 @@ struct TemplateListView: View {
         let templates = viewModel.config.fileTemplates
 
         DesignPageScroll {
-            PageToolbar {
-                Text("共 \(templates.count) 个模板")
-                    .font(.callout)
-                    .foregroundStyle(SettingsTheme.muted)
-            } trailing: {
-                Button {
-                    editingDraft = TemplateDraft()
-                } label: {
-                    Label("添加模板", systemImage: "plus")
-                }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.large)
-            }
-
             DesignPanel(padding: 0) {
                 LazyVStack(spacing: 0) {
                     TemplateTableHeader()
@@ -2230,9 +2287,21 @@ struct TemplateListView: View {
                         EmptyStateRow(title: "暂无模板", systemImage: "doc.badge.plus")
                     } else {
                         ForEach(Array(templates.enumerated()), id: \.element.id) { index, template in
-                            TemplateTableRow(template: template, viewModel: viewModel) {
-                                editingDraft = TemplateDraft(template: template)
-                            }
+                            TemplateTableRow(
+                                template: template,
+                                viewModel: viewModel,
+                                canMoveUp: index > 0,
+                                canMoveDown: index < templates.count - 1,
+                                onEdit: {
+                                    editingDraft = TemplateDraft(template: template)
+                                },
+                                onMoveUp: {
+                                    viewModel.moveTemplate(template, offset: -1)
+                                },
+                                onMoveDown: {
+                                    viewModel.moveTemplate(template, offset: 1)
+                                }
+                            )
                             if index < templates.count - 1 {
                                 Divider()
                             }
@@ -2241,29 +2310,12 @@ struct TemplateListView: View {
                 }
             }
 
-            PreviewSection(
-                    rootItems: [
-                        FinderMenuItem(title: "打开"),
-                        FinderMenuItem(title: "打开方式", hasSubmenu: true),
-                        FinderMenuItem(title: "快速查看"),
-                        FinderMenuItem(title: "新建文件", systemImage: "doc", tint: SettingsTheme.accent, isHighlighted: true, hasSubmenu: true),
-                        FinderMenuItem(title: "服务", hasSubmenu: true)
-                    ],
-                    submenuTitle: nil,
-                    submenuItems: templatePreviewItems
-            ) {
-                VStack(alignment: .leading, spacing: 10) {
-                    Text("右键菜单预览")
-                        .font(.headline)
-                        .foregroundStyle(SettingsTheme.ink)
-                    Text("在 Finder 中右键查看新建文件子菜单效果。")
-                        .font(.callout)
-                        .foregroundStyle(SettingsTheme.muted)
-                        .fixedSize(horizontal: false, vertical: true)
-                    Text("右键菜单会按当前模板顺序显示。")
-                        .font(.caption)
-                        .foregroundStyle(SettingsTheme.accent)
-                }
+            HStack(alignment: .top, spacing: 20) {
+                TemplateMenuPreviewPanel(items: templatePreviewItems)
+                    .frame(maxWidth: .infinity, alignment: .topLeading)
+
+                TemplateHintCard()
+                    .frame(width: 240)
             }
         }
         .sheet(item: $editingDraft) { draft in
@@ -2274,23 +2326,30 @@ struct TemplateListView: View {
                 editingDraft = nil
             }
         }
-    }
-
-    private var templatePreviewItems: [FinderMenuItem] {
-        viewModel.config.fileTemplates.prefix(8).map {
-            FinderMenuItem(title: $0.title, systemImage: templateIcon(for: $0), tint: SettingsTheme.accent, id: $0.id)
+        .onChange(of: viewModel.templateAddRequest) { _, _ in
+            editingDraft = TemplateDraft()
         }
     }
 
-    private func templateIcon(for template: FileTemplate) -> String {
-        let ext = URL(fileURLWithPath: template.defaultFileName).pathExtension.lowercased()
-        switch ext {
-        case "md": return "doc.richtext"
-        case "json": return "curlybraces"
-        case "sh": return "terminal"
-        case "swift": return "swift"
-        case "txt": return "doc.text"
-        default: return "doc"
+    private var templatePreviewItems: [FinderMenuItem] {
+        let enabledActions = viewModel.config.actions
+            .filter { $0.kind == .createFile && $0.isEnabled }
+            .sorted { $0.order < $1.order }
+
+        return enabledActions.compactMap { action -> FinderMenuItem? in
+            guard
+                let templateID = action.payload.templateID,
+                let template = viewModel.config.fileTemplates.first(where: { $0.id == templateID })
+            else {
+                return nil
+            }
+
+            return FinderMenuItem(
+                title: action.title,
+                systemImage: templateSystemIcon(for: template),
+                tint: templateTint(for: template),
+                id: action.id
+            )
         }
     }
 }
@@ -2299,23 +2358,27 @@ struct TemplateTableHeader: View {
     var body: some View {
         HStack(spacing: 16) {
             Text("模板名称").frame(maxWidth: .infinity, alignment: .leading)
-            Text("扩展名").frame(width: 120, alignment: .leading)
-            Text("启用").frame(width: 72, alignment: .center)
+            Text("扩展名").frame(width: 150, alignment: .leading)
+            Text("启用").frame(width: 84, alignment: .center)
             Text("排序").frame(width: 120, alignment: .center)
             Text("操作").frame(width: 72, alignment: .center)
         }
-        .font(.caption.weight(.semibold))
+        .font(.system(size: 13, weight: .semibold))
         .foregroundStyle(SettingsTheme.muted)
         .padding(.horizontal, 18)
-        .frame(height: 44)
-        .background(Color.black.opacity(0.015))
+        .frame(height: 38)
+        .background(.white.opacity(0.44))
     }
 }
 
 struct TemplateTableRow: View {
     let template: FileTemplate
     @ObservedObject var viewModel: SettingsViewModel
+    let canMoveUp: Bool
+    let canMoveDown: Bool
     let onEdit: () -> Void
+    let onMoveUp: () -> Void
+    let onMoveDown: () -> Void
 
     private var matchingAction: RightToolAction? {
         viewModel.config.actions.first {
@@ -2327,27 +2390,20 @@ struct TemplateTableRow: View {
         HStack(spacing: 16) {
             Button(action: onEdit) {
                 HStack(spacing: 12) {
-                    Image(systemName: iconName)
-                        .font(.title3)
-                        .foregroundStyle(SettingsTheme.accent)
-                        .frame(width: 28)
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text(template.title)
-                            .font(.callout.weight(.semibold))
-                            .foregroundStyle(SettingsTheme.ink)
-                        Text(template.defaultFileName)
-                            .font(.caption)
-                            .foregroundStyle(SettingsTheme.muted)
-                    }
+                    TemplateIconTile(template: template)
+                    Text(templateDisplayTitle)
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(SettingsTheme.ink)
+                        .lineLimit(1)
                 }
             }
             .buttonStyle(.plain)
             .frame(maxWidth: .infinity, alignment: .leading)
 
             Text(extensionText)
-                .font(.callout)
+                .font(.system(size: 13))
                 .foregroundStyle(SettingsTheme.muted)
-                .frame(width: 120, alignment: .leading)
+                .frame(width: 150, alignment: .leading)
 
             Toggle("", isOn: Binding(
                 get: { matchingAction?.isEnabled ?? false },
@@ -2359,11 +2415,22 @@ struct TemplateTableRow: View {
             .toggleStyle(.switch)
             .labelsHidden()
             .disabled(matchingAction == nil)
-            .frame(width: 72)
+            .frame(width: 84)
 
             HStack(spacing: 20) {
-                Image(systemName: "arrow.up")
-                Image(systemName: "arrow.down")
+                Button(action: onMoveUp) {
+                    Image(systemName: "arrow.up")
+                        .frame(width: 24, height: 24)
+                }
+                .buttonStyle(.plain)
+                .disabled(!canMoveUp)
+
+                Button(action: onMoveDown) {
+                    Image(systemName: "arrow.down")
+                        .frame(width: 24, height: 24)
+                }
+                .buttonStyle(.plain)
+                .disabled(!canMoveDown)
             }
             .foregroundStyle(SettingsTheme.muted)
             .frame(width: 120)
@@ -2382,23 +2449,137 @@ struct TemplateTableRow: View {
             .frame(width: 72)
         }
         .padding(.horizontal, 18)
-        .frame(height: 58)
+        .frame(height: 52)
+        .opacity((matchingAction?.isEnabled ?? true) ? 1 : 0.55)
     }
 
     private var extensionText: String {
-        let ext = URL(fileURLWithPath: template.defaultFileName).pathExtension
-        return ext.isEmpty ? "—" : ".\(ext)"
+        templateExtensionText(for: template)
     }
 
-    private var iconName: String {
-        switch extensionText.lowercased() {
-        case ".md": return "doc.richtext"
-        case ".json": return "curlybraces"
-        case ".sh": return "terminal"
-        case ".swift": return "swift"
-        case ".txt": return "doc.text"
-        default: return "doc"
+    private var templateDisplayTitle: String {
+        matchingAction?.title ?? template.title
+    }
+}
+
+struct TemplateIconTile: View {
+    let template: FileTemplate
+
+    var body: some View {
+        Image(systemName: templateSystemIcon(for: template))
+            .font(.system(size: 18, weight: .medium))
+            .foregroundStyle(templateTint(for: template))
+            .frame(width: 28, height: 28)
+            .background(templateTint(for: template).opacity(0.1), in: RoundedRectangle(cornerRadius: 6))
+    }
+}
+
+struct TemplateMenuPreviewPanel: View {
+    let items: [FinderMenuItem]
+
+    var body: some View {
+        DesignPanel(padding: 0) {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("右键菜单预览（在 Finder 中右键查看效果）")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(SettingsTheme.ink)
+
+                HStack(alignment: .center, spacing: 24) {
+                    VStack(spacing: 10) {
+                        Image(systemName: "folder.fill")
+                            .font(.system(size: 46))
+                            .foregroundStyle(.blue.opacity(0.82))
+                            .frame(width: 72, height: 58)
+                        Text("示例文件夹")
+                            .font(.system(size: 12))
+                            .foregroundStyle(SettingsTheme.muted)
+                    }
+                    .frame(width: 92)
+
+                    HStack(alignment: .center, spacing: 14) {
+                        FinderMenuBox(items: rootMenuItems)
+                        Image(systemName: "arrow.right")
+                            .font(.system(size: 20, weight: .semibold))
+                            .foregroundStyle(SettingsTheme.accent)
+                        FinderMenuBox(items: items.isEmpty ? [FinderMenuItem(title: "暂无启用模板")] : items)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .center)
+                }
+                .frame(maxWidth: .infinity, minHeight: 222, alignment: .center)
+            }
+            .padding(18)
+            .frame(maxWidth: .infinity, minHeight: 280, alignment: .topLeading)
         }
+    }
+
+    private var rootMenuItems: [FinderMenuItem] {
+        [
+            FinderMenuItem(title: "打开"),
+            FinderMenuItem(title: "打开方式", hasSubmenu: true),
+            FinderMenuItem(title: "移动到废纸篓"),
+            FinderMenuItem(title: "显示简介"),
+            FinderMenuItem(title: "重新命名"),
+            FinderMenuItem(title: "压缩“示例文件夹”"),
+            FinderMenuItem(title: "复制"),
+            FinderMenuItem(title: "制作替身"),
+            FinderMenuItem(title: "快速查看"),
+            FinderMenuItem(title: "新建文件", tint: SettingsTheme.accent, isHighlighted: true, hasSubmenu: true),
+            FinderMenuItem(title: "服务", hasSubmenu: true)
+        ]
+    }
+}
+
+struct TemplateHintCard: View {
+    var body: some View {
+        DesignPanel(padding: 0) {
+            HStack(alignment: .top, spacing: 14) {
+                Image(systemName: "lightbulb")
+                    .font(.system(size: 22, weight: .regular))
+                    .foregroundStyle(SettingsTheme.accent)
+                    .frame(width: 30)
+
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("提示")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(SettingsTheme.accent)
+                    Text("可通过箭头调整顺序，右键菜单将按此顺序显示。")
+                        .font(.system(size: 13))
+                        .foregroundStyle(SettingsTheme.muted)
+                        .lineSpacing(5)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .padding(18)
+            .frame(maxWidth: .infinity, minHeight: 124, alignment: .topLeading)
+            .background(SettingsTheme.accent.opacity(0.04), in: RoundedRectangle(cornerRadius: 8))
+        }
+    }
+}
+
+private func templateExtensionText(for template: FileTemplate) -> String {
+    let ext = URL(fileURLWithPath: template.defaultFileName).pathExtension
+    return ext.isEmpty ? "—" : ".\(ext)"
+}
+
+private func templateSystemIcon(for template: FileTemplate) -> String {
+    switch templateExtensionText(for: template).lowercased() {
+    case ".md": return "m.square.fill"
+    case ".json": return "curlybraces.square"
+    case ".sh": return "terminal.fill"
+    case ".swift": return "swift"
+    case ".py": return "chevron.left.forwardslash.chevron.right"
+    case ".txt": return "doc.text"
+    default: return "doc"
+    }
+}
+
+private func templateTint(for template: FileTemplate) -> Color {
+    switch templateExtensionText(for: template).lowercased() {
+    case ".json": return .green
+    case ".sh": return SettingsTheme.ink
+    case ".swift": return .orange
+    case ".py": return .blue
+    default: return SettingsTheme.accent
     }
 }
 
