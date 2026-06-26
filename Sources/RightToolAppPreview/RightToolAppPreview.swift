@@ -1178,6 +1178,20 @@ struct SettingsDetailShell<Content: View>: View {
                 TemplateHeaderAddButton {
                     viewModel.requestAddTemplate()
                 }
+            } else if section == .actions {
+                if viewModel.hasUnsavedChanges {
+                    StatusBadge(
+                        message: viewModel.statusMessage,
+                        tone: viewModel.statusTone,
+                        isDirty: viewModel.hasUnsavedChanges
+                    )
+                    .frame(maxWidth: 92)
+
+                    SaveConfigButton(viewModel: viewModel)
+                        .fixedSize(horizontal: true, vertical: false)
+                }
+
+                ActionHeaderAddMenu(viewModel: viewModel)
             } else {
                 StatusBadge(
                     message: viewModel.statusMessage,
@@ -1199,6 +1213,52 @@ struct SettingsDetailShell<Content: View>: View {
         default:
             return 28
         }
+    }
+}
+
+struct ActionHeaderAddMenu: View {
+    @ObservedObject var viewModel: SettingsViewModel
+
+    var body: some View {
+        Menu {
+            Button {
+                viewModel.addDirectoryBookmarkFromPanel()
+            } label: {
+                Label("添加常用目录", systemImage: "folder.badge.plus")
+            }
+
+            Button {
+                viewModel.requestAddDeveloperEntrypoint()
+            } label: {
+                Label("添加开发者入口", systemImage: "terminal")
+            }
+
+            Button {
+                viewModel.requestAddTemplate()
+            } label: {
+                Label("添加新建模板", systemImage: "doc.badge.plus")
+            }
+        } label: {
+            HStack(spacing: 10) {
+                Image(systemName: "plus")
+                    .font(.system(size: 14, weight: .semibold))
+                Text("新增菜单项")
+                    .font(.system(size: 14, weight: .semibold))
+                Divider()
+                    .frame(height: 18)
+                    .overlay(.white.opacity(0.42))
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 11, weight: .bold))
+            }
+            .foregroundStyle(.white)
+            .padding(.horizontal, 16)
+            .frame(height: 38)
+            .background(SettingsTheme.accent, in: RoundedRectangle(cornerRadius: 8))
+        }
+        .menuStyle(.button)
+        .buttonStyle(.plain)
+        .fixedSize(horizontal: true, vertical: false)
+        .accessibilityLabel("新增菜单项")
     }
 }
 
@@ -2101,21 +2161,96 @@ struct DirectoryTableRow: View {
     }
 }
 
+enum ActionManagementFilter: String, CaseIterable, Identifiable {
+    case all = "全部"
+    case create = "新建"
+    case operations = "操作"
+    case tools = "工具"
+
+    var id: String { rawValue }
+
+    func matches(_ action: RightToolAction) -> Bool {
+        switch self {
+        case .all:
+            return true
+        case .create:
+            return action.kind == .createFile || action.group == .createFile
+        case .operations:
+            return [
+                .commonDirectories,
+                .moveToCommonDirectory,
+                .copyToCommonDirectory,
+                .fileOperations
+            ].contains(action.group)
+        case .tools:
+            return action.group == .developerEntrypoints || action.kind == .openInApp || action.kind == .runCommand
+        }
+    }
+}
+
+enum ActionPreviewContext: String, CaseIterable, Identifiable {
+    case fileFolder = "文件/文件夹"
+    case desktop = "桌面空白处"
+    case disk = "磁盘"
+
+    var id: String { rawValue }
+
+    func matches(_ visibility: Set<ActionVisibility>) -> Bool {
+        switch self {
+        case .fileFolder:
+            return visibility.contains(.selection)
+        case .desktop:
+            return visibility.contains(.container)
+        case .disk:
+            return visibility.contains(.toolbar)
+        }
+    }
+}
+
+struct ActionManagementPageScroll<Content: View>: View {
+    @ViewBuilder var content: Content
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                content
+            }
+            .padding(.horizontal, 28)
+            .padding(.vertical, 20)
+            .frame(maxWidth: 1120, alignment: .topLeading)
+            .frame(maxWidth: .infinity, alignment: .topLeading)
+        }
+        .background(.white.opacity(0.34))
+    }
+}
+
 struct ActionListView: View {
     @ObservedObject var viewModel: SettingsViewModel
     @State private var searchText = ""
+    @State private var selectedFilter: ActionManagementFilter = .all
+    @State private var previewContext: ActionPreviewContext = .fileFolder
 
     private var sortedActions: [RightToolAction] {
         viewModel.config.actions.sorted(by: { $0.order < $1.order })
     }
 
+    private var actionCounts: [ActionManagementFilter: Int] {
+        Dictionary(
+            uniqueKeysWithValues: ActionManagementFilter.allCases.map { filter in
+                (filter, sortedActions.filter { filter.matches($0) }.count)
+            }
+        )
+    }
+
     private func filteredActions(from actions: [RightToolAction]) -> [RightToolAction] {
+        let categoryRows = actions.filter { selectedFilter.matches($0) }
         let keyword = searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        guard !keyword.isEmpty else { return actions }
-        return actions.filter { action in
+        guard !keyword.isEmpty else { return categoryRows }
+        return categoryRows.filter { action in
             action.title.lowercased().contains(keyword)
                 || action.kind.displayName.lowercased().contains(keyword)
                 || (action.group?.displayName.lowercased().contains(keyword) ?? false)
+                || action.visibility.displayName.lowercased().contains(keyword)
         }
     }
 
@@ -2123,82 +2258,129 @@ struct ActionListView: View {
         let actions = sortedActions
         let rows = filteredActions(from: actions)
 
-        DesignPageScroll {
+        ActionManagementPageScroll {
             PageToolbar {
-                SearchField(placeholder: "筛选动作名称、类型或分组", text: $searchText)
+                SearchField(placeholder: "搜索菜单项或功能...", text: $searchText)
             } trailing: {
                 RootMenuCapacityBadge(viewModel: viewModel)
             }
 
-            DesignPanel(padding: 0) {
-                LazyVStack(spacing: 0) {
-                    ActionTableHeader()
-                    if rows.isEmpty {
-                        EmptyStateRow(title: actions.isEmpty ? "暂无动作" : "没有匹配的动作", systemImage: "contextualmenu.and.cursorarrow")
-                    } else {
+            HStack(alignment: .top, spacing: 22) {
+                VStack(alignment: .leading, spacing: 16) {
+                    ActionManagementTable(
+                        rows: rows,
+                        allActions: actions,
+                        selectedFilter: $selectedFilter,
+                        counts: actionCounts,
+                        viewModel: viewModel
+                    )
+
+                    ActionManagementRuleGrid(viewModel: viewModel)
+
+                    ActionManagementHintBar()
+                }
+                .frame(maxWidth: .infinity, alignment: .topLeading)
+
+                ActionMenuPreviewCard(
+                    selectedContext: $previewContext,
+                    actions: actions
+                )
+                .frame(width: 292)
+            }
+        }
+    }
+}
+
+struct ActionManagementTable: View {
+    let rows: [RightToolAction]
+    let allActions: [RightToolAction]
+    @Binding var selectedFilter: ActionManagementFilter
+    let counts: [ActionManagementFilter: Int]
+    @ObservedObject var viewModel: SettingsViewModel
+
+    private var enabledCount: Int {
+        allActions.filter(\.isEnabled).count
+    }
+
+    private var disabledCount: Int {
+        allActions.filter { !$0.isEnabled }.count
+    }
+
+    var body: some View {
+        DesignPanel(padding: 0) {
+            VStack(spacing: 0) {
+                ActionFilterTabs(
+                    selectedFilter: $selectedFilter,
+                    counts: counts
+                )
+
+                Divider()
+
+                ActionTableHeader()
+
+                if rows.isEmpty {
+                    EmptyStateRow(
+                        title: allActions.isEmpty ? "暂无菜单项" : "没有匹配的菜单项",
+                        systemImage: "contextualmenu.and.cursorarrow"
+                    )
+                } else {
+                    LazyVStack(spacing: 0) {
                         ForEach(Array(rows.enumerated()), id: \.element.id) { index, action in
                             ActionEditorRow(action: action, viewModel: viewModel)
                             if index < rows.count - 1 {
                                 Divider()
+                                    .padding(.leading, 26)
                             }
                         }
                     }
                 }
-            }
 
-            PreviewSection(
-                    rootItems: previewRootItems(from: actions),
-                    submenuTitle: "RightTool",
-                    submenuItems: previewSubmenuItems(from: actions)
-            ) {
-                VStack(alignment: .leading, spacing: 10) {
-                    Text("右键菜单预览")
-                        .font(.headline)
-                        .foregroundStyle(SettingsTheme.ink)
-                    Text("一级菜单动作会直接出现在 Finder 右键菜单中，其他动作收纳到 RightTool 子菜单。")
-                        .font(.callout)
-                        .foregroundStyle(SettingsTheme.muted)
-                        .fixedSize(horizontal: false, vertical: true)
-                    Text("一级菜单最多 \(viewModel.config.maxRootMenuActions) 个动作。")
-                        .font(.caption)
+                Divider()
+
+                HStack(spacing: 10) {
+                    Label("添加分隔线", systemImage: "plus")
                         .foregroundStyle(SettingsTheme.accent)
+
+                    Spacer()
+
+                    Text("已启用 \(enabledCount) 项，禁用 \(disabledCount) 项")
+                        .foregroundStyle(SettingsTheme.muted)
                 }
+                .font(.caption)
+                .padding(.horizontal, 18)
+                .frame(height: 42)
             }
         }
     }
+}
 
-    private func previewRootItems(from actions: [RightToolAction]) -> [FinderMenuItem] {
-        let defaultItems = [
-            FinderMenuItem(title: "新建文件夹"),
-            FinderMenuItem(title: "显示简介"),
-            FinderMenuItem(title: "排序方式", hasSubmenu: true)
-        ]
-        let rootActions = actions
-            .filter { $0.isEnabled && $0.placement == .rootMenu }
-            .map { FinderMenuItem(title: $0.title, systemImage: $0.kind.rowIcon, tint: tint(for: $0), id: $0.id) }
-        return defaultItems + rootActions + [FinderMenuItem(title: "服务", hasSubmenu: true)]
-    }
+struct ActionFilterTabs: View {
+    @Binding var selectedFilter: ActionManagementFilter
+    let counts: [ActionManagementFilter: Int]
 
-    private func previewSubmenuItems(from actions: [RightToolAction]) -> [FinderMenuItem] {
-        actions
-            .filter { $0.isEnabled && $0.placement == .submenu }
-            .prefix(8)
-            .map { FinderMenuItem(title: $0.title, systemImage: $0.kind.rowIcon, tint: tint(for: $0), hasSubmenu: $0.group != nil, id: $0.id) }
-    }
+    var body: some View {
+        HStack(spacing: 8) {
+            ForEach(ActionManagementFilter.allCases) { filter in
+                Button {
+                    selectedFilter = filter
+                } label: {
+                    Text("\(filter.rawValue) (\(counts[filter, default: 0]))")
+                        .font(.system(size: 13, weight: selectedFilter == filter ? .semibold : .medium))
+                        .foregroundStyle(selectedFilter == filter ? .white : SettingsTheme.muted)
+                        .padding(.horizontal, 12)
+                        .frame(height: 30)
+                        .background(
+                            selectedFilter == filter ? SettingsTheme.accent : Color.clear,
+                            in: RoundedRectangle(cornerRadius: 7)
+                        )
+                }
+                .buttonStyle(.plain)
+            }
 
-    private func tint(for action: RightToolAction) -> Color {
-        switch action.group {
-        case .commonDirectories, .moveToCommonDirectory, .copyToCommonDirectory:
-            return .blue
-        case .createFile:
-            return SettingsTheme.accent
-        case .developerEntrypoints:
-            return SettingsTheme.accent
-        case .fileOperations:
-            return .cyan
-        case .none:
-            return SettingsTheme.muted
+            Spacer(minLength: 0)
         }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
     }
 }
 
@@ -2232,17 +2414,18 @@ struct RootMenuCapacityBadge: View {
 
 struct ActionTableHeader: View {
     var body: some View {
-        HStack(spacing: 16) {
-            Text("动作").frame(width: 260, alignment: .leading)
-            Text("分组").frame(width: 150, alignment: .leading)
-            Text("可见范围").frame(maxWidth: .infinity, alignment: .leading)
-            Text("启用").frame(width: 64, alignment: .center)
-            Text("菜单层级").frame(width: 220, alignment: .center)
+        HStack(spacing: 12) {
+            Text("").frame(width: 20)
+            Text("菜单项").frame(maxWidth: .infinity, alignment: .leading)
+            Text("状态").frame(width: 70, alignment: .center)
+            Text("适用范围").frame(width: 152, alignment: .leading)
+            Text("类型").frame(width: 72, alignment: .leading)
+            Text("操作").frame(width: 76, alignment: .center)
         }
-        .font(.caption.weight(.semibold))
+        .font(.system(size: 12, weight: .medium))
         .foregroundStyle(SettingsTheme.muted)
         .padding(.horizontal, 18)
-        .frame(height: 44)
+        .frame(height: 42)
         .background(Color.black.opacity(0.015))
     }
 }
@@ -2251,49 +2434,31 @@ struct ActionEditorRow: View {
     let action: RightToolAction
     @ObservedObject var viewModel: SettingsViewModel
 
-    private var groupTint: Color {
-        switch action.group {
-        case .commonDirectories, .moveToCommonDirectory, .copyToCommonDirectory:
-            return .blue
-        case .createFile:
-            return .pink
-        case .developerEntrypoints:
-            return .purple
-        case .fileOperations:
-            return .teal
-        case .none:
-            return .secondary
-        }
-    }
-
     var body: some View {
-        HStack(spacing: 16) {
+        HStack(spacing: 12) {
+            Image(systemName: "circle.grid.2x3.fill")
+                .font(.system(size: 10, weight: .medium))
+                .foregroundStyle(SettingsTheme.muted.opacity(0.58))
+                .frame(width: 20)
+
             HStack(spacing: 12) {
                 Image(systemName: action.kind.rowIcon)
-                    .font(.title3)
-                    .foregroundStyle(action.isEnabled ? groupTint : Color.secondary.opacity(0.5))
-                    .frame(width: 28, alignment: .center)
+                    .font(.system(size: 22, weight: .semibold))
+                    .foregroundStyle(action.isEnabled ? action.managementTint : Color.secondary.opacity(0.5))
+                    .frame(width: 30, alignment: .center)
 
                 VStack(alignment: .leading, spacing: 4) {
                     Text(action.title)
-                        .font(.callout.weight(.semibold))
-                        .foregroundStyle(action.isEnabled ? .primary : .secondary)
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(action.isEnabled ? SettingsTheme.ink : .secondary)
                         .lineLimit(1)
-                    Text(action.kind.displayName)
-                        .font(.caption)
+                    Text(action.managementSubtitle)
+                        .font(.system(size: 12))
                         .foregroundStyle(SettingsTheme.muted)
+                        .lineLimit(1)
                 }
             }
-            .frame(width: 260, alignment: .leading)
-
-            labelPill(action.group?.displayName ?? "未分组", systemImage: "tag", tint: groupTint)
-                .frame(width: 150, alignment: .leading)
-
-            Text(action.visibility.displayName)
-                .font(.callout)
-                .foregroundStyle(SettingsTheme.muted)
-                .lineLimit(1)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(maxWidth: .infinity, alignment: .leading)
 
             Toggle("启用", isOn: Binding(
                 get: { action.isEnabled },
@@ -2301,31 +2466,430 @@ struct ActionEditorRow: View {
             ))
             .toggleStyle(.switch)
             .labelsHidden()
-            .frame(width: 64)
+            .frame(width: 70)
 
-            Picker("菜单层级", selection: Binding(
-                get: { action.placement },
-                set: { viewModel.setActionPlacement($0, actionID: action.id) }
-            )) {
-                Text("RightTool 子菜单").tag(ActionPlacement.submenu)
-                Text("Finder 一级菜单").tag(ActionPlacement.rootMenu)
+            FlowPillGroup(items: action.visibilityPills)
+                .frame(width: 152, alignment: .leading)
+
+            ActionTypeBadge(action: action)
+                .frame(width: 72, alignment: .leading)
+
+            HStack(spacing: 12) {
+                Menu {
+                    Button {
+                        viewModel.setActionPlacement(.submenu, actionID: action.id)
+                    } label: {
+                        Label("放入 RightTool 子菜单", systemImage: action.placement == .submenu ? "checkmark" : "rectangle")
+                    }
+
+                    Button {
+                        viewModel.setActionPlacement(.rootMenu, actionID: action.id)
+                    } label: {
+                        Label("显示在 Finder 一级菜单", systemImage: action.placement == .rootMenu ? "checkmark" : "menubar.rectangle")
+                    }
+                } label: {
+                    Image(systemName: "pencil")
+                        .frame(width: 20, height: 20)
+                }
+                .menuStyle(.button)
+                .buttonStyle(.plain)
+                .disabled(!action.isEnabled)
+                .accessibilityLabel("调整 \(action.title) 的菜单层级")
+
+                Button {
+                    viewModel.setActionEnabled(false, actionID: action.id)
+                } label: {
+                    Image(systemName: "trash")
+                        .frame(width: 20, height: 20)
+                }
+                .buttonStyle(.plain)
+                .disabled(!action.isEnabled)
+                .accessibilityLabel("禁用 \(action.title)")
             }
-            .pickerStyle(.segmented)
-            .disabled(!action.isEnabled)
-            .frame(width: 220)
+            .font(.system(size: 15, weight: .medium))
+            .foregroundStyle(SettingsTheme.muted)
+            .frame(width: 76, alignment: .center)
         }
         .padding(.horizontal, 18)
-        .frame(height: 66)
+        .frame(height: 58)
         .opacity(action.isEnabled ? 1 : 0.6)
     }
+}
 
-    private func labelPill(_ text: String, systemImage: String, tint: Color) -> some View {
-        Label(text, systemImage: systemImage)
-            .font(.caption2.weight(.semibold))
-            .foregroundStyle(tint)
-            .padding(.horizontal, 7)
-            .padding(.vertical, 3)
-            .background(tint.opacity(0.12), in: Capsule())
+struct FlowPillGroup: View {
+    let items: [String]
+
+    var body: some View {
+        HStack(spacing: 6) {
+            ForEach(items.prefix(2), id: \.self) { item in
+                Text(item)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(SettingsTheme.muted)
+                    .padding(.horizontal, 7)
+                    .frame(height: 22)
+                    .background(Color.black.opacity(0.045), in: RoundedRectangle(cornerRadius: 5))
+            }
+        }
+        .lineLimit(1)
+    }
+}
+
+struct ActionTypeBadge: View {
+    let action: RightToolAction
+
+    var body: some View {
+        Text(action.managementType)
+            .font(.system(size: 11, weight: .semibold))
+            .foregroundStyle(action.managementTint)
+            .padding(.horizontal, 8)
+            .frame(height: 22)
+            .background(action.managementTint.opacity(0.12), in: RoundedRectangle(cornerRadius: 5))
+    }
+}
+
+struct ActionManagementRuleGrid: View {
+    @ObservedObject var viewModel: SettingsViewModel
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 14) {
+            ActionRuleCard(title: "分组与排序规则", subtitle: nil) {
+                VStack(alignment: .leading, spacing: 10) {
+                    ActionRuleLine(title: "分组方式", value: "按类型分组", systemImage: "chevron.down")
+                    ActionRuleLine(title: "排序方式", value: "自定义排序", systemImage: "chevron.down")
+
+                    HStack(spacing: 10) {
+                        Text("按分隔线分组显示")
+                            .font(.system(size: 12))
+                            .foregroundStyle(SettingsTheme.muted)
+                        Spacer()
+                        Toggle("", isOn: .constant(true))
+                            .toggleStyle(.switch)
+                            .labelsHidden()
+                            .allowsHitTesting(false)
+                    }
+                }
+            }
+
+            ActionRuleCard(title: "右键新建模板", subtitle: "在右键菜单中快速创建文件") {
+                VStack(alignment: .leading, spacing: 10) {
+                    Button {
+                        viewModel.selectedSection = .templates
+                    } label: {
+                        HStack {
+                            Text("管理新建模板 (\(viewModel.config.fileTemplates.count))")
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(SettingsTheme.ink)
+                    .padding(.horizontal, 12)
+                    .frame(height: 34)
+                    .background(Color.black.opacity(0.035), in: RoundedRectangle(cornerRadius: 7))
+
+                    HStack(spacing: 8) {
+                        ActionGhostButton(title: "导入模板", systemImage: "square.and.arrow.down")
+                        ActionGhostButton(title: "导出模板", systemImage: "square.and.arrow.up")
+                    }
+                }
+            }
+
+            ActionRuleCard(title: "显示条件", subtitle: "精确控制菜单项何时显示") {
+                VStack(alignment: .leading, spacing: 10) {
+                    Button {
+                        viewModel.selectedSection = .actions
+                    } label: {
+                        HStack {
+                            Text("管理显示条件 (\(viewModel.config.actions.count))")
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(SettingsTheme.ink)
+                    .padding(.horizontal, 12)
+                    .frame(height: 34)
+                    .background(Color.black.opacity(0.035), in: RoundedRectangle(cornerRadius: 7))
+
+                    HStack(spacing: 10) {
+                        Text("隐藏系统默认菜单项")
+                            .font(.system(size: 12))
+                            .foregroundStyle(SettingsTheme.muted)
+                        Spacer()
+                        Toggle("", isOn: .constant(false))
+                            .toggleStyle(.switch)
+                            .labelsHidden()
+                            .allowsHitTesting(false)
+                    }
+                }
+            }
+        }
+    }
+}
+
+struct ActionRuleCard<Content: View>: View {
+    let title: String
+    let subtitle: String?
+    @ViewBuilder var content: Content
+
+    var body: some View {
+        DesignPanel(padding: 16) {
+            VStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(title)
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(SettingsTheme.ink)
+                    if let subtitle {
+                        Text(subtitle)
+                            .font(.system(size: 12))
+                            .foregroundStyle(SettingsTheme.muted)
+                    }
+                }
+
+                content
+            }
+        }
+    }
+}
+
+struct ActionRuleLine: View {
+    let title: String
+    let value: String
+    let systemImage: String
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Text(title)
+                .font(.system(size: 12))
+                .foregroundStyle(SettingsTheme.muted)
+            Spacer()
+            HStack(spacing: 8) {
+                Text(value)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(SettingsTheme.ink)
+                Image(systemName: systemImage)
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundStyle(SettingsTheme.muted)
+            }
+            .padding(.horizontal, 10)
+            .frame(height: 30)
+            .background(.white, in: RoundedRectangle(cornerRadius: 7))
+            .overlay(RoundedRectangle(cornerRadius: 7).stroke(SettingsTheme.hairline))
+        }
+    }
+}
+
+struct ActionGhostButton: View {
+    let title: String
+    let systemImage: String
+
+    var body: some View {
+        Label(title, systemImage: systemImage)
+            .font(.system(size: 11, weight: .medium))
+            .foregroundStyle(SettingsTheme.muted)
+            .frame(maxWidth: .infinity)
+            .frame(height: 30)
+            .background(.white, in: RoundedRectangle(cornerRadius: 7))
+            .overlay(RoundedRectangle(cornerRadius: 7).stroke(SettingsTheme.hairline))
+    }
+}
+
+struct ActionManagementHintBar: View {
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "info.circle.fill")
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(SettingsTheme.accent)
+            Text("提示：拖拽左侧")
+                .font(.system(size: 12))
+                .foregroundStyle(SettingsTheme.muted)
+            Image(systemName: "circle.grid.2x3.fill")
+                .font(.system(size: 9, weight: .medium))
+                .foregroundStyle(SettingsTheme.muted.opacity(0.7))
+            Text("调整菜单顺序，控制右键菜单的展示位置。")
+                .font(.system(size: 12))
+                .foregroundStyle(SettingsTheme.muted)
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 16)
+        .frame(maxWidth: .infinity, minHeight: 38)
+        .background(SettingsTheme.accent.opacity(0.055), in: RoundedRectangle(cornerRadius: 8))
+        .overlay(RoundedRectangle(cornerRadius: 8).stroke(SettingsTheme.accent.opacity(0.14)))
+    }
+}
+
+struct ActionMenuPreviewCard: View {
+    @Binding var selectedContext: ActionPreviewContext
+    let actions: [RightToolAction]
+
+    private var visibleActions: [RightToolAction] {
+        actions
+            .filter { $0.isEnabled && selectedContext.matches($0.visibility) }
+            .prefix(8)
+            .map { $0 }
+    }
+
+    var body: some View {
+        DesignPanel(padding: 20) {
+            VStack(alignment: .leading, spacing: 16) {
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(spacing: 6) {
+                        Text("右键菜单预览")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(SettingsTheme.ink)
+                        Image(systemName: "info.circle")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(SettingsTheme.muted)
+                    }
+
+                    Text("在不同位置右键时的菜单效果预览。")
+                        .font(.system(size: 12))
+                        .foregroundStyle(SettingsTheme.muted)
+                }
+
+                ActionPreviewContextPicker(selectedContext: $selectedContext)
+
+                FinderContextMenuMock(actions: visibleActions)
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .padding(.top, 6)
+
+                Text("提示：预览仅供参考，实际效果以系统为准。")
+                    .font(.system(size: 11))
+                    .foregroundStyle(SettingsTheme.muted)
+                    .padding(.top, 6)
+            }
+        }
+    }
+}
+
+struct ActionPreviewContextPicker: View {
+    @Binding var selectedContext: ActionPreviewContext
+
+    var body: some View {
+        HStack(spacing: 4) {
+            ForEach(ActionPreviewContext.allCases) { context in
+                Button {
+                    selectedContext = context
+                } label: {
+                    Text(context.rawValue)
+                        .font(.system(size: 11, weight: selectedContext == context ? .semibold : .medium))
+                        .foregroundStyle(selectedContext == context ? SettingsTheme.accent : SettingsTheme.muted)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 30)
+                        .background(
+                            selectedContext == context ? .white : Color.clear,
+                            in: RoundedRectangle(cornerRadius: 6)
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 6)
+                                .stroke(selectedContext == context ? SettingsTheme.accent.opacity(0.18) : Color.clear)
+                        )
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(4)
+        .background(Color.black.opacity(0.035), in: RoundedRectangle(cornerRadius: 8))
+        .overlay(RoundedRectangle(cornerRadius: 8).stroke(SettingsTheme.hairline))
+    }
+}
+
+struct FinderContextMenuMock: View {
+    let actions: [RightToolAction]
+
+    var body: some View {
+        VStack(spacing: 0) {
+            FinderContextMenuStaticRow(title: "打开")
+            FinderContextMenuStaticRow(title: "打开方式", hasSubmenu: true)
+            menuDivider
+            FinderContextMenuStaticRow(title: "移到废纸篓")
+            menuDivider
+            FinderContextMenuStaticRow(title: "显示简介")
+            FinderContextMenuStaticRow(title: "重新命名")
+            FinderContextMenuStaticRow(title: "压缩 “示例文件夹”")
+            FinderContextMenuStaticRow(title: "复制")
+            FinderContextMenuStaticRow(title: "制作替身")
+            FinderContextMenuStaticRow(title: "快速查看")
+            menuDivider
+
+            if actions.isEmpty {
+                FinderContextMenuStaticRow(title: "暂无启用菜单项")
+            } else {
+                ForEach(actions) { action in
+                    FinderContextActionRow(action: action)
+                }
+            }
+
+            menuDivider
+            FinderContextMenuStaticRow(title: "服务", hasSubmenu: true)
+        }
+        .padding(.vertical, 8)
+        .frame(width: 228)
+        .background(
+            LinearGradient(
+                colors: [Color.white.opacity(0.96), Color(red: 0.95, green: 0.96, blue: 0.98)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            ),
+            in: RoundedRectangle(cornerRadius: 9)
+        )
+        .overlay(RoundedRectangle(cornerRadius: 9).stroke(Color.black.opacity(0.08)))
+        .shadow(color: Color.black.opacity(0.16), radius: 18, x: 0, y: 12)
+    }
+
+    private var menuDivider: some View {
+        Divider()
+            .padding(.horizontal, 12)
+            .padding(.vertical, 4)
+    }
+}
+
+struct FinderContextMenuStaticRow: View {
+    let title: String
+    var hasSubmenu = false
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Text(title)
+                .font(.system(size: 13))
+                .foregroundStyle(SettingsTheme.ink)
+                .lineLimit(1)
+            Spacer(minLength: 8)
+            if hasSubmenu {
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundStyle(SettingsTheme.muted)
+            }
+        }
+        .padding(.horizontal, 14)
+        .frame(height: 24)
+    }
+}
+
+struct FinderContextActionRow: View {
+    let action: RightToolAction
+
+    var body: some View {
+        HStack(spacing: 9) {
+            Image(systemName: action.kind.rowIcon)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(action.managementTint)
+                .frame(width: 16)
+            Text(action.title)
+                .font(.system(size: 13))
+                .foregroundStyle(SettingsTheme.ink)
+                .lineLimit(1)
+            Spacer(minLength: 8)
+            if action.group != nil {
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundStyle(SettingsTheme.muted)
+            }
+        }
+        .padding(.horizontal, 14)
+        .frame(height: 26)
     }
 }
 
@@ -3589,6 +4153,72 @@ private let operationDateFormatter: DateFormatter = {
     formatter.timeStyle = .medium
     return formatter
 }()
+
+private extension RightToolAction {
+    var managementTint: Color {
+        switch group {
+        case .commonDirectories, .moveToCommonDirectory, .copyToCommonDirectory:
+            return .blue
+        case .createFile:
+            return SettingsTheme.accent
+        case .developerEntrypoints:
+            return SettingsTheme.accent
+        case .fileOperations:
+            return .cyan
+        case .none:
+            return SettingsTheme.muted
+        }
+    }
+
+    var managementType: String {
+        if kind == .createFile || group == .createFile {
+            return "新建"
+        }
+
+        if group == .developerEntrypoints || kind == .openInApp || kind == .runCommand {
+            return "工具"
+        }
+
+        return "操作"
+    }
+
+    var managementSubtitle: String {
+        switch kind {
+        case .openDirectory:
+            return "快速访问常用位置"
+        case .moveToDirectory:
+            return "移动所选项目到指定目录"
+        case .copyToDirectory:
+            return "复制所选项目到指定目录"
+        case .cut:
+            return "剪切所选项目到剪贴板"
+        case .paste:
+            return "粘贴剪贴板中的文件"
+        case .createFile:
+            return "在当前目录创建 \(payload.templateID ?? "文件")"
+        case .openInApp:
+            return "快速打开开发者常用工具"
+        case .runCommand:
+            return "在当前路径执行命令"
+        case .undoOperation:
+            return "撤销最近一次文件操作"
+        }
+    }
+
+    var visibilityPills: [String] {
+        var labels: [String] = []
+        if visibility.contains(.toolbar) {
+            labels.append("Finder")
+        }
+        if visibility.contains(.selection) {
+            labels.append("文件/文件夹")
+        }
+        if visibility.contains(.container) {
+            labels.append("桌面空白处")
+        }
+        return labels.isEmpty ? ["未设置"] : labels
+    }
+}
 
 private extension ActionKind {
     var displayName: String {
