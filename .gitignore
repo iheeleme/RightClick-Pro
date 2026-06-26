@@ -8,3 +8,5 @@ dist-*/
 *.dSYM/
 *.zip
 .DS_Store
+
+.codegraph/

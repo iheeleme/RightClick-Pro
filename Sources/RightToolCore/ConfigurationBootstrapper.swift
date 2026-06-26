@@ -24,9 +24,25 @@ public struct ConfigurationBootstrapResult: Equatable {
 
 public struct ConfigurationBootstrapper {
     private let fileManager: FileManager
+    private let processHomeDirectoryOverride: URL?
+    private let realUserHomeDirectoryOverride: URL?
 
     public init(fileManager: FileManager = .default) {
+        self.init(
+            fileManager: fileManager,
+            processHomeDirectory: nil,
+            realUserHomeDirectory: nil
+        )
+    }
+
+    init(
+        fileManager: FileManager = .default,
+        processHomeDirectory: URL?,
+        realUserHomeDirectory: URL?
+    ) {
         self.fileManager = fileManager
+        self.processHomeDirectoryOverride = processHomeDirectory
+        self.realUserHomeDirectoryOverride = realUserHomeDirectory
     }
 
     public func bootstrap(paths: RightToolStoragePaths = .defaultForCurrentProcess()) throws -> ConfigurationBootstrapResult {
@@ -34,15 +50,19 @@ public struct ConfigurationBootstrapper {
         let bookmarkStore = JSONFileStore<DirectoryBookmarkCatalog>(url: paths.bookmarksURL, fileManager: fileManager)
         let logStore = JSONLineOperationLog(url: paths.operationLogURL, fileManager: fileManager)
 
+        let defaultBookmarks = defaultBookmarks()
         let didCreateBookmarks = !fileManager.fileExists(atPath: paths.bookmarksURL.path)
-        let bookmarks = try bookmarkStore.load(default: defaultBookmarks())
-        if didCreateBookmarks {
+        let originalBookmarks = try bookmarkStore.load(default: defaultBookmarks)
+        let sanitizedBookmarks = sanitizeBookmarks(originalBookmarks)
+        let bookmarks = repairDefaultBookmarks(sanitizedBookmarks, defaults: defaultBookmarks)
+        if didCreateBookmarks || bookmarks != originalBookmarks {
             try bookmarkStore.save(bookmarks)
         }
 
         let didCreateConfig = !fileManager.fileExists(atPath: paths.configURL.path)
-        let config = try configStore.load(default: defaultConfig(bookmarks: bookmarks))
-        if didCreateConfig {
+        let originalConfig = try configStore.load(default: defaultConfig(bookmarks: bookmarks))
+        let config = repairDefaultConfig(originalConfig, bookmarks: bookmarks, defaultBookmarkIDs: defaultBookmarks.bookmarks.map(\.id))
+        if didCreateConfig || config != originalConfig {
             try configStore.save(config)
         }
 
@@ -68,7 +88,7 @@ public struct ConfigurationBootstrapper {
     }
 
     public func defaultBookmarks() -> DirectoryBookmarkCatalog {
-        let home = fileManager.homeDirectoryForCurrentUser
+        let home = realUserHomeDirectory
         let candidates: [(String, String, URL)] = [
             ("desktop", "桌面", home.appendingPathComponent("Desktop")),
             ("downloads", "下载", home.appendingPathComponent("Downloads")),
@@ -83,6 +103,166 @@ public struct ConfigurationBootstrapper {
             }
 
         return DirectoryBookmarkCatalog(bookmarks: bookmarks)
+    }
+
+    private func repairDefaultBookmarks(
+        _ catalog: DirectoryBookmarkCatalog,
+        defaults: DirectoryBookmarkCatalog
+    ) -> DirectoryBookmarkCatalog {
+        var repaired = catalog
+        var existingIDs = Set(catalog.bookmarks.map(\.id))
+
+        for bookmark in defaults.bookmarks where existingIDs.insert(bookmark.id).inserted {
+            repaired.bookmarks.append(bookmark)
+        }
+
+        return repaired
+    }
+
+    private func repairDefaultConfig(
+        _ config: RightToolConfig,
+        bookmarks: DirectoryBookmarkCatalog,
+        defaultBookmarkIDs: [String]
+    ) -> RightToolConfig {
+        var repaired = config
+        let bookmarkIDs = Set(bookmarks.bookmarks.map(\.id))
+        let directoryIDs = defaultBookmarkIDs.filter { bookmarkIDs.contains($0) }
+
+        appendMissing(directoryIDs, to: &repaired.monitoredDirectoryIDs)
+        appendMissing(directoryIDs, to: &repaired.commonDirectoryIDs)
+        appendMissingDirectoryActions(for: directoryIDs, bookmarks: bookmarks, to: &repaired.actions)
+
+        return repaired
+    }
+
+    private func appendMissing(_ ids: [String], to existingIDs: inout [String]) {
+        var seenIDs = Set(existingIDs)
+        for id in ids where seenIDs.insert(id).inserted {
+            existingIDs.append(id)
+        }
+    }
+
+    private func appendMissingDirectoryActions(
+        for directoryIDs: [String],
+        bookmarks: DirectoryBookmarkCatalog,
+        to actions: inout [RightToolAction]
+    ) {
+        var existingActionIDs = Set(actions.map(\.id))
+        var order = (actions.map(\.order).max() ?? 0) + 10
+
+        for id in directoryIDs {
+            guard let bookmark = bookmarks.bookmark(id: id) else {
+                continue
+            }
+
+            for action in defaultDirectoryActions(for: bookmark, startingAt: order) where existingActionIDs.insert(action.id).inserted {
+                actions.append(action)
+                order += 10
+            }
+        }
+    }
+
+    private func defaultDirectoryActions(for bookmark: DirectoryBookmark, startingAt order: Int) -> [RightToolAction] {
+        [
+            RightToolAction(
+                id: "open-directory-\(bookmark.id)",
+                title: "前往\(bookmark.displayName)",
+                kind: .openDirectory,
+                visibility: [.container, .toolbar],
+                placement: .submenu,
+                group: .commonDirectories,
+                order: order,
+                payload: ActionPayload(directoryID: bookmark.id)
+            ),
+            RightToolAction(
+                id: "move-to-\(bookmark.id)",
+                title: "移动到\(bookmark.displayName)",
+                kind: .moveToDirectory,
+                visibility: [.selection],
+                placement: .submenu,
+                group: .moveToCommonDirectory,
+                order: order + 10,
+                payload: ActionPayload(directoryID: bookmark.id)
+            ),
+            RightToolAction(
+                id: "copy-to-\(bookmark.id)",
+                title: "复制到\(bookmark.displayName)",
+                kind: .copyToDirectory,
+                visibility: [.selection],
+                placement: .submenu,
+                group: .copyToCommonDirectory,
+                order: order + 20,
+                payload: ActionPayload(directoryID: bookmark.id)
+            )
+        ]
+    }
+
+    /// Rewrites bookmarks that still point inside the host app sandbox container
+    /// (e.g. `~/Library/Containers/.../Data/Desktop`) to the real user home
+    /// equivalent. Runs on every bootstrap so existing installs self-heal without
+    /// requiring the user to wipe their configuration.
+    private func sanitizeBookmarks(_ catalog: DirectoryBookmarkCatalog) -> DirectoryBookmarkCatalog {
+        let containerRoot = processHomeDirectory.standardizedFileURL.path
+        let realHome = realUserHomeDirectory.standardizedFileURL.path
+        guard containerRoot != realHome else {
+            return catalog
+        }
+        var didChange = false
+        let sanitized = catalog.bookmarks.map { bookmark -> DirectoryBookmark in
+            let bookmarkPath = URL(fileURLWithPath: bookmark.path).standardizedFileURL.path
+            guard let relativePath = relativePath(of: bookmarkPath, under: containerRoot) else {
+                return bookmark
+            }
+            let newPath = relativePath.isEmpty
+                ? realHome
+                : (realHome as NSString).appendingPathComponent(relativePath)
+            didChange = true
+            return DirectoryBookmark(
+                id: bookmark.id,
+                displayName: bookmark.displayName,
+                path: newPath,
+                bookmarkDataBase64: bookmark.bookmarkDataBase64,
+                addedAt: bookmark.addedAt
+            )
+        }
+        guard didChange else { return catalog }
+        return DirectoryBookmarkCatalog(schemaVersion: catalog.schemaVersion, bookmarks: sanitized)
+    }
+
+    private func relativePath(of path: String, under root: String) -> String? {
+        if path == root {
+            return ""
+        }
+        let rootPrefix = root.hasSuffix("/") ? root : root + "/"
+        guard path.hasPrefix(rootPrefix) else {
+            return nil
+        }
+        return String(path.dropFirst(rootPrefix.count))
+    }
+
+    /// Resolves the real user home directory, bypassing the App Sandbox
+    /// container redirection that `homeDirectoryForCurrentUser` returns when
+    /// the process is sandboxed. Falls back to the FileManager value when the
+    /// real path cannot be determined.
+    private var realUserHomeDirectory: URL {
+        if let realUserHomeDirectoryOverride {
+            return realUserHomeDirectoryOverride
+        }
+        if let home = realUserHomePath(), !home.isEmpty {
+            return URL(fileURLWithPath: home)
+        }
+        return processHomeDirectory
+    }
+
+    private var processHomeDirectory: URL {
+        processHomeDirectoryOverride ?? fileManager.homeDirectoryForCurrentUser
+    }
+
+    private func realUserHomePath() -> String? {
+        guard let pw = getpwuid(getuid())?.pointee.pw_dir else {
+            return nil
+        }
+        return String(cString: pw)
     }
 
     public func defaultConfig(bookmarks: DirectoryBookmarkCatalog) -> RightToolConfig {
@@ -125,47 +305,8 @@ public struct ConfigurationBootstrapper {
         order += 10
 
         for bookmark in bookmarks.bookmarks {
-            actions.append(
-                RightToolAction(
-                    id: "open-directory-\(bookmark.id)",
-                    title: "前往\(bookmark.displayName)",
-                    kind: .openDirectory,
-                    visibility: [.container, .toolbar],
-                    placement: .submenu,
-                    group: .commonDirectories,
-                    order: order,
-                    payload: ActionPayload(directoryID: bookmark.id)
-                )
-            )
-            order += 10
-
-            actions.append(
-                RightToolAction(
-                    id: "move-to-\(bookmark.id)",
-                    title: "移动到\(bookmark.displayName)",
-                    kind: .moveToDirectory,
-                    visibility: [.selection],
-                    placement: .submenu,
-                    group: .moveToCommonDirectory,
-                    order: order,
-                    payload: ActionPayload(directoryID: bookmark.id)
-                )
-            )
-            order += 10
-
-            actions.append(
-                RightToolAction(
-                    id: "copy-to-\(bookmark.id)",
-                    title: "复制到\(bookmark.displayName)",
-                    kind: .copyToDirectory,
-                    visibility: [.selection],
-                    placement: .submenu,
-                    group: .copyToCommonDirectory,
-                    order: order,
-                    payload: ActionPayload(directoryID: bookmark.id)
-                )
-            )
-            order += 10
+            actions.append(contentsOf: defaultDirectoryActions(for: bookmark, startingAt: order))
+            order += 30
         }
 
         for template in RightToolConfig.defaultFileTemplates() {

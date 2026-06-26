@@ -15,6 +15,7 @@ final class FinderSyncController: FIFinderSync {
         let paths = RightToolStoragePaths.defaultForCurrentProcess()
         self.configProvider = FileBackedRightToolConfigProvider(paths: paths)
         super.init()
+        bootstrapConfiguration(paths: paths)
         reloadMonitoredDirectories()
     }
 
@@ -57,6 +58,14 @@ final class FinderSyncController: FIFinderSync {
         }
 
         return menu
+    }
+
+    private func bootstrapConfiguration(paths: RightToolStoragePaths) {
+        do {
+            _ = try ConfigurationBootstrapper().bootstrap(paths: paths)
+        } catch {
+            NSLog("RightTool Finder extension bootstrap failed: \(error.localizedDescription)")
+        }
     }
 
     private func reloadMonitoredDirectories() {

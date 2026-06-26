@@ -65,6 +65,16 @@ Questions to answer:
   ```bash
   scripts/package-macos.sh <release|debug>
   ```
+- Finder extension bootstrap before monitored-directory registration:
+  ```swift
+  _ = try ConfigurationBootstrapper().bootstrap(paths: paths)
+  FIFinderSyncController.default().directoryURLs = Set(urls)
+  ```
+- Local preview PlugInKit registration order:
+  ```bash
+  pluginkit -a "$appex_path"
+  pluginkit -e use -i "$FINDER_EXTENSION_BUNDLE_IDENTIFIER"
+  ```
 - Optional Xcode archive inputs:
   ```text
   RIGHTTOOL_XCODE_PROJECT=<path-to-xcodeproj>
@@ -90,10 +100,15 @@ Questions to answer:
 - The preview bundle must place `RightToolActionRunner.xpc` in `Contents/XPCServices/` and also inside `RightToolFinderExtension.appex/Contents/XPCServices/` so `NSXPCConnection(serviceName:)` can resolve the service from the main app and the Finder extension process.
 - The preview Finder Sync `.appex` must be a Mach-O `EXECUTE` binary linked with `_NSExtensionMain`; a Swift dylib inside an `.appex` is not a valid Finder Sync extension bundle for PlugInKit discovery.
 - The preview `.appex` Info.plist must contain `NSExtensionPointIdentifier=com.apple.FinderSync`.
+- Finder Sync extension startup must not assume the menu-bar app launched first. It must run `ConfigurationBootstrapper.bootstrap(paths:)` before loading config and assigning `FIFinderSyncController.default().directoryURLs`.
+- Default injected Desktop/Downloads/Documents/Code bookmarks must use the real user home directory, not the sandbox container home returned by `FileManager.homeDirectoryForCurrentUser` inside sandboxed app/extension processes.
+- Bootstrap must self-heal existing bookmark paths under the sandbox process home by remapping them to the real user home while preserving bookmark IDs, display names, bookmark data, and timestamps.
+- Bootstrap must also repair older existing configs that are missing an available default directory. Append the missing default bookmark, monitored/common directory IDs, and generated directory actions while preserving unrelated custom actions, templates, developer entries, and user ordering as much as possible.
 - Finder Sync menu leaf items must not rely on `representedObject` for action payloads after Finder copies menu items. Use a stable `tag` or another Finder-preserved primitive to map selected menu items back to pending actions.
 - The ActionRunner must resolve directory bookmarks and hold security-scoped access during request execution before creating the authorized-path validator.
 - The preview app, XPC service, Finder extension, and their embedded `libRightToolCore.dylib` copies must be signed before zipping. Ad-hoc signing is acceptable for local test artifacts; public distribution still requires Developer ID signing and notarization.
 - The packaging script must validate the preview bundle before upload so CI cannot publish an artifact that lacks a discoverable Finder Sync extension.
+- For local preview smoke tests, the packaging script should explicitly register the just-built `.appex` path with `pluginkit -a` before applying `pluginkit -e use`; enabling by identifier alone only affects already-discovered extension records and may miss reinstalls.
 - When both `RIGHTTOOL_XCODE_PROJECT` and `RIGHTTOOL_XCODE_SCHEME` are configured, packaging must use `xcodebuild archive`.
 - If only one Xcode variable is configured, packaging must fail instead of silently falling back to SwiftPM preview output.
 - Artifacts are written to `dist/*.zip`.
@@ -107,15 +122,26 @@ Questions to answer:
 - No Xcode variables are set -> build SwiftPM preview bundle.
 - Preview Finder Sync binary is not `EXECUTE` -> exit 65.
 - Preview Finder Sync extension point is not `com.apple.FinderSync` -> exit 65.
+- Finder extension starts before config/bookmark files exist -> bootstrap creates defaults before assigning `directoryURLs`.
+- Existing bookmark path starts with the sandbox process home -> remap to the same relative path under the real user home.
+- Existing bookmark path merely shares a similar prefix with the sandbox process home -> leave unchanged.
+- Existing config/bookmark files omit an available default directory such as `~/Code` -> append that directory to bookmarks, `monitoredDirectoryIDs`, `commonDirectoryIDs`, and missing generated directory actions.
 - Preview bundle is missing app or extension-local `RightToolActionRunner.xpc` -> packaging fails before zip upload.
 - Preview XPC service has app sandbox entitlement -> local smoke tests against auto-injected protected folders may fail.
 - Preview deep code-sign verification fails -> packaging fails before zip upload.
+- `pluginkit` unavailable on the runner -> skip registration/enablement without failing packaging.
+- `pluginkit -a` or `pluginkit -e use` fails during local preview enablement -> do not fail packaging; the bundle validation remains the hard gate.
 - No `dist/*.zip` output in GitHub Actions -> artifact upload must fail.
 
 #### 5. Good/Base/Bad Cases
 
 - Good: tag `v1.2.3` produces `RightTool-1.2.3-<arch>-preview.zip` containing `RightToolFinderExtension.appex` as an `_NSExtensionMain` executable, or an exported Xcode archive artifact.
+- Good: Finder starts the extension before the app has opened; the extension bootstraps config/bookmarks and assigns real-home Desktop/Downloads/Documents/Code URLs to `directoryURLs`.
+- Good: an older install has Desktop/Downloads/Documents only and `~/Code` exists; bootstrap appends the `code` bookmark, monitors it, and adds `open-directory-code`, `move-to-code`, and `copy-to-code`.
+- Good: rebuilding/reinstalling a local preview registers the new `RightToolFinderExtension.appex` path, then enables `com.righttool.app.FinderExtension`.
 - Base: manual workflow dispatch with no Xcode env vars produces a SwiftPM preview bundle with App, app-local XPC service, extension-local XPC service, Finder extension, and shared core dylib.
+- Bad: bootstrap writes `~/Library/Containers/com.righttool.app/Data/Desktop` as a monitored directory, so the Finder menu never appears on the user's real Desktop.
+- Bad: the packaging script only runs `pluginkit -e use -i com.righttool.app.FinderExtension`; after reinstall, PlugInKit may still know only an old or missing physical extension path.
 - Bad: `RIGHTTOOL_XCODE_PROJECT` set without `RIGHTTOOL_XCODE_SCHEME` silently falls back to preview bundling.
 - Bad: preview bundle contains `Contents/PlugIns/RightToolFinderExtension.appex` but the appex executable is a `DYLIB`.
 
@@ -124,6 +150,10 @@ Questions to answer:
 - Run shell syntax checks:
   ```bash
   bash -n scripts/ci-swift-check.sh scripts/package-macos.sh
+  ```
+- Run bootstrap regression tests:
+  ```bash
+  swift test --filter ConfigurationBootstrapperTests
   ```
 - Parse the workflow YAML:
   ```bash
@@ -174,6 +204,31 @@ Correct:
 ```text
 RightToolFinderExtension.appex/Contents/MacOS/RightToolFinderExtension: Mach-O ... executable
 ```
+
+Wrong:
+```swift
+let home = fileManager.homeDirectoryForCurrentUser
+```
+when building default monitored-directory bookmarks from a sandboxed app or extension process.
+
+Correct:
+```swift
+let home = realUserHomeDirectory
+```
+where the real home bypasses sandbox container redirection and existing container paths are sanitized on bootstrap.
+
+Wrong:
+```bash
+pluginkit -e use -i "$FINDER_EXTENSION_BUNDLE_IDENTIFIER"
+```
+as the only local reinstall step.
+
+Correct:
+```bash
+pluginkit -a "$appex_path"
+pluginkit -e use -i "$FINDER_EXTENSION_BUNDLE_IDENTIFIER"
+```
+so the physical `.appex` path is registered before enablement.
 
 Wrong:
 ```swift

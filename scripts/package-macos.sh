@@ -11,6 +11,7 @@ CODE_SIGN_IDENTITY="${CODE_SIGN_IDENTITY:--}"
 ARTIFACT_SUFFIX="${ARTIFACT_SUFFIX:-$(uname -m)}"
 DIST_DIR="${DIST_DIR:-dist}"
 DERIVED_DATA_PATH="${DERIVED_DATA_PATH:-DerivedData}"
+PACKAGED_FINDER_EXTENSION_PATH=""
 
 case "$CONFIGURATION" in
   release|debug) ;;
@@ -466,8 +467,24 @@ NOTES
 
   mkdir -p "$DIST_DIR"
   ditto -c -k --keepParent "$app_path" "$DIST_DIR/$APP_NAME-$(version_name)-$ARTIFACT_SUFFIX-preview.zip"
+  PACKAGED_FINDER_EXTENSION_PATH="$appex_path"
+}
+
+enable_finder_extension() {
+  local appex_path="${1:-}"
+  if ! command -v pluginkit >/dev/null 2>&1; then
+    return
+  fi
+
+  if [[ -n "$appex_path" && -d "$appex_path" ]]; then
+    pluginkit -a "$appex_path" >/dev/null 2>&1 || true
+  fi
+
+  pluginkit -e use -i "$FINDER_EXTENSION_BUNDLE_IDENTIFIER" >/dev/null 2>&1 || true
 }
 
 if ! package_xcode_archive_if_configured; then
   package_swiftpm_preview_bundle
 fi
+
+enable_finder_extension "$PACKAGED_FINDER_EXTENSION_PATH"
