@@ -11,6 +11,8 @@ CODE_SIGN_IDENTITY="${CODE_SIGN_IDENTITY:--}"
 ARTIFACT_SUFFIX="${ARTIFACT_SUFFIX:-$(uname -m)}"
 DIST_DIR="${DIST_DIR:-dist}"
 DERIVED_DATA_PATH="${DERIVED_DATA_PATH:-DerivedData}"
+APP_ICON_SOURCE="${APP_ICON_SOURCE:-design/icon.png}"
+APP_ICON_NAME="${APP_ICON_NAME:-RightToolIcon}"
 PACKAGED_FINDER_EXTENSION_PATH=""
 
 case "$CONFIGURATION" in
@@ -104,6 +106,8 @@ write_app_info_plist() {
   <string>$APP_NAME</string>
   <key>CFBundleIdentifier</key>
   <string>$BUNDLE_IDENTIFIER</string>
+  <key>CFBundleIconFile</key>
+  <string>$APP_ICON_NAME</string>
   <key>CFBundleInfoDictionaryVersion</key>
   <string>6.0</string>
   <key>CFBundleName</key>
@@ -239,6 +243,39 @@ write_xpc_entitlements_plist() {
 </dict>
 </plist>
 PLIST
+}
+
+copy_app_icon_resources() {
+  local resources_dir="$1"
+  local icon_png_path="$resources_dir/$APP_ICON_NAME.png"
+  local iconset_path="$resources_dir/$APP_ICON_NAME.iconset"
+  local icon_path="$resources_dir/$APP_ICON_NAME.icns"
+
+  if [[ ! -f "$APP_ICON_SOURCE" ]]; then
+    echo "App icon source does not exist: $APP_ICON_SOURCE" >&2
+    exit 66
+  fi
+
+  cp "$APP_ICON_SOURCE" "$icon_png_path"
+
+  if ! command -v sips >/dev/null 2>&1 || ! command -v iconutil >/dev/null 2>&1; then
+    echo "sips and iconutil are required to build the macOS app icon." >&2
+    exit 69
+  fi
+
+  rm -rf "$iconset_path"
+  mkdir -p "$iconset_path"
+
+  local size
+  for size in 16 32 128 256 512; do
+    sips -z "$size" "$size" "$APP_ICON_SOURCE" \
+      --out "$iconset_path/icon_${size}x${size}.png" >/dev/null
+    sips -z "$((size * 2))" "$((size * 2))" "$APP_ICON_SOURCE" \
+      --out "$iconset_path/icon_${size}x${size}@2x.png" >/dev/null
+  done
+
+  iconutil -c icns "$iconset_path" -o "$icon_path"
+  rm -rf "$iconset_path"
 }
 
 build_righttool_core_dylib() {
@@ -386,10 +423,19 @@ validate_preview_bundle() {
   test -x "$xpc_path/Contents/MacOS/RightToolActionRunner"
   test -x "$appex_xpc_path/Contents/MacOS/RightToolActionRunner"
   test -x "$appex_executable"
+  test -f "$app_path/Contents/Resources/$APP_ICON_NAME.icns"
+  test -f "$app_path/Contents/Resources/$APP_ICON_NAME.png"
   test -f "$app_path/Contents/Frameworks/libRightToolCore.dylib"
   test -f "$xpc_path/Contents/Frameworks/libRightToolCore.dylib"
   test -f "$appex_path/Contents/Frameworks/libRightToolCore.dylib"
   test -f "$appex_xpc_path/Contents/Frameworks/libRightToolCore.dylib"
+
+  local app_icon
+  app_icon="$(/usr/libexec/PlistBuddy -c "Print :CFBundleIconFile" "$app_path/Contents/Info.plist")"
+  if [[ "$app_icon" != "$APP_ICON_NAME" ]]; then
+    echo "Invalid app icon file: $app_icon" >&2
+    exit 65
+  fi
 
   extension_point="$(/usr/libexec/PlistBuddy -c "Print :NSExtension:NSExtensionPointIdentifier" "$appex_path/Contents/Info.plist")"
   if [[ "$extension_point" != "com.apple.FinderSync" ]]; then
@@ -446,6 +492,7 @@ package_swiftpm_preview_bundle() {
     "$xpc_path/Contents/MacOS/RightToolActionRunner"
   cp "$manual_build_dir/core/libRightToolCore.dylib" "$app_path/Contents/Frameworks/"
   cp "$manual_build_dir/core/libRightToolCore.dylib" "$xpc_path/Contents/Frameworks/"
+  copy_app_icon_resources "$app_path/Contents/Resources"
   write_app_info_plist "$app_path/Contents/Info.plist"
   write_xpc_info_plist "$xpc_path/Contents/Info.plist"
   build_finder_extension_bundle "$manual_build_dir/core" "$appex_path"

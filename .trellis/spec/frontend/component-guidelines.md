@@ -197,6 +197,86 @@ config.developerEntrypoints.map {
 }
 ```
 
+### Scenario: SwiftUI App Icon and Settings Brand Icon
+
+#### 1. Scope / Trigger
+
+- Trigger: changing the macOS app icon, `design/icon.png`, or the settings sidebar brand mark in `Sources/RightToolAppPreview/RightToolAppPreview.swift`.
+- This is both a frontend and packaging contract because the settings UI reads the runtime PNG while the `.app` bundle uses the generated `.icns`.
+
+#### 2. Signatures
+
+- `scripts/package-macos.sh` exposes these environment overrides:
+  ```bash
+  APP_ICON_SOURCE="${APP_ICON_SOURCE:-design/icon.png}"
+  APP_ICON_NAME="${APP_ICON_NAME:-RightToolIcon}"
+  ```
+- The app `Info.plist` must set:
+  ```xml
+  <key>CFBundleIconFile</key>
+  <string>RightToolIcon</string>
+  ```
+- SwiftUI settings should load the same base asset through `RightToolIconAsset` and render it with `RightToolBrandIcon`.
+
+#### 3. Contracts
+
+- `design/icon.png` is the source of truth for the product icon.
+- Packaging must copy it to `Contents/Resources/RightToolIcon.png` for the settings page.
+- Packaging must generate `Contents/Resources/RightToolIcon.icns` with `sips` + `iconutil` for the app icon.
+- Local development may fall back to the repository `design/icon.png`; packaged app rendering must not depend on repository paths.
+
+#### 4. Validation & Error Matrix
+
+- Missing `APP_ICON_SOURCE` -> packaging exits before producing an app bundle.
+- Missing `sips` or `iconutil` -> packaging exits because the `.icns` cannot be generated.
+- `CFBundleIconFile` does not match `APP_ICON_NAME` -> bundle validation fails.
+- Packaged app lacks `RightToolIcon.png` -> settings page brand icon falls back to the system symbol and should be treated as a packaging bug.
+
+#### 5. Good/Base/Bad Cases
+
+- Good: update `design/icon.png`, run packaging, and both `RightToolIcon.png` and `RightToolIcon.icns` are regenerated in the bundle.
+- Base: run the settings preview from the repository and the UI loads `design/icon.png` directly.
+- Bad: add a separate copied icon under `Sources/` and let it drift from `design/icon.png`.
+- Bad: set `CFBundleIconFile` without validating that the referenced `.icns` exists in `Contents/Resources`.
+
+#### 6. Tests Required
+
+- Run:
+  ```bash
+  git diff --check
+  bash -n scripts/package-macos.sh
+  scripts/package-macos.sh debug
+  ```
+- Verify:
+  ```bash
+  /usr/libexec/PlistBuddy -c 'Print :CFBundleIconFile' dist/staging/RightTool.app/Contents/Info.plist
+  test -f dist/staging/RightTool.app/Contents/Resources/RightToolIcon.icns
+  test -f dist/staging/RightTool.app/Contents/Resources/RightToolIcon.png
+  ```
+- Run `scripts/ci-swift-check.sh debug` when the local SwiftPM manifest toolchain is healthy.
+
+#### 7. Wrong vs Correct
+
+Wrong:
+```swift
+Image(systemName: "cursorarrow")
+```
+
+Correct:
+```swift
+RightToolBrandIcon(size: 44)
+```
+
+Wrong:
+```bash
+cp design/icon.png "$app_path/Contents/Resources/AppIcon.png"
+```
+
+Correct:
+```bash
+copy_app_icon_resources "$app_path/Contents/Resources"
+```
+
 ### Common Mistake: Duplicating Native macOS Window Controls
 
 **Symptom**: The settings window shows two sets of red/yellow/green controls in the upper-left corner.

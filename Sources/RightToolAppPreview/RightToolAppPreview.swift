@@ -891,6 +891,71 @@ private enum SettingsTheme {
     }
 }
 
+private enum RightToolIconAsset {
+    static let resourceName = "RightToolIcon"
+    static let pngExtension = "png"
+    static let sourceRelativePath = "design/icon.png"
+    static let image = loadImage()
+
+    private static func loadImage() -> NSImage? {
+        if let bundledURL = Bundle.main.url(forResource: resourceName, withExtension: pngExtension),
+           let image = NSImage(contentsOf: bundledURL) {
+            return image
+        }
+
+        let fileManager = FileManager.default
+        let sourceFileURL = URL(fileURLWithPath: #filePath)
+        let packageRootURL = sourceFileURL
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+
+        let candidateURLs = [
+            URL(fileURLWithPath: fileManager.currentDirectoryPath)
+                .appendingPathComponent(sourceRelativePath),
+            packageRootURL.appendingPathComponent(sourceRelativePath)
+        ]
+
+        for url in candidateURLs where fileManager.fileExists(atPath: url.path) {
+            if let image = NSImage(contentsOf: url) {
+                return image
+            }
+        }
+
+        return nil
+    }
+}
+
+struct RightToolBrandIcon: View {
+    let size: CGFloat
+
+    var body: some View {
+        Group {
+            if let image = RightToolIconAsset.image {
+                Image(nsImage: image)
+                    .resizable()
+                    .interpolation(.high)
+                    .scaledToFit()
+            } else {
+                fallbackIcon
+            }
+        }
+        .frame(width: size, height: size)
+        .accessibilityHidden(true)
+    }
+
+    private var fallbackIcon: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 8)
+                .fill(SettingsTheme.brandGradient)
+            Image(systemName: "cursorarrow")
+                .font(.title2.weight(.bold))
+                .foregroundStyle(.white)
+                .rotationEffect(.degrees(-18))
+        }
+    }
+}
+
 struct SettingsSidebar: View {
     let selectedSection: SettingsViewModel.Section
     let badges: [SettingsViewModel.Section: String]
@@ -911,16 +976,8 @@ struct SettingsSidebar: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 26) {
             HStack(spacing: 12) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(SettingsTheme.brandGradient)
-                    Image(systemName: "cursorarrow")
-                        .font(.title2.weight(.bold))
-                        .foregroundStyle(.white)
-                        .rotationEffect(.degrees(-18))
-                }
-                .frame(width: 44, height: 44)
-                .shadow(color: SettingsTheme.accent.opacity(0.25), radius: 14, x: 0, y: 8)
+                RightToolBrandIcon(size: 44)
+                    .shadow(color: SettingsTheme.accent.opacity(0.18), radius: 14, x: 0, y: 8)
 
                 VStack(alignment: .leading, spacing: 3) {
                     Text("RightClick Pro")
