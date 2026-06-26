@@ -38,7 +38,7 @@ final class SettingsViewModel: ObservableObject {
             case .directories:
                 return "常用目录快捷直达"
             case .developer:
-                return "开发者入口"
+                return "开发者快捷入口"
             case .history:
                 return "剪贴板助手"
             case .templates:
@@ -72,7 +72,7 @@ final class SettingsViewModel: ObservableObject {
             case .directories:
                 return "管理常用目录，快速访问，提高工作效率。"
             case .developer:
-                return "管理开发者常用工具、仓库与目录的快捷入口。"
+                return "管理开发者常用工具、仓库与目录的快捷入口，支持在 Finder 右键菜单中快速打开。"
             case .history:
                 return "查看剪切、复制、粘贴等文件操作记录与菜单入口。"
             case .templates:
@@ -109,6 +109,7 @@ final class SettingsViewModel: ObservableObject {
     @Published var statusTone: StatusTone = .neutral
     @Published var hasUnsavedChanges = false
     @Published var recentOperations: [OperationRecord] = []
+    @Published var developerEntrypointAddRequest = 0
 
     private var paths = RightToolStoragePaths.defaultForCurrentProcess()
 
@@ -203,6 +204,7 @@ final class SettingsViewModel: ObservableObject {
     func saveConfig() {
         do {
             try validateConfig()
+            try JSONFileStore<DirectoryBookmarkCatalog>(url: paths.bookmarksURL).save(bookmarks)
             try JSONFileStore<RightToolConfig>(url: paths.configURL).save(config)
             hasUnsavedChanges = false
             setStatus("配置已保存，重新打开 Finder 右键菜单后生效", tone: .success)
@@ -283,6 +285,80 @@ final class SettingsViewModel: ObservableObject {
             action.kind == .openInApp && action.payload.developerEntrypointID == entrypoint.id
         }
         markUnsaved("开发者入口已删除，关联动作已移除")
+    }
+
+    func requestAddDeveloperEntrypoint() {
+        developerEntrypointAddRequest += 1
+    }
+
+    @MainActor
+    func addDirectoryBookmarkFromPanel() {
+        guard let url = selectDirectoryURL() else {
+            return
+        }
+
+        upsertDirectoryBookmark(url: url, replacing: nil)
+    }
+
+    @MainActor
+    func replaceDirectoryBookmarkFromPanel(bookmarkID: String) {
+        guard let bookmark = bookmarks.bookmark(id: bookmarkID) else {
+            setStatus("找不到要编辑的目录", tone: .warning)
+            return
+        }
+
+        let initialURL = URL(fileURLWithPath: bookmark.path)
+        guard let url = selectDirectoryURL(initialURL: initialURL) else {
+            return
+        }
+
+        upsertDirectoryBookmark(url: url, replacing: bookmarkID)
+    }
+
+    func deleteDirectoryBookmark(bookmarkID: String) {
+        guard let bookmark = bookmarks.bookmark(id: bookmarkID) else {
+            setStatus("找不到要删除的目录", tone: .warning)
+            return
+        }
+
+        bookmarks.bookmarks.removeAll { $0.id == bookmarkID }
+        config.commonDirectoryIDs.removeAll { $0 == bookmarkID }
+        config.monitoredDirectoryIDs.removeAll { $0 == bookmarkID }
+        config.actions.removeAll { action in
+            directoryActionKinds.contains(action.kind) && action.payload.directoryID == bookmarkID
+        }
+
+        saveDirectoryChanges("已删除目录：\(bookmark.displayName)")
+    }
+
+    func isDirectoryBookmarkEnabled(_ bookmarkID: String) -> Bool {
+        let isReferenced = config.commonDirectoryIDs.contains(bookmarkID) && config.monitoredDirectoryIDs.contains(bookmarkID)
+        let openAction = config.actions.first { action in
+            action.kind == .openDirectory && action.payload.directoryID == bookmarkID
+        }
+        return isReferenced && (openAction?.isEnabled ?? true)
+    }
+
+    func setDirectoryBookmarkEnabled(_ isEnabled: Bool, bookmarkID: String) {
+        guard let bookmark = bookmarks.bookmark(id: bookmarkID) else {
+            setStatus("找不到要更新的目录", tone: .warning)
+            return
+        }
+
+        if isEnabled {
+            appendUnique(bookmarkID, to: &config.commonDirectoryIDs)
+            appendUnique(bookmarkID, to: &config.monitoredDirectoryIDs)
+            syncDirectoryActions(for: bookmark)
+        } else {
+            config.commonDirectoryIDs.removeAll { $0 == bookmarkID }
+            config.monitoredDirectoryIDs.removeAll { $0 == bookmarkID }
+        }
+
+        for index in config.actions.indices where directoryActionKinds.contains(config.actions[index].kind) && config.actions[index].payload.directoryID == bookmarkID {
+            config.actions[index].isEnabled = isEnabled
+        }
+
+        saveDirectoryChanges(isEnabled ? "已启用目录：\(bookmark.displayName)" : "已停用目录：\(bookmark.displayName)")
     }
 
     private func apply(result: ConfigurationBootstrapResult) {
@@ -367,6 +443,175 @@ final class SettingsViewModel: ObservableObject {
                 payload: ActionPayload(developerEntrypointID: entrypoint.id)
             )
         )
+    }
+
+    private var directoryActionKinds: Set<ActionKind> {
+        [.openDirectory, .moveToDirectory, .copyToDirectory]
+    }
+
+    private func upsertDirectoryBookmark(url: URL, replacing bookmarkID: String?) {
+        let path = normalizedDirectoryPath(for: url)
+        if let duplicate = bookmarks.bookmarks.first(where: { $0.id != bookmarkID && normalizedDirectoryPath($0.path) == path }) {
+            setStatus("目录已存在：\(duplicate.displayName)", tone: .warning)
+            return
+        }
+
+        let displayName = directoryDisplayName(for: url)
+        let bookmarkDataBase64 = securityBookmarkDataBase64(for: url)
+
+        if let bookmarkID {
+            guard let index = bookmarks.bookmarks.firstIndex(where: { $0.id == bookmarkID }) else {
+                setStatus("找不到要编辑的目录", tone: .warning)
+                return
+            }
+
+            let updated = DirectoryBookmark(
+                id: bookmarkID,
+                displayName: displayName,
+                path: path,
+                bookmarkDataBase64: bookmarkDataBase64,
+                addedAt: bookmarks.bookmarks[index].addedAt
+            )
+            bookmarks.bookmarks[index] = updated
+            appendUnique(bookmarkID, to: &config.commonDirectoryIDs)
+            appendUnique(bookmarkID, to: &config.monitoredDirectoryIDs)
+            syncDirectoryActions(for: updated)
+            saveDirectoryChanges("已更新目录：\(displayName)")
+            return
+        }
+
+        let bookmark = DirectoryBookmark(
+            id: uniqueBookmarkID(base: "directory-\(slug(for: displayName))"),
+            displayName: displayName,
+            path: path,
+            bookmarkDataBase64: bookmarkDataBase64
+        )
+        bookmarks.bookmarks.append(bookmark)
+        appendUnique(bookmark.id, to: &config.commonDirectoryIDs)
+        appendUnique(bookmark.id, to: &config.monitoredDirectoryIDs)
+        syncDirectoryActions(for: bookmark)
+        saveDirectoryChanges("已添加目录：\(displayName)")
+    }
+
+    private func syncDirectoryActions(for bookmark: DirectoryBookmark) {
+        let specs: [(kind: ActionKind, idPrefix: String, titlePrefix: String, visibility: Set<ActionVisibility>, group: MenuGroup)] = [
+            (.openDirectory, "open-directory", "前往", [.container, .toolbar], .commonDirectories),
+            (.moveToDirectory, "move-to", "移动到", [.selection], .moveToCommonDirectory),
+            (.copyToDirectory, "copy-to", "复制到", [.selection], .copyToCommonDirectory)
+        ]
+        let isEnabled = config.commonDirectoryIDs.contains(bookmark.id) && config.monitoredDirectoryIDs.contains(bookmark.id)
+        var order = nextActionOrder
+
+        for spec in specs {
+            if let index = config.actions.firstIndex(where: { action in
+                action.kind == spec.kind && action.payload.directoryID == bookmark.id
+            }) {
+                config.actions[index].title = "\(spec.titlePrefix)\(bookmark.displayName)"
+                config.actions[index].payload.directoryID = bookmark.id
+                continue
+            }
+
+            config.actions.append(
+                RightToolAction(
+                    id: uniqueActionID(base: "\(spec.idPrefix)-\(bookmark.id)"),
+                    title: "\(spec.titlePrefix)\(bookmark.displayName)",
+                    kind: spec.kind,
+                    visibility: spec.visibility,
+                    placement: .submenu,
+                    group: spec.group,
+                    isEnabled: isEnabled,
+                    order: order,
+                    payload: ActionPayload(directoryID: bookmark.id)
+                )
+            )
+            order += 10
+        }
+    }
+
+    @MainActor
+    private func selectDirectoryURL(initialURL: URL? = nil) -> URL? {
+        let panel = NSOpenPanel()
+        panel.title = "选择常用目录"
+        panel.prompt = "选择"
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.canCreateDirectories = true
+        panel.allowsMultipleSelection = false
+        panel.directoryURL = initialURL
+
+        guard panel.runModal() == .OK else {
+            return nil
+        }
+        return panel.url
+    }
+
+    private func securityBookmarkDataBase64(for url: URL) -> String? {
+        guard let data = try? url.bookmarkData(
+            options: [.withSecurityScope],
+            includingResourceValuesForKeys: nil,
+            relativeTo: nil
+        ) else {
+            return nil
+        }
+        return data.base64EncodedString()
+    }
+
+    private func saveDirectoryChanges(_ message: String) {
+        do {
+            try validateConfig()
+            try JSONFileStore<DirectoryBookmarkCatalog>(url: paths.bookmarksURL).save(bookmarks)
+            try JSONFileStore<RightToolConfig>(url: paths.configURL).save(config)
+            hasUnsavedChanges = false
+            setStatus(message, tone: .success)
+        } catch {
+            hasUnsavedChanges = true
+            setStatus("保存目录配置失败：\(error.localizedDescription)", tone: .error)
+        }
+    }
+
+    private func appendUnique(_ id: String, to ids: inout [String]) {
+        guard !ids.contains(id) else {
+            return
+        }
+        ids.append(id)
+    }
+
+    private func uniqueBookmarkID(base: String) -> String {
+        let fallback = base == "directory-" ? "directory" : base
+        if !bookmarks.bookmarks.contains(where: { $0.id == fallback }) {
+            return fallback
+        }
+
+        var index = 2
+        while bookmarks.bookmarks.contains(where: { $0.id == "\(fallback)-\(index)" }) {
+            index += 1
+        }
+        return "\(fallback)-\(index)"
+    }
+
+    private func normalizedDirectoryPath(for url: URL) -> String {
+        normalizedDirectoryPath(url.path)
+    }
+
+    private func normalizedDirectoryPath(_ path: String) -> String {
+        (path as NSString).standardizingPath
+    }
+
+    private func directoryDisplayName(for url: URL) -> String {
+        let name = url.lastPathComponent.trimmingCharacters(in: .whitespacesAndNewlines)
+        return name.isEmpty ? url.path : name
+    }
+
+    private func slug(for value: String) -> String {
+        let folded = value.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+        let allowed = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyz0123456789")
+        let characters = folded.lowercased().unicodeScalars.map { scalar -> String in
+            allowed.contains(scalar) ? String(scalar) : "-"
+        }
+        let collapsed = characters.joined()
+            .split(separator: "-", omittingEmptySubsequences: true)
+            .joined(separator: "-")
+        return collapsed.isEmpty ? "directory" : collapsed
     }
 
     private var nextActionOrder: Int {
@@ -522,7 +767,7 @@ struct SettingsRootView: View {
                 case .onboarding:
                     OnboardingView(viewModel: viewModel)
                 case .directories:
-                    DirectoryListView(bookmarks: viewModel.bookmarks.bookmarks)
+                    DirectoryListView(viewModel: viewModel)
                 case .actions:
                     ActionListView(viewModel: viewModel)
                 case .templates:
@@ -640,9 +885,12 @@ struct SettingsSidebar: View {
                 .shadow(color: SettingsTheme.accent.opacity(0.25), radius: 14, x: 0, y: 8)
 
                 VStack(alignment: .leading, spacing: 3) {
-                    Text("右键菜单管理")
-                        .font(.system(size: 18, weight: .bold))
+                    Text("RightClick Pro")
+                        .font(.system(size: 15, weight: .bold))
                         .foregroundStyle(SettingsTheme.ink)
+                    Text("Mac 右键效率工具")
+                        .font(.system(size: 12))
+                        .foregroundStyle(SettingsTheme.muted)
                 }
             }
 
@@ -802,7 +1050,24 @@ struct SettingsDetailShell<Content: View>: View {
     private var headerActions: some View {
         HStack(spacing: 12) {
             if section == .directories {
-                DirectoryHeaderAddButton()
+                DirectoryHeaderAddButton {
+                    viewModel.addDirectoryBookmarkFromPanel()
+                }
+            } else if section == .developer {
+                if viewModel.hasUnsavedChanges {
+                    StatusBadge(
+                        message: viewModel.statusMessage,
+                        tone: viewModel.statusTone,
+                        isDirty: viewModel.hasUnsavedChanges
+                    )
+                    .frame(maxWidth: 92)
+
+                    SaveConfigButton(viewModel: viewModel)
+                        .fixedSize(horizontal: true, vertical: false)
+                }
+                DeveloperHeaderAddButton {
+                    viewModel.requestAddDeveloperEntrypoint()
+                }
             } else {
                 StatusBadge(
                     message: viewModel.statusMessage,
@@ -814,6 +1079,7 @@ struct SettingsDetailShell<Content: View>: View {
             }
         }
         .frame(alignment: .trailing)
+        .layoutPriority(section == .developer ? 2 : 0)
     }
 
     private var titleSize: CGFloat {
@@ -827,13 +1093,37 @@ struct SettingsDetailShell<Content: View>: View {
 }
 
 struct DirectoryHeaderAddButton: View {
+    let action: () -> Void
+
     var body: some View {
-        Label("添加目录", systemImage: "plus.circle")
-            .font(.system(size: 14, weight: .semibold))
-            .foregroundStyle(.white)
-            .padding(.horizontal, 16)
-            .frame(height: 38)
-            .background(SettingsTheme.accent, in: RoundedRectangle(cornerRadius: 8))
+        Button(action: action) {
+            Label("添加目录", systemImage: "plus.circle")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(.white)
+                .padding(.horizontal, 16)
+                .frame(height: 38)
+                .background(SettingsTheme.accent, in: RoundedRectangle(cornerRadius: 8))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("添加常用目录")
+    }
+}
+
+struct DeveloperHeaderAddButton: View {
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Label("添加快捷入口", systemImage: "plus")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(.white)
+                .lineLimit(1)
+                .frame(width: 124, height: 38)
+                .background(SettingsTheme.accent, in: RoundedRectangle(cornerRadius: 8))
+        }
+        .buttonStyle(.plain)
+        .fixedSize(horizontal: true, vertical: false)
+        .accessibilityLabel("添加开发者快捷入口")
     }
 }
 
@@ -1416,8 +1706,12 @@ struct OverviewMetric: View {
 }
 
 struct DirectoryListView: View {
-    let bookmarks: [DirectoryBookmark]
+    @ObservedObject var viewModel: SettingsViewModel
     @State private var searchText = ""
+
+    private var bookmarks: [DirectoryBookmark] {
+        viewModel.bookmarks.bookmarks
+    }
 
     private var filteredBookmarks: [DirectoryBookmark] {
         let keyword = searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
@@ -1428,7 +1722,8 @@ struct DirectoryListView: View {
     }
 
     private var previewItems: [FinderMenuItem] {
-        Array(bookmarks.prefix(7)).map {
+        let enabledBookmarks = bookmarks.filter { viewModel.isDirectoryBookmarkEnabled($0.id) }
+        return Array(enabledBookmarks.prefix(7)).map {
             FinderMenuItem(title: $0.displayName, systemImage: directoryIcon(for: $0), tint: directoryTint(for: $0), id: $0.id)
         }
     }
@@ -1444,7 +1739,19 @@ struct DirectoryListView: View {
                 LazyVStack(spacing: 0) {
                     DirectoryTableHeader()
                     ForEach(Array(rows.enumerated()), id: \.element.id) { index, bookmark in
-                        DirectoryTableRow(bookmark: bookmark)
+                        DirectoryTableRow(
+                            bookmark: bookmark,
+                            isEnabled: viewModel.isDirectoryBookmarkEnabled(bookmark.id),
+                            onToggle: { isEnabled in
+                                viewModel.setDirectoryBookmarkEnabled(isEnabled, bookmarkID: bookmark.id)
+                            },
+                            onEdit: {
+                                viewModel.replaceDirectoryBookmarkFromPanel(bookmarkID: bookmark.id)
+                            },
+                            onDelete: {
+                                viewModel.deleteDirectoryBookmark(bookmarkID: bookmark.id)
+                            }
+                        )
                         if index < rows.count - 1 {
                             Divider()
                         }
@@ -1568,6 +1875,10 @@ struct DirectoryTableHeader: View {
 
 struct DirectoryTableRow: View {
     let bookmark: DirectoryBookmark
+    let isEnabled: Bool
+    let onToggle: (Bool) -> Void
+    let onEdit: () -> Void
+    let onDelete: () -> Void
 
     var body: some View {
         HStack(spacing: 16) {
@@ -1587,6 +1898,7 @@ struct DirectoryTableRow: View {
                     .lineLimit(1)
             }
             .frame(width: 260, alignment: .leading)
+            .opacity(isEnabled ? 1 : 0.48)
 
             Text(displayPath)
                 .font(.system(size: 13))
@@ -1596,15 +1908,30 @@ struct DirectoryTableRow: View {
                 .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
-            Toggle("", isOn: .constant(true))
+            Toggle("", isOn: Binding(
+                get: { isEnabled },
+                set: { isEnabled in
+                    onToggle(isEnabled)
+                }
+            ))
                 .toggleStyle(.switch)
                 .labelsHidden()
-                .disabled(true)
                 .frame(width: 90)
 
             HStack(spacing: 16) {
-                Image(systemName: "pencil")
-                Image(systemName: "trash")
+                Button(action: onEdit) {
+                    Image(systemName: "pencil")
+                        .frame(width: 24, height: 24)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("编辑 \(bookmark.displayName)")
+
+                Button(role: .destructive, action: onDelete) {
+                    Image(systemName: "trash")
+                        .frame(width: 24, height: 24)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("删除 \(bookmark.displayName)")
             }
             .font(.system(size: 14, weight: .medium))
             .foregroundStyle(SettingsTheme.muted)
@@ -2081,76 +2408,42 @@ struct DeveloperEntrypointListView: View {
     @State private var selectedFilter: DeveloperEntrypointFilter = .all
 
     private var filteredEntrypoints: [DeveloperEntrypoint] {
-        switch selectedFilter {
-        case .all:
-            return viewModel.config.developerEntrypoints
-        case .currentDirectory:
-            return viewModel.config.developerEntrypoints.filter { $0.targetMode == .currentDirectory }
-        case .selectedItem:
-            return viewModel.config.developerEntrypoints.filter { $0.targetMode != .currentDirectory }
-        }
+        viewModel.config.developerEntrypoints.filter { selectedFilter.matches($0) }
     }
 
     var body: some View {
         let rows = filteredEntrypoints
 
         DesignPageScroll {
-            PageToolbar {
-                Picker("入口筛选", selection: $selectedFilter) {
-                    ForEach(DeveloperEntrypointFilter.allCases) { filter in
-                        Text(filter.rawValue).tag(filter)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .frame(minWidth: 240, maxWidth: 360)
-            } trailing: {
-                Button {
-                    editingDraft = DeveloperEntrypointDraft()
-                } label: {
-                    Label("添加快捷入口", systemImage: "plus")
-                }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.large)
-            }
+            HStack(alignment: .top, spacing: 20) {
+                VStack(alignment: .leading, spacing: 14) {
+                    DesignPanel(padding: 0) {
+                        LazyVStack(spacing: 0) {
+                            DeveloperFilterTabs(selectedFilter: $selectedFilter)
+                            Divider()
+                            DeveloperTableHeader()
 
-            DesignPanel(padding: 0) {
-                LazyVStack(spacing: 0) {
-                    DeveloperTableHeader()
-                    if rows.isEmpty {
-                        EmptyStateRow(title: "暂无开发者入口", systemImage: "terminal")
-                    } else {
-                        ForEach(Array(rows.enumerated()), id: \.element.id) { index, entrypoint in
-                            DeveloperTableRow(entrypoint: entrypoint, viewModel: viewModel) {
-                                editingDraft = DeveloperEntrypointDraft(entrypoint: entrypoint)
-                            }
-                            if index < rows.count - 1 {
-                                Divider()
+                            if rows.isEmpty {
+                                EmptyStateRow(title: "暂无匹配的开发者入口", systemImage: "terminal")
+                            } else {
+                                ForEach(Array(rows.enumerated()), id: \.element.id) { index, entrypoint in
+                                    DeveloperTableRow(entrypoint: entrypoint, viewModel: viewModel) {
+                                        editingDraft = DeveloperEntrypointDraft(entrypoint: entrypoint)
+                                    }
+                                    if index < rows.count - 1 {
+                                        Divider()
+                                    }
+                                }
                             }
                         }
                     }
-                }
-            }
 
-            PreviewSection(
-                    rootItems: [
-                        FinderMenuItem(title: "新建文件夹"),
-                        FinderMenuItem(title: "显示简介"),
-                        FinderMenuItem(title: "开发者工具", systemImage: "chevron.left.forwardslash.chevron.right", tint: SettingsTheme.accent, isHighlighted: true, hasSubmenu: true),
-                        FinderMenuItem(title: "快速操作", hasSubmenu: true),
-                        FinderMenuItem(title: "拷贝")
-                    ],
-                    submenuTitle: nil,
-                    submenuItems: developerPreviewItems
-            ) {
-                VStack(alignment: .leading, spacing: 10) {
-                    Text("右键菜单预览")
-                        .font(.headline)
-                        .foregroundStyle(SettingsTheme.ink)
-                    Text("在 Finder 中右键任意位置，选择「开发者工具」即可看到这些入口。")
-                        .font(.callout)
-                        .foregroundStyle(SettingsTheme.muted)
-                        .fixedSize(horizontal: false, vertical: true)
+                    DeveloperHintBanner()
                 }
+                .frame(maxWidth: .infinity, alignment: .topLeading)
+
+                DeveloperMenuPreviewCard(items: developerPreviewItems)
+                    .frame(width: 276)
             }
         }
         .sheet(item: $editingDraft) { draft in
@@ -2161,45 +2454,119 @@ struct DeveloperEntrypointListView: View {
                 editingDraft = nil
             }
         }
-    }
-
-    private var developerPreviewItems: [FinderMenuItem] {
-        viewModel.config.developerEntrypoints.prefix(10).map {
-            FinderMenuItem(title: $0.title, systemImage: developerIcon(for: $0), tint: SettingsTheme.accent, id: $0.id)
+        .onChange(of: viewModel.developerEntrypointAddRequest) { _, _ in
+            editingDraft = DeveloperEntrypointDraft()
         }
     }
 
-    private func developerIcon(for entrypoint: DeveloperEntrypoint) -> String {
-        let id = entrypoint.bundleIdentifier.lowercased()
-        if id.contains("terminal") || id.contains("iterm") { return "terminal" }
-        if id.contains("github") { return "globe" }
-        if id.contains("docker") { return "shippingbox" }
-        return "app"
+    private var developerPreviewItems: [FinderMenuItem] {
+        let enabledActions = viewModel.config.actions
+            .filter { $0.kind == .openInApp && $0.isEnabled }
+            .sorted { $0.order < $1.order }
+
+        let items = enabledActions.compactMap { action -> FinderMenuItem? in
+            guard
+                let entrypointID = action.payload.developerEntrypointID,
+                let entrypoint = viewModel.config.developerEntrypoints.first(where: { $0.id == entrypointID })
+            else {
+                return nil
+            }
+            return FinderMenuItem(
+                title: entrypoint.title,
+                systemImage: developerEntryIcon(for: entrypoint),
+                tint: developerEntryTint(for: entrypoint),
+                id: action.id
+            )
+        }
+
+        guard items.count > 9 else {
+            return items
+        }
+        return Array(items.prefix(9)) + [FinderMenuItem(title: "更多...")]
     }
 }
 
 enum DeveloperEntrypointFilter: String, CaseIterable, Identifiable {
     case all = "全部"
-    case currentDirectory = "当前目录"
-    case selectedItem = "选中项目"
+    case ide = "IDE"
+    case terminal = "终端"
+    case repository = "仓库"
+    case service = "服务"
+    case directory = "目录"
 
     var id: String { rawValue }
+
+    func matches(_ entrypoint: DeveloperEntrypoint) -> Bool {
+        guard self != .all else {
+            return true
+        }
+
+        let value = "\(entrypoint.id) \(entrypoint.title) \(entrypoint.bundleIdentifier)".lowercased()
+        switch self {
+        case .all:
+            return true
+        case .ide:
+            return ["vscode", "visual studio", "code", "cursor", "webstorm", "xcode", "idea", "intellij", "zed"].contains { value.contains($0) }
+        case .terminal:
+            return ["terminal", "iterm", "warp", "alacritty", "kitty"].contains { value.contains($0) }
+        case .repository:
+            return ["github", "gitlab", "repo", "repository", "projects", "仓库"].contains { value.contains($0) }
+        case .service:
+            return ["docker", "postman", "service", "api", "服务"].contains { value.contains($0) }
+        case .directory:
+            return value.hasPrefix("/") || value.hasPrefix("~") || ["folder", "directory", "logs", "config", "目录"].contains { value.contains($0) }
+        }
+    }
+}
+
+struct DeveloperFilterTabs: View {
+    @Binding var selectedFilter: DeveloperEntrypointFilter
+
+    var body: some View {
+        HStack(spacing: 12) {
+            ForEach(DeveloperEntrypointFilter.allCases) { filter in
+                Button {
+                    selectedFilter = filter
+                } label: {
+                    Text(filter.rawValue)
+                        .font(.system(size: 13, weight: selectedFilter == filter ? .semibold : .regular))
+                        .foregroundStyle(selectedFilter == filter ? .white : SettingsTheme.ink)
+                        .frame(minWidth: filter == .all ? 42 : 48)
+                        .frame(height: 32)
+                        .background(
+                            selectedFilter == filter ? SettingsTheme.accent : Color.white.opacity(0.72),
+                            in: RoundedRectangle(cornerRadius: 7)
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 7)
+                                .stroke(selectedFilter == filter ? Color.clear : SettingsTheme.hairline)
+                        )
+                }
+                .buttonStyle(.plain)
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 11)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
 }
 
 struct DeveloperTableHeader: View {
     var body: some View {
-        HStack(spacing: 16) {
-            Text("名称").frame(width: 210, alignment: .leading)
-            Text("Bundle Identifier").frame(maxWidth: .infinity, alignment: .leading)
-            Text("目标").frame(width: 120, alignment: .leading)
-            Text("启用").frame(width: 72, alignment: .center)
-            Text("操作").frame(width: 72, alignment: .center)
+        HStack(spacing: 10) {
+            Text("名称").frame(width: 144, alignment: .leading)
+            Text("目标路径 / 地址").frame(maxWidth: .infinity, alignment: .leading)
+            Text("快捷键").frame(width: 64, alignment: .leading)
+            Text("启用").frame(width: 60, alignment: .center)
+            Text("操作").frame(width: 76, alignment: .center)
         }
         .font(.caption.weight(.semibold))
         .foregroundStyle(SettingsTheme.muted)
-        .padding(.horizontal, 18)
-        .frame(height: 44)
-        .background(Color.black.opacity(0.015))
+        .padding(.horizontal, 12)
+        .frame(height: 38)
+        .background(Color.black.opacity(0.012))
     }
 }
 
@@ -2215,34 +2582,33 @@ struct DeveloperTableRow: View {
     }
 
     var body: some View {
-        HStack(spacing: 16) {
+        HStack(spacing: 10) {
             Button(action: onEdit) {
-                HStack(spacing: 12) {
-                    Image(systemName: iconName)
-                        .font(.title3)
-                        .foregroundStyle(SettingsTheme.accent)
-                        .frame(width: 28)
+                HStack(spacing: 10) {
+                    DeveloperEntryIcon(entrypoint: entrypoint)
+
                     Text(entrypoint.title)
-                        .font(.callout.weight(.semibold))
+                        .font(.system(size: 13, weight: .semibold))
                         .foregroundStyle(SettingsTheme.ink)
                         .lineLimit(1)
                 }
             }
             .buttonStyle(.plain)
-            .frame(width: 210, alignment: .leading)
+            .frame(width: 144, alignment: .leading)
 
-            Text(entrypoint.bundleIdentifier)
-                .font(.callout)
+            Text(developerEntryTargetPath(for: entrypoint))
+                .font(.system(size: 12))
                 .foregroundStyle(SettingsTheme.muted)
                 .lineLimit(1)
-                .truncationMode(.middle)
+                .truncationMode(.tail)
                 .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
-            Text(entrypoint.targetMode.displayName)
-                .font(.callout)
+            Text(developerEntryHotkey(for: entrypoint))
+                .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(SettingsTheme.muted)
-                .frame(width: 120, alignment: .leading)
+                .lineLimit(1)
+                .frame(width: 64, alignment: .leading)
 
             Toggle("", isOn: Binding(
                 get: { matchingAction?.isEnabled ?? false },
@@ -2254,32 +2620,187 @@ struct DeveloperTableRow: View {
             .toggleStyle(.switch)
             .labelsHidden()
             .disabled(matchingAction == nil)
-            .frame(width: 72)
+            .frame(width: 60)
 
-            Menu {
-                Button("编辑", action: onEdit)
-                Button("删除", role: .destructive) {
-                    viewModel.deleteDeveloperEntrypoint(entrypoint)
+            HStack(spacing: 8) {
+                Button(action: onEdit) {
+                    Image(systemName: "pencil")
+                        .font(.system(size: 13, weight: .medium))
+                        .frame(width: 28, height: 28)
+                        .background(.white.opacity(0.7), in: RoundedRectangle(cornerRadius: 7))
+                        .overlay(RoundedRectangle(cornerRadius: 7).stroke(SettingsTheme.hairline))
                 }
-            } label: {
-                Image(systemName: "ellipsis")
-                    .font(.title3)
-                    .frame(width: 32, height: 32)
+                .buttonStyle(.plain)
+                .accessibilityLabel("编辑 \(entrypoint.title)")
+
+                Menu {
+                    Button("编辑", action: onEdit)
+                    Button("删除", role: .destructive) {
+                        viewModel.deleteDeveloperEntrypoint(entrypoint)
+                    }
+                } label: {
+                    Image(systemName: "ellipsis")
+                        .font(.system(size: 14, weight: .semibold))
+                        .frame(width: 28, height: 28)
+                        .background(.white.opacity(0.7), in: RoundedRectangle(cornerRadius: 7))
+                        .overlay(RoundedRectangle(cornerRadius: 7).stroke(SettingsTheme.hairline))
+                }
+                .buttonStyle(.plain)
+                .menuStyle(.borderlessButton)
             }
-            .menuStyle(.borderlessButton)
-            .frame(width: 72)
+            .foregroundStyle(SettingsTheme.ink)
+            .frame(width: 76)
         }
-        .padding(.horizontal, 18)
-        .frame(height: 58)
+        .padding(.horizontal, 12)
+        .frame(height: 48)
+        .opacity((matchingAction?.isEnabled ?? true) ? 1 : 0.52)
+    }
+}
+
+struct DeveloperEntryIcon: View {
+    let entrypoint: DeveloperEntrypoint
+
+    var body: some View {
+        Image(systemName: developerEntryIcon(for: entrypoint))
+            .font(.system(size: 16, weight: .semibold))
+            .foregroundStyle(developerEntryTint(for: entrypoint))
+            .frame(width: 28, height: 28)
+            .background(developerEntryTint(for: entrypoint).opacity(0.1), in: RoundedRectangle(cornerRadius: 7))
+    }
+}
+
+struct DeveloperMenuPreviewCard: View {
+    let items: [FinderMenuItem]
+
+    var body: some View {
+        DesignPanel(padding: 0) {
+            VStack(alignment: .leading, spacing: 14) {
+                HStack(spacing: 6) {
+                    Text("右键菜单预览")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(SettingsTheme.ink)
+                    Image(systemName: "info.circle")
+                        .font(.caption)
+                        .foregroundStyle(SettingsTheme.muted)
+                }
+
+                Text("在 Finder 中右键时，将在「开发者工具」子菜单中显示以下内容：")
+                    .font(.system(size: 12))
+                    .foregroundStyle(SettingsTheme.muted)
+                    .lineSpacing(5)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                ZStack(alignment: .topLeading) {
+                    FinderMenuBox(items: rootMenuItems)
+                        .offset(x: 0, y: 0)
+
+                    FinderMenuBox(items: submenuItems)
+                        .offset(x: 112, y: 82)
+                }
+                .scaleEffect(0.94, anchor: .topLeading)
+                .frame(maxWidth: .infinity, minHeight: 330, alignment: .topLeading)
+
+                Spacer(minLength: 0)
+            }
+            .padding(18)
+            .frame(maxWidth: .infinity, minHeight: 500, alignment: .topLeading)
+        }
     }
 
-    private var iconName: String {
-        let id = entrypoint.bundleIdentifier.lowercased()
-        if id.contains("terminal") || id.contains("iterm") { return "terminal" }
-        if id.contains("github") { return "globe" }
-        if id.contains("docker") { return "shippingbox" }
-        return "app"
+    private var rootMenuItems: [FinderMenuItem] {
+        [
+            FinderMenuItem(title: "新建文件夹"),
+            FinderMenuItem(title: "显示简介"),
+            FinderMenuItem(title: "开发者工具", systemImage: "chevron.left.forwardslash.chevron.right", tint: SettingsTheme.accent, isHighlighted: true, hasSubmenu: true),
+            FinderMenuItem(title: "快速操作", hasSubmenu: true),
+            FinderMenuItem(title: "拷贝"),
+            FinderMenuItem(title: "粘贴"),
+            FinderMenuItem(title: "显示查看选项"),
+            FinderMenuItem(title: "标签..."),
+            FinderMenuItem(title: "服务", hasSubmenu: true)
+        ]
     }
+
+    private var submenuItems: [FinderMenuItem] {
+        items.isEmpty ? [FinderMenuItem(title: "暂无启用入口")] : items
+    }
+}
+
+struct DeveloperHintBanner: View {
+    var body: some View {
+        HStack(alignment: .center, spacing: 12) {
+            Image(systemName: "lightbulb")
+                .font(.system(size: 18, weight: .regular))
+                .foregroundStyle(SettingsTheme.accent)
+                .frame(width: 24)
+
+            Text("提示：")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(SettingsTheme.accent)
+
+            Text("在 Finder 中右键任意位置，选择「开发者工具」即可看到以上快捷入口。")
+                .font(.system(size: 13))
+                .foregroundStyle(SettingsTheme.accent)
+                .lineLimit(1)
+                .minimumScaleFactor(0.85)
+
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 16)
+        .frame(maxWidth: .infinity, minHeight: 48)
+        .background(SettingsTheme.accent.opacity(0.055), in: RoundedRectangle(cornerRadius: 8))
+        .overlay(RoundedRectangle(cornerRadius: 8).stroke(SettingsTheme.accent.opacity(0.18)))
+    }
+}
+
+private func developerEntryIcon(for entrypoint: DeveloperEntrypoint) -> String {
+    let value = "\(entrypoint.title) \(entrypoint.bundleIdentifier)".lowercased()
+    if value.contains("terminal") || value.contains("iterm") || value.contains("warp") { return "terminal.fill" }
+    if value.contains("github") || value.contains("gitlab") { return "globe" }
+    if value.contains("docker") { return "shippingbox.fill" }
+    if value.contains("postman") { return "paperplane.fill" }
+    if value.hasPrefix("/") || value.hasPrefix("~") || value.contains("folder") || value.contains("目录") { return "folder.fill" }
+    if value.contains("vscode") || value.contains("webstorm") || value.contains("cursor") || value.contains("xcode") || value.contains("code") {
+        return "chevron.left.forwardslash.chevron.right"
+    }
+    return "app.fill"
+}
+
+private func developerEntryTint(for entrypoint: DeveloperEntrypoint) -> Color {
+    let value = "\(entrypoint.title) \(entrypoint.bundleIdentifier)".lowercased()
+    if value.contains("terminal") || value.contains("iterm") { return .green }
+    if value.contains("github") { return SettingsTheme.ink }
+    if value.contains("docker") { return .blue }
+    if value.contains("postman") { return .orange }
+    if value.contains("folder") || value.contains("目录") { return .blue }
+    return SettingsTheme.accent
+}
+
+private func developerEntryTargetPath(for entrypoint: DeveloperEntrypoint) -> String {
+    let value = "\(entrypoint.title) \(entrypoint.bundleIdentifier)".lowercased()
+    if value.contains("visual studio") || value.contains("vscode") { return "/Applications/Visual Studio Code.app" }
+    if value.contains("webstorm") { return "/Applications/WebStorm.app" }
+    if value.contains("cursor") { return "/Applications/Cursor.app" }
+    if value.contains("iterm") { return "/Applications/iTerm.app" }
+    if value.contains("terminal") { return "/Applications/Utilities/Terminal.app" }
+    if value.contains("github") { return "https://github.com" }
+    if value.contains("docker") { return "/Applications/Docker.app" }
+    if value.contains("postman") { return "/Applications/Postman.app" }
+    return entrypoint.bundleIdentifier
+}
+
+private func developerEntryHotkey(for entrypoint: DeveloperEntrypoint) -> String {
+    let value = "\(entrypoint.title) \(entrypoint.bundleIdentifier)".lowercased()
+    if value.contains("vscode") || value.contains("visual studio") { return "⌥⌘ V" }
+    if value.contains("cursor") { return "⌥⌘ C" }
+    if value.contains("webstorm") { return "⌥⌘ W" }
+    if value.contains("terminal") || value.contains("iterm") { return "⌥⌘ T" }
+    if value.contains("github") { return "⌥⌘ G" }
+    if value.contains("docker") { return "⌥⌘ D" }
+    if value.contains("postman") { return "⌥⌘ P" }
+    if value.contains("logs") { return "⌥⌘ L" }
+    if value.contains("config") { return "⌥⌘ E" }
+    return "⌥⌘ \(entrypoint.title.prefix(1).uppercased())"
 }
 
 struct OperationHistoryView: View {
