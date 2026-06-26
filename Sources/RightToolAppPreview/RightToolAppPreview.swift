@@ -619,41 +619,54 @@ struct SidebarNavigationRow: View {
     let badge: String?
     let isSelected: Bool
     let onSelect: () -> Void
+    @State private var didSelectDuringPress = false
 
     var body: some View {
-        Button(action: onSelect) {
-            HStack(spacing: 12) {
-                Image(systemName: section.systemImage)
-                    .font(.system(size: 17, weight: .medium))
-                    .frame(width: 22)
+        HStack(spacing: 12) {
+            Image(systemName: section.systemImage)
+                .font(.system(size: 17, weight: .medium))
+                .frame(width: 22)
+                .foregroundStyle(isSelected ? SettingsTheme.accent : SettingsTheme.muted)
+
+            Text(section.rawValue)
+                .font(.system(size: 15, weight: isSelected ? .semibold : .regular))
+                .foregroundStyle(isSelected ? SettingsTheme.accent : SettingsTheme.ink)
+                .lineLimit(1)
+
+            Spacer(minLength: 8)
+
+            if let badge {
+                Text(badge)
+                    .font(.caption2.weight(.semibold))
+                    .monospacedDigit()
                     .foregroundStyle(isSelected ? SettingsTheme.accent : SettingsTheme.muted)
-
-                Text(section.rawValue)
-                    .font(.system(size: 15, weight: isSelected ? .semibold : .regular))
-                    .foregroundStyle(isSelected ? SettingsTheme.accent : SettingsTheme.ink)
-                    .lineLimit(1)
-
-                Spacer(minLength: 8)
-
-                if let badge {
-                    Text(badge)
-                        .font(.caption2.weight(.semibold))
-                        .monospacedDigit()
-                        .foregroundStyle(isSelected ? SettingsTheme.accent : SettingsTheme.muted)
-                        .padding(.horizontal, 7)
-                        .padding(.vertical, 3)
-                        .background(.white.opacity(0.72), in: Capsule())
-                }
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 3)
+                    .background(.white.opacity(0.72), in: Capsule())
             }
-            .padding(.horizontal, 12)
-            .frame(height: 42)
-            .frame(maxWidth: .infinity)
-            .background(
-                isSelected ? SettingsTheme.accentSoft : Color.clear,
-                in: RoundedRectangle(cornerRadius: 8)
-            )
         }
-        .buttonStyle(.plain)
+        .padding(.horizontal, 12)
+        .frame(height: 42)
+        .frame(maxWidth: .infinity)
+        .background(
+            isSelected ? SettingsTheme.accentSoft : Color.clear,
+            in: RoundedRectangle(cornerRadius: 8)
+        )
+        .contentShape(Rectangle())
+        .gesture(
+            DragGesture(minimumDistance: 0)
+                .onChanged { _ in
+                    guard !didSelectDuringPress else { return }
+                    didSelectDuringPress = true
+                    onSelect()
+                }
+                .onEnded { _ in
+                    didSelectDuringPress = false
+                }
+        )
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(.isButton)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }
 

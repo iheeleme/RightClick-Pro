@@ -219,3 +219,30 @@ VStack {
     SettingsSidebarContent()
 }
 ```
+
+### Common Mistake: Slow Sidebar Selection
+
+**Symptom**: Custom sidebar rows feel delayed because selection changes after mouse release and expensive detail views start rebuilding at the same time.
+
+**Cause**: Using a default SwiftUI `Button` for navigation rows in a dense macOS settings sidebar can defer the action until mouseUp.
+
+**Fix**: For custom sidebar navigation in `RightToolAppPreview.swift`, use a full-row hit target and select on mouseDown with `DragGesture(minimumDistance: 0)`. Keep accessibility traits so the row is still announced as a button.
+
+Wrong:
+```swift
+Button(action: onSelect) {
+    SidebarRowContent()
+}
+.buttonStyle(.plain)
+```
+
+Correct:
+```swift
+SidebarRowContent()
+    .contentShape(Rectangle())
+    .gesture(
+        DragGesture(minimumDistance: 0)
+            .onChanged { _ in onSelect() }
+    )
+    .accessibilityAddTraits(.isButton)
+```
