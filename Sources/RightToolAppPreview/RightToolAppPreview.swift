@@ -252,6 +252,50 @@ final class SettingsViewModel: ObservableObject {
         markUnsaved()
     }
 
+    func toggleActionVisibility(_ visibility: ActionVisibility, actionID: String) {
+        guard let index = config.actions.firstIndex(where: { $0.id == actionID }) else {
+            return
+        }
+
+        if config.actions[index].visibility.contains(visibility) {
+            guard config.actions[index].visibility.count > 1 else {
+                setStatus("至少保留一个显示位置", tone: .warning)
+                return
+            }
+            config.actions[index].visibility.remove(visibility)
+        } else {
+            config.actions[index].visibility.insert(visibility)
+        }
+
+        markUnsaved("菜单项显示范围已更新")
+    }
+
+    func moveAction(actionID: String, visibleActionIDs: [String], offset: Int) {
+        guard
+            let sourceVisibleIndex = visibleActionIDs.firstIndex(of: actionID)
+        else {
+            return
+        }
+
+        let targetVisibleIndex = sourceVisibleIndex + offset
+        guard visibleActionIDs.indices.contains(targetVisibleIndex) else {
+            return
+        }
+
+        let targetActionID = visibleActionIDs[targetVisibleIndex]
+        guard
+            let sourceIndex = config.actions.firstIndex(where: { $0.id == actionID }),
+            let targetIndex = config.actions.firstIndex(where: { $0.id == targetActionID })
+        else {
+            return
+        }
+
+        let sourceOrder = config.actions[sourceIndex].order
+        config.actions[sourceIndex].order = config.actions[targetIndex].order
+        config.actions[targetIndex].order = sourceOrder
+        markUnsaved("菜单项顺序已更新")
+    }
+
     func upsertTemplate(_ template: FileTemplate, replacing originalID: String?) {
         if let originalID, let index = config.fileTemplates.firstIndex(where: { $0.id == originalID }) {
             config.fileTemplates[index] = template
@@ -315,6 +359,31 @@ final class SettingsViewModel: ObservableObject {
         developerEntrypointAddRequest += 1
     }
 
+    func moveDeveloperEntrypoint(_ entrypoint: DeveloperEntrypoint, visibleEntrypointIDs: [String], offset: Int) {
+        guard
+            let sourceVisibleIndex = visibleEntrypointIDs.firstIndex(of: entrypoint.id)
+        else {
+            return
+        }
+
+        let targetVisibleIndex = sourceVisibleIndex + offset
+        guard visibleEntrypointIDs.indices.contains(targetVisibleIndex) else {
+            return
+        }
+
+        let targetID = visibleEntrypointIDs[targetVisibleIndex]
+        guard
+            let sourceIndex = config.developerEntrypoints.firstIndex(where: { $0.id == entrypoint.id }),
+            let targetIndex = config.developerEntrypoints.firstIndex(where: { $0.id == targetID })
+        else {
+            return
+        }
+
+        config.developerEntrypoints.swapAt(sourceIndex, targetIndex)
+        normalizeDeveloperActionOrder()
+        markUnsaved("开发者入口顺序已更新")
+    }
+
     @MainActor
     func addDirectoryBookmarkFromPanel() {
         guard let url = selectDirectoryURL() else {
@@ -353,6 +422,32 @@ final class SettingsViewModel: ObservableObject {
         }
 
         saveDirectoryChanges("已删除目录：\(bookmark.displayName)")
+    }
+
+    func moveDirectoryBookmark(bookmarkID: String, visibleBookmarkIDs: [String], offset: Int) {
+        guard
+            let sourceVisibleIndex = visibleBookmarkIDs.firstIndex(of: bookmarkID)
+        else {
+            return
+        }
+
+        let targetVisibleIndex = sourceVisibleIndex + offset
+        guard visibleBookmarkIDs.indices.contains(targetVisibleIndex) else {
+            return
+        }
+
+        let targetID = visibleBookmarkIDs[targetVisibleIndex]
+        guard
+            let sourceIndex = bookmarks.bookmarks.firstIndex(where: { $0.id == bookmarkID }),
+            let targetIndex = bookmarks.bookmarks.firstIndex(where: { $0.id == targetID })
+        else {
+            return
+        }
+
+        bookmarks.bookmarks.swapAt(sourceIndex, targetIndex)
+        reorderDirectoryIDReferences()
+        normalizeDirectoryActionOrder()
+        saveDirectoryChanges("目录顺序已更新")
     }
 
     func isDirectoryBookmarkEnabled(_ bookmarkID: String) -> Bool {
@@ -452,6 +547,22 @@ final class SettingsViewModel: ObservableObject {
         for (index, template) in config.fileTemplates.enumerated() {
             guard let actionIndex = config.actions.firstIndex(where: {
                 $0.kind == .createFile && $0.payload.templateID == template.id
+            }) else {
+                continue
+            }
+            config.actions[actionIndex].order = baseOrder + index * 10
+        }
+    }
+
+    private func normalizeDeveloperActionOrder() {
+        let baseOrder = config.actions
+            .filter { $0.kind == .openInApp }
+            .map(\.order)
+            .min() ?? nextActionOrder
+
+        for (index, entrypoint) in config.developerEntrypoints.enumerated() {
+            guard let actionIndex = config.actions.firstIndex(where: {
+                $0.kind == .openInApp && $0.payload.developerEntrypointID == entrypoint.id
             }) else {
                 continue
             }
@@ -565,6 +676,35 @@ final class SettingsViewModel: ObservableObject {
                 )
             )
             order += 10
+        }
+    }
+
+    private func reorderDirectoryIDReferences() {
+        let orderedIDs = bookmarks.bookmarks.map(\.id)
+        config.commonDirectoryIDs = orderedIDs.filter { config.commonDirectoryIDs.contains($0) }
+        config.monitoredDirectoryIDs = orderedIDs.filter { config.monitoredDirectoryIDs.contains($0) }
+    }
+
+    private func normalizeDirectoryActionOrder() {
+        let baseOrder = config.actions
+            .filter { directoryActionKinds.contains($0.kind) }
+            .map(\.order)
+            .min() ?? nextActionOrder
+        let specs: [(kind: ActionKind, offset: Int)] = [
+            (.openDirectory, 0),
+            (.moveToDirectory, 10),
+            (.copyToDirectory, 20)
+        ]
+
+        for (bookmarkIndex, bookmark) in bookmarks.bookmarks.enumerated() {
+            for spec in specs {
+                guard let actionIndex = config.actions.firstIndex(where: {
+                    $0.kind == spec.kind && $0.payload.directoryID == bookmark.id
+                }) else {
+                    continue
+                }
+                config.actions[actionIndex].order = baseOrder + bookmarkIndex * 30 + spec.offset
+            }
         }
     }
 
@@ -1024,7 +1164,7 @@ struct SidebarHintCard: View {
                 Text("小提示")
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(SettingsTheme.ink)
-                Text("拖拽调整顺序，启用/禁用快速定制你的右键菜单。")
+                Text("使用排序箭头调整顺序，启用/禁用快速定制你的右键菜单。")
                     .font(.system(size: 11))
                     .foregroundStyle(SettingsTheme.muted)
                     .lineLimit(3)
@@ -1733,7 +1873,7 @@ struct OverviewHintBanner: View {
                 .font(.system(size: 14, weight: .semibold))
                 .foregroundStyle(SettingsTheme.accent)
 
-            Text("所有功能均可在右键菜单中使用，支持拖动排序与自定义设置。")
+            Text("所有功能均可在右键菜单中使用，支持箭头排序与自定义设置。")
                 .font(.system(size: 12))
                 .foregroundStyle(SettingsTheme.muted)
                 .lineLimit(1)
@@ -1940,6 +2080,7 @@ struct DirectoryListView: View {
 
     var body: some View {
         let rows = filteredBookmarks
+        let visibleBookmarkIDs = rows.map(\.id)
 
         DirectoryPageScroll {
             SearchField(placeholder: "搜索目录名称或路径", text: $searchText)
@@ -1952,8 +2093,16 @@ struct DirectoryListView: View {
                         DirectoryTableRow(
                             bookmark: bookmark,
                             isEnabled: viewModel.isDirectoryBookmarkEnabled(bookmark.id),
+                            canMoveUp: index > 0,
+                            canMoveDown: index < rows.count - 1,
                             onToggle: { isEnabled in
                                 viewModel.setDirectoryBookmarkEnabled(isEnabled, bookmarkID: bookmark.id)
+                            },
+                            onMoveUp: {
+                                viewModel.moveDirectoryBookmark(bookmarkID: bookmark.id, visibleBookmarkIDs: visibleBookmarkIDs, offset: -1)
+                            },
+                            onMoveDown: {
+                                viewModel.moveDirectoryBookmark(bookmarkID: bookmark.id, visibleBookmarkIDs: visibleBookmarkIDs, offset: 1)
                             },
                             onEdit: {
                                 viewModel.replaceDirectoryBookmarkFromPanel(bookmarkID: bookmark.id)
@@ -2076,22 +2225,32 @@ struct DirectoryTableHeader: View {
 struct DirectoryTableRow: View {
     let bookmark: DirectoryBookmark
     let isEnabled: Bool
+    let canMoveUp: Bool
+    let canMoveDown: Bool
     let onToggle: (Bool) -> Void
+    let onMoveUp: () -> Void
+    let onMoveDown: () -> Void
     let onEdit: () -> Void
     let onDelete: () -> Void
 
     var body: some View {
         HStack(spacing: 16) {
-            Image(systemName: "grip.vertical")
-                .font(.system(size: 14, weight: .medium))
-                .foregroundStyle(SettingsTheme.muted.opacity(0.7))
-                .frame(width: 58, alignment: .center)
+            SortStepControls(
+                canMoveUp: canMoveUp,
+                canMoveDown: canMoveDown,
+                onMoveUp: onMoveUp,
+                onMoveDown: onMoveDown
+            )
+            .frame(width: 58, alignment: .center)
 
             HStack(spacing: 12) {
-                Image(systemName: iconName)
-                    .font(.system(size: 20, weight: .regular))
-                    .foregroundStyle(tint)
-                    .frame(width: 28)
+                MenuIconView(
+                    icon: .filePath(bookmark.path),
+                    tint: tint,
+                    size: 24,
+                    font: .system(size: 20, weight: .regular)
+                )
+                .frame(width: 28)
                 Text(bookmark.displayName)
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundStyle(SettingsTheme.ink)
@@ -2139,16 +2298,6 @@ struct DirectoryTableRow: View {
         }
         .padding(.horizontal, 18)
         .frame(height: 46)
-    }
-
-    private var iconName: String {
-        let lowercased = bookmark.path.lowercased()
-        if lowercased.contains("download") { return "arrow.down.to.line.compact" }
-        if lowercased.contains("desktop") { return "display" }
-        if lowercased.contains("document") { return "doc.text" }
-        if lowercased.contains("picture") { return "photo" }
-        if lowercased.contains("server") || lowercased.contains("smb://") { return "server.rack" }
-        return "folder"
     }
 
     private var tint: Color {
@@ -2355,6 +2504,7 @@ struct ActionListView: View {
                                 sections: sections,
                                 allActions: actions,
                                 showsGroupSeparators: showsGroupSeparators,
+                                allowsCustomOrdering: sortingMode == .custom,
                                 selectedFilter: $selectedFilter,
                                 counts: actionCounts,
                                 viewModel: viewModel
@@ -2374,7 +2524,7 @@ struct ActionListView: View {
                         if metrics.previewWidth > 0 {
                             ActionMenuPreviewCard(
                                 selectedContext: $previewContext,
-                                actions: actions,
+                                actions: rows,
                                 config: viewModel.config,
                                 bookmarks: viewModel.bookmarks
                             )
@@ -2385,7 +2535,7 @@ struct ActionListView: View {
                     if metrics.previewWidth == 0 {
                         ActionMenuPreviewCard(
                             selectedContext: $previewContext,
-                            actions: actions,
+                            actions: rows,
                             config: viewModel.config,
                             bookmarks: viewModel.bookmarks
                         )
@@ -2414,6 +2564,7 @@ struct ActionManagementTable: View {
     let sections: [ActionGroupSection]
     let allActions: [RightToolAction]
     let showsGroupSeparators: Bool
+    let allowsCustomOrdering: Bool
     @Binding var selectedFilter: ActionManagementFilter
     let counts: [ActionManagementFilter: Int]
     @ObservedObject var viewModel: SettingsViewModel
@@ -2435,6 +2586,8 @@ struct ActionManagementTable: View {
     }
 
     var body: some View {
+        let visibleActionIDs = rows.map(\.id)
+
         DesignPanel(padding: 0) {
             VStack(spacing: 0) {
                 ActionFilterTabs(
@@ -2461,7 +2614,20 @@ struct ActionManagementTable: View {
                             }
 
                             ForEach(Array(section.rows.enumerated()), id: \.element.id) { rowIndex, action in
-                                ActionEditorRow(action: action, viewModel: viewModel)
+                                let orderIndex = visibleActionIDs.firstIndex(of: action.id) ?? 0
+                                ActionEditorRow(
+                                    action: action,
+                                    viewModel: viewModel,
+                                    canMoveUp: allowsCustomOrdering && orderIndex > 0,
+                                    canMoveDown: allowsCustomOrdering && orderIndex < visibleActionIDs.count - 1,
+                                    orderingHelp: allowsCustomOrdering ? nil : "切换到自定义排序后可调整顺序",
+                                    onMoveUp: {
+                                        viewModel.moveAction(actionID: action.id, visibleActionIDs: visibleActionIDs, offset: -1)
+                                    },
+                                    onMoveDown: {
+                                        viewModel.moveAction(actionID: action.id, visibleActionIDs: visibleActionIDs, offset: 1)
+                                    }
+                                )
                                 if rowIndex < section.rows.count - 1 {
                                     Divider()
                                         .padding(.leading, 26)
@@ -2479,7 +2645,7 @@ struct ActionManagementTable: View {
                 Divider()
 
                 HStack(spacing: 10) {
-                    Label("添加分隔线", systemImage: "plus")
+                    Label("自定义排序下可用箭头调整菜单顺序", systemImage: "arrow.up.arrow.down")
                         .foregroundStyle(SettingsTheme.accent)
 
                     Spacer()
@@ -2518,6 +2684,36 @@ struct ActionGroupHeader: View {
     }
 }
 
+struct SortStepControls: View {
+    let canMoveUp: Bool
+    let canMoveDown: Bool
+    var disabledHelp: String? = nil
+    let onMoveUp: () -> Void
+    let onMoveDown: () -> Void
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Button(action: onMoveUp) {
+                Image(systemName: "arrow.up")
+                    .frame(width: 22, height: 24)
+            }
+            .buttonStyle(.plain)
+            .disabled(!canMoveUp)
+            .help(canMoveUp ? "上移" : (disabledHelp ?? "已经在最前"))
+
+            Button(action: onMoveDown) {
+                Image(systemName: "arrow.down")
+                    .frame(width: 22, height: 24)
+            }
+            .buttonStyle(.plain)
+            .disabled(!canMoveDown)
+            .help(canMoveDown ? "下移" : (disabledHelp ?? "已经在最后"))
+        }
+        .font(.system(size: 12, weight: .semibold))
+        .foregroundStyle(SettingsTheme.muted)
+    }
+}
+
 struct ActionFilterTabs: View {
     @Binding var selectedFilter: ActionManagementFilter
     let counts: [ActionManagementFilter: Int]
@@ -2551,7 +2747,7 @@ struct ActionFilterTabs: View {
 struct ActionTableHeader: View {
     var body: some View {
         HStack(spacing: 12) {
-            Text("").frame(width: 20)
+            Text("排序").frame(width: 54, alignment: .center)
             Text("菜单项").frame(maxWidth: .infinity, alignment: .leading)
             Text("状态").frame(width: 56, alignment: .center)
             Text("适用范围").frame(width: 130, alignment: .leading)
@@ -2569,13 +2765,22 @@ struct ActionTableHeader: View {
 struct ActionEditorRow: View {
     let action: RightToolAction
     @ObservedObject var viewModel: SettingsViewModel
+    let canMoveUp: Bool
+    let canMoveDown: Bool
+    let orderingHelp: String?
+    let onMoveUp: () -> Void
+    let onMoveDown: () -> Void
 
     var body: some View {
         HStack(spacing: 12) {
-            Image(systemName: "circle.grid.2x3.fill")
-                .font(.system(size: 10, weight: .medium))
-                .foregroundStyle(SettingsTheme.muted.opacity(0.58))
-                .frame(width: 20)
+            SortStepControls(
+                canMoveUp: canMoveUp,
+                canMoveDown: canMoveDown,
+                disabledHelp: orderingHelp,
+                onMoveUp: onMoveUp,
+                onMoveDown: onMoveDown
+            )
+            .frame(width: 54)
 
             HStack(spacing: 12) {
                 MenuIconView(
@@ -2610,7 +2815,7 @@ struct ActionEditorRow: View {
             .scaleEffect(0.86)
             .frame(width: 56)
 
-            FlowPillGroup(items: action.visibilityPills)
+            ActionVisibilityMenu(action: action, viewModel: viewModel)
                 .frame(width: 130, alignment: .leading)
 
             ActionTypeBadge(action: action)
@@ -2676,6 +2881,35 @@ struct FlowPillGroup: View {
     }
 }
 
+struct ActionVisibilityMenu: View {
+    let action: RightToolAction
+    @ObservedObject var viewModel: SettingsViewModel
+
+    var body: some View {
+        Menu {
+            ForEach(ActionVisibility.allCases, id: \.self) { visibility in
+                Button {
+                    viewModel.toggleActionVisibility(visibility, actionID: action.id)
+                } label: {
+                    Label(visibility.displayName, systemImage: action.visibility.contains(visibility) ? "checkmark" : "rectangle")
+                }
+            }
+        } label: {
+            HStack(spacing: 6) {
+                FlowPillGroup(items: action.visibilityPills)
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 9, weight: .bold))
+                    .foregroundStyle(SettingsTheme.muted)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .menuStyle(.button)
+        .buttonStyle(.plain)
+        .help("调整 \(action.title) 的显示位置")
+    }
+}
+
 struct ActionTypeBadge: View {
     let action: RightToolAction
 
@@ -2732,10 +2966,7 @@ struct ActionManagementRuleGrid: View {
                     .frame(height: 34)
                     .background(Color.black.opacity(0.035), in: RoundedRectangle(cornerRadius: 7))
 
-                    HStack(spacing: 8) {
-                        ActionGhostButton(title: "导入模板", systemImage: "square.and.arrow.down")
-                        ActionGhostButton(title: "导出模板", systemImage: "square.and.arrow.up")
-                    }
+                    ActionInfoChip(title: "模板顺序会同步到新建文件菜单", systemImage: "arrow.up.arrow.down")
                 }
             }
 
@@ -2757,16 +2988,7 @@ struct ActionManagementRuleGrid: View {
                     .frame(height: 34)
                     .background(Color.black.opacity(0.035), in: RoundedRectangle(cornerRadius: 7))
 
-                    HStack(spacing: 10) {
-                        Text("隐藏系统默认菜单项")
-                            .font(.system(size: 12))
-                            .foregroundStyle(SettingsTheme.muted)
-                        Spacer()
-                        Toggle("", isOn: .constant(false))
-                            .toggleStyle(.switch)
-                            .labelsHidden()
-                            .allowsHitTesting(false)
-                    }
+                    ActionInfoChip(title: "点击表格中的适用范围标签可调整显示位置", systemImage: "eye")
                 }
             }
         }
@@ -2863,7 +3085,7 @@ struct ActionSortingMenu: View {
     }
 }
 
-struct ActionGhostButton: View {
+struct ActionInfoChip: View {
     let title: String
     let systemImage: String
 
@@ -2873,7 +3095,7 @@ struct ActionGhostButton: View {
             .foregroundStyle(SettingsTheme.muted)
             .frame(maxWidth: .infinity)
             .frame(height: 30)
-            .background(.white, in: RoundedRectangle(cornerRadius: 7))
+            .background(Color.black.opacity(0.035), in: RoundedRectangle(cornerRadius: 7))
             .overlay(RoundedRectangle(cornerRadius: 7).stroke(SettingsTheme.hairline))
     }
 }
@@ -2884,7 +3106,7 @@ struct ActionManagementHintBar: View {
             Image(systemName: "info.circle.fill")
                 .font(.system(size: 16, weight: .semibold))
                 .foregroundStyle(SettingsTheme.accent)
-            Text("提示：拖拽左侧")
+            Text("提示：使用左侧箭头")
                 .font(.system(size: 12))
                 .foregroundStyle(SettingsTheme.muted)
             Image(systemName: "circle.grid.2x3.fill")
@@ -3228,22 +3450,12 @@ struct TemplateTableRow: View {
             .disabled(matchingAction == nil)
             .frame(width: 84)
 
-            HStack(spacing: 20) {
-                Button(action: onMoveUp) {
-                    Image(systemName: "arrow.up")
-                        .frame(width: 24, height: 24)
-                }
-                .buttonStyle(.plain)
-                .disabled(!canMoveUp)
-
-                Button(action: onMoveDown) {
-                    Image(systemName: "arrow.down")
-                        .frame(width: 24, height: 24)
-                }
-                .buttonStyle(.plain)
-                .disabled(!canMoveDown)
-            }
-            .foregroundStyle(SettingsTheme.muted)
+            SortStepControls(
+                canMoveUp: canMoveUp,
+                canMoveDown: canMoveDown,
+                onMoveUp: onMoveUp,
+                onMoveDown: onMoveDown
+            )
             .frame(width: 120)
 
             Menu {
@@ -3401,6 +3613,7 @@ struct DeveloperEntrypointListView: View {
 
     var body: some View {
         let rows = filteredEntrypoints
+        let visibleEntrypointIDs = rows.map(\.id)
 
         DesignPageScroll {
             HStack(alignment: .top, spacing: 20) {
@@ -3415,9 +3628,21 @@ struct DeveloperEntrypointListView: View {
                                 EmptyStateRow(title: "暂无匹配的开发者入口", systemImage: "terminal")
                             } else {
                                 ForEach(Array(rows.enumerated()), id: \.element.id) { index, entrypoint in
-                                    DeveloperTableRow(entrypoint: entrypoint, viewModel: viewModel) {
-                                        editingDraft = DeveloperEntrypointDraft(entrypoint: entrypoint)
-                                    }
+                                    DeveloperTableRow(
+                                        entrypoint: entrypoint,
+                                        viewModel: viewModel,
+                                        canMoveUp: index > 0,
+                                        canMoveDown: index < rows.count - 1,
+                                        onMoveUp: {
+                                            viewModel.moveDeveloperEntrypoint(entrypoint, visibleEntrypointIDs: visibleEntrypointIDs, offset: -1)
+                                        },
+                                        onMoveDown: {
+                                            viewModel.moveDeveloperEntrypoint(entrypoint, visibleEntrypointIDs: visibleEntrypointIDs, offset: 1)
+                                        },
+                                        onEdit: {
+                                            editingDraft = DeveloperEntrypointDraft(entrypoint: entrypoint)
+                                        }
+                                    )
                                     if index < rows.count - 1 {
                                         Divider()
                                     }
@@ -3544,7 +3769,8 @@ struct DeveloperFilterTabs: View {
 struct DeveloperTableHeader: View {
     var body: some View {
         HStack(spacing: 10) {
-            Text("名称").frame(width: 144, alignment: .leading)
+            Text("排序").frame(width: 56, alignment: .center)
+            Text("名称").frame(width: 136, alignment: .leading)
             Text("目标路径 / 地址").frame(maxWidth: .infinity, alignment: .leading)
             Text("快捷键").frame(width: 64, alignment: .leading)
             Text("启用").frame(width: 60, alignment: .center)
@@ -3561,6 +3787,10 @@ struct DeveloperTableHeader: View {
 struct DeveloperTableRow: View {
     let entrypoint: DeveloperEntrypoint
     @ObservedObject var viewModel: SettingsViewModel
+    let canMoveUp: Bool
+    let canMoveDown: Bool
+    let onMoveUp: () -> Void
+    let onMoveDown: () -> Void
     let onEdit: () -> Void
 
     private var matchingAction: RightToolAction? {
@@ -3571,6 +3801,14 @@ struct DeveloperTableRow: View {
 
     var body: some View {
         HStack(spacing: 10) {
+            SortStepControls(
+                canMoveUp: canMoveUp,
+                canMoveDown: canMoveDown,
+                onMoveUp: onMoveUp,
+                onMoveDown: onMoveDown
+            )
+            .frame(width: 56)
+
             Button(action: onEdit) {
                 HStack(spacing: 10) {
                     DeveloperEntryIcon(entrypoint: entrypoint)
@@ -3582,7 +3820,7 @@ struct DeveloperTableRow: View {
                 }
             }
             .buttonStyle(.plain)
-            .frame(width: 144, alignment: .leading)
+            .frame(width: 136, alignment: .leading)
 
             Text(developerEntryTargetPath(for: entrypoint))
                 .font(.system(size: 12))

@@ -165,6 +165,8 @@ Button("保存配置") {
 - Read-only visual affordances such as disabled toggles or static edit icons are acceptable only when they reflect current model state.
 - Rule controls that visually look clickable, such as menu rows or toggles in settings cards, must have backing state and update the visible table or preview they describe.
 - Settings menu rows must render `MenuIconDescriptor` through `MenuIconView`; application actions use installed app icons, templates use file type icons, directories use path/folder icons, and unsupported cases fall back to semantic SF Symbols.
+- Sorting controls must call `SettingsViewModel` commands that update `RightToolAction.order`, `fileTemplates`, `developerEntrypoints`, or bookmark order as appropriate; sorting UI must update the table and the Finder preview in the same interaction.
+- Display-condition controls must mutate `RightToolAction.visibility` through `SettingsViewModel` and must prevent leaving an action with no visible invocation.
 
 #### 4. Validation & Error Matrix
 
@@ -173,6 +175,8 @@ Button("保存配置") {
 - Table displays an edit/delete control with no backing command -> either wire it to a ViewModel command or render it as static/read-only.
 - A grouping/sorting card renders chevrons or switches but does not change the action table -> wire it to local state and the table's filtered/sorted data pipeline.
 - Developer, template, or directory rows hard-code SF Symbols instead of using `MenuIconResolver` / `MenuIconView` -> icons drift from the real Finder menu and app icons disappear.
+- Table shows a drag handle or arrow controls but does not update persisted ordering -> bug; wire it to an explicit move command and normalize associated action orders.
+- Visibility pills are rendered as inert labels -> bug when the surface claims display-condition editing; expose a menu or remove the edit affordance.
 
 #### 5. Good/Base/Bad Cases
 
@@ -199,6 +203,22 @@ Correct:
 config.developerEntrypoints.map {
     FinderMenuItem(title: $0.title, icon: .appBundleIdentifier($0.bundleIdentifier))
 }
+```
+
+Wrong:
+```swift
+Image(systemName: "grip.vertical")
+```
+for a sortable row with no move or drag handler.
+
+Correct:
+```swift
+SortStepControls(
+    canMoveUp: index > 0,
+    canMoveDown: index < rows.count - 1,
+    onMoveUp: { viewModel.moveAction(actionID: action.id, visibleActionIDs: visibleIDs, offset: -1) },
+    onMoveDown: { viewModel.moveAction(actionID: action.id, visibleActionIDs: visibleIDs, offset: 1) }
+)
 ```
 
 ### Scenario: SwiftUI App Icon and Settings Brand Icon
