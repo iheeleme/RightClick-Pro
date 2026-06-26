@@ -2225,10 +2225,38 @@ enum ActionPreviewContext: String, CaseIterable, Identifiable {
     }
 }
 
+enum ActionGroupingMode: String, CaseIterable, Identifiable {
+    case type = "按类型分组"
+    case placement = "按菜单层级"
+    case visibility = "按适用范围"
+    case status = "按启用状态"
+    case none = "不分组"
+
+    var id: String { rawValue }
+}
+
+enum ActionSortingMode: String, CaseIterable, Identifiable {
+    case custom = "自定义排序"
+    case name = "按名称排序"
+    case type = "按类型排序"
+    case status = "启用优先"
+
+    var id: String { rawValue }
+}
+
+struct ActionGroupSection: Identifiable {
+    let id: String
+    let title: String
+    var rows: [RightToolAction]
+}
+
 struct ActionListView: View {
     @ObservedObject var viewModel: SettingsViewModel
     @State private var selectedFilter: ActionManagementFilter = .all
     @State private var previewContext: ActionPreviewContext = .fileFolder
+    @State private var groupingMode: ActionGroupingMode = .type
+    @State private var sortingMode: ActionSortingMode = .custom
+    @State private var showsGroupSeparators = true
 
     private var sortedActions: [RightToolAction] {
         viewModel.config.actions.sorted(by: { $0.order < $1.order })
@@ -2254,9 +2282,73 @@ struct ActionListView: View {
         }
     }
 
+    private func arrangedActions(from actions: [RightToolAction]) -> [RightToolAction] {
+        let rows = filteredActions(from: actions)
+
+        switch sortingMode {
+        case .custom:
+            return rows.sorted { $0.order < $1.order }
+        case .name:
+            return rows.sorted {
+                let comparison = $0.title.localizedStandardCompare($1.title)
+                return comparison == .orderedSame ? $0.order < $1.order : comparison == .orderedAscending
+            }
+        case .type:
+            return rows.sorted {
+                let comparison = $0.managementType.localizedStandardCompare($1.managementType)
+                return comparison == .orderedSame ? $0.order < $1.order : comparison == .orderedAscending
+            }
+        case .status:
+            return rows.sorted {
+                if $0.isEnabled != $1.isEnabled {
+                    return $0.isEnabled && !$1.isEnabled
+                }
+                return $0.order < $1.order
+            }
+        }
+    }
+
+    private func actionSections(from rows: [RightToolAction]) -> [ActionGroupSection] {
+        guard groupingMode != .none else {
+            return [ActionGroupSection(id: "all", title: "全部菜单项", rows: rows)]
+        }
+
+        var sections: [ActionGroupSection] = []
+        var sectionIndexes: [String: Int] = [:]
+
+        for action in rows {
+            let title = groupTitle(for: action)
+            if let index = sectionIndexes[title] {
+                sections[index].rows.append(action)
+            } else {
+                sectionIndexes[title] = sections.count
+                sections.append(ActionGroupSection(id: "\(groupingMode.id)-\(title)", title: title, rows: [action]))
+            }
+        }
+
+        return sections
+    }
+
+    private func groupTitle(for action: RightToolAction) -> String {
+        switch groupingMode {
+        case .type:
+            return action.managementType
+        case .placement:
+            return action.placement.displayName
+        case .visibility:
+            let displayName = action.visibility.displayName
+            return displayName.isEmpty ? "未设置" : displayName
+        case .status:
+            return action.isEnabled ? "已启用" : "已禁用"
+        case .none:
+            return "全部菜单项"
+        }
+    }
+
     var body: some View {
         let actions = sortedActions
-        let rows = filteredActions(from: actions)
+        let rows = arrangedActions(from: actions)
+        let sections = actionSections(from: rows)
 
         GeometryReader { proxy in
             let metrics = layoutMetrics(for: proxy.size.width)
@@ -2266,14 +2358,20 @@ struct ActionListView: View {
                     HStack(alignment: .top, spacing: metrics.previewWidth > 0 ? 18 : 0) {
                         VStack(alignment: .leading, spacing: 14) {
                             ActionManagementTable(
-                                rows: rows,
+                                sections: sections,
                                 allActions: actions,
+                                showsGroupSeparators: showsGroupSeparators,
                                 selectedFilter: $selectedFilter,
                                 counts: actionCounts,
                                 viewModel: viewModel
                             )
 
-                            ActionManagementRuleGrid(viewModel: viewModel)
+                            ActionManagementRuleGrid(
+                                viewModel: viewModel,
+                                groupingMode: $groupingMode,
+                                sortingMode: $sortingMode,
+                                showsGroupSeparators: $showsGroupSeparators
+                            )
 
                             ActionManagementHintBar()
                         }
@@ -2315,8 +2413,9 @@ struct ActionListView: View {
 }
 
 struct ActionManagementTable: View {
-    let rows: [RightToolAction]
+    let sections: [ActionGroupSection]
     let allActions: [RightToolAction]
+    let showsGroupSeparators: Bool
     @Binding var selectedFilter: ActionManagementFilter
     let counts: [ActionManagementFilter: Int]
     @ObservedObject var viewModel: SettingsViewModel
@@ -2327,6 +2426,14 @@ struct ActionManagementTable: View {
 
     private var disabledCount: Int {
         allActions.filter { !$0.isEnabled }.count
+    }
+
+    private var rows: [RightToolAction] {
+        sections.flatMap(\.rows)
+    }
+
+    private var shouldShowGroupHeaders: Bool {
+        showsGroupSeparators && sections.count > 1
     }
 
     var body: some View {
@@ -2348,11 +2455,24 @@ struct ActionManagementTable: View {
                     )
                 } else {
                     LazyVStack(spacing: 0) {
-                        ForEach(Array(rows.enumerated()), id: \.element.id) { index, action in
-                            ActionEditorRow(action: action, viewModel: viewModel)
-                            if index < rows.count - 1 {
+                        ForEach(Array(sections.enumerated()), id: \.element.id) { sectionIndex, section in
+                            if shouldShowGroupHeaders {
+                                ActionGroupHeader(title: section.title, count: section.rows.count)
                                 Divider()
-                                    .padding(.leading, 26)
+                                    .padding(.leading, 18)
+                            }
+
+                            ForEach(Array(section.rows.enumerated()), id: \.element.id) { rowIndex, action in
+                                ActionEditorRow(action: action, viewModel: viewModel)
+                                if rowIndex < section.rows.count - 1 {
+                                    Divider()
+                                        .padding(.leading, 26)
+                                }
+                            }
+
+                            if sectionIndex < sections.count - 1 {
+                                Divider()
+                                    .padding(.leading, shouldShowGroupHeaders ? 0 : 26)
                             }
                         }
                     }
@@ -2374,6 +2494,29 @@ struct ActionManagementTable: View {
                 .frame(height: 42)
             }
         }
+    }
+}
+
+struct ActionGroupHeader: View {
+    let title: String
+    let count: Int
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Text(title)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(SettingsTheme.ink)
+            Text("\(count)")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(SettingsTheme.accent)
+                .padding(.horizontal, 7)
+                .frame(height: 20)
+                .background(SettingsTheme.accent.opacity(0.1), in: Capsule())
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 18)
+        .frame(height: 34)
+        .background(SettingsTheme.accent.opacity(0.04))
     }
 }
 
@@ -2547,23 +2690,25 @@ struct ActionTypeBadge: View {
 
 struct ActionManagementRuleGrid: View {
     @ObservedObject var viewModel: SettingsViewModel
+    @Binding var groupingMode: ActionGroupingMode
+    @Binding var sortingMode: ActionSortingMode
+    @Binding var showsGroupSeparators: Bool
 
     var body: some View {
         HStack(alignment: .top, spacing: 14) {
             ActionRuleCard(title: "分组与排序规则", subtitle: nil) {
                 VStack(alignment: .leading, spacing: 10) {
-                    ActionRuleLine(title: "分组方式", value: "按类型分组", systemImage: "chevron.down")
-                    ActionRuleLine(title: "排序方式", value: "自定义排序", systemImage: "chevron.down")
+                    ActionGroupingMenu(selection: $groupingMode)
+                    ActionSortingMenu(selection: $sortingMode)
 
                     HStack(spacing: 10) {
                         Text("按分隔线分组显示")
                             .font(.system(size: 12))
                             .foregroundStyle(SettingsTheme.muted)
                         Spacer()
-                        Toggle("", isOn: .constant(true))
+                        Toggle("", isOn: $showsGroupSeparators)
                             .toggleStyle(.switch)
                             .labelsHidden()
-                            .allowsHitTesting(false)
                     }
                 }
             }
@@ -2652,10 +2797,10 @@ struct ActionRuleCard<Content: View>: View {
     }
 }
 
-struct ActionRuleLine: View {
+struct ActionRuleMenuButton<MenuContent: View>: View {
     let title: String
     let value: String
-    let systemImage: String
+    @ViewBuilder var menuContent: MenuContent
 
     var body: some View {
         HStack(spacing: 10) {
@@ -2663,18 +2808,56 @@ struct ActionRuleLine: View {
                 .font(.system(size: 12))
                 .foregroundStyle(SettingsTheme.muted)
             Spacer()
-            HStack(spacing: 8) {
-                Text(value)
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(SettingsTheme.ink)
-                Image(systemName: systemImage)
-                    .font(.system(size: 10, weight: .bold))
-                    .foregroundStyle(SettingsTheme.muted)
+            Menu {
+                menuContent
+            } label: {
+                HStack(spacing: 8) {
+                    Text(value)
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(SettingsTheme.ink)
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(SettingsTheme.muted)
+                }
+                .padding(.horizontal, 10)
+                .frame(height: 30)
+                .background(.white, in: RoundedRectangle(cornerRadius: 7))
+                .overlay(RoundedRectangle(cornerRadius: 7).stroke(SettingsTheme.hairline))
             }
-            .padding(.horizontal, 10)
-            .frame(height: 30)
-            .background(.white, in: RoundedRectangle(cornerRadius: 7))
-            .overlay(RoundedRectangle(cornerRadius: 7).stroke(SettingsTheme.hairline))
+            .menuStyle(.button)
+            .buttonStyle(.plain)
+        }
+    }
+}
+
+struct ActionGroupingMenu: View {
+    @Binding var selection: ActionGroupingMode
+
+    var body: some View {
+        ActionRuleMenuButton(title: "分组方式", value: selection.rawValue) {
+            ForEach(ActionGroupingMode.allCases) { mode in
+                Button {
+                    selection = mode
+                } label: {
+                    Label(mode.rawValue, systemImage: selection == mode ? "checkmark" : "rectangle")
+                }
+            }
+        }
+    }
+}
+
+struct ActionSortingMenu: View {
+    @Binding var selection: ActionSortingMode
+
+    var body: some View {
+        ActionRuleMenuButton(title: "排序方式", value: selection.rawValue) {
+            ForEach(ActionSortingMode.allCases) { mode in
+                Button {
+                    selection = mode
+                } label: {
+                    Label(mode.rawValue, systemImage: selection == mode ? "checkmark" : "rectangle")
+                }
+            }
         }
     }
 }

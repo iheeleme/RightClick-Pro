@@ -163,12 +163,14 @@ Button("保存配置") {
 - Menu previews must be derived from `RightToolConfig`, `DirectoryBookmarkCatalog`, `FileTemplate`, `DeveloperEntrypoint`, or `OperationRecord` values.
 - Do not make a preview imply that an edit/add/delete operation is available unless there is a matching `SettingsViewModel` command.
 - Read-only visual affordances such as disabled toggles or static edit icons are acceptable only when they reflect current model state.
+- Rule controls that visually look clickable, such as menu rows or toggles in settings cards, must have backing state and update the visible table or preview they describe.
 
 #### 4. Validation & Error Matrix
 
 - Preview shows an action as enabled but `RightToolAction.isEnabled == false` -> bug; derive enabled state from the action.
 - Toggle changes a template/developer entrypoint but bypasses `setActionEnabled` or upsert/delete commands -> persistence contract violation.
 - Table displays an edit/delete control with no backing command -> either wire it to a ViewModel command or render it as static/read-only.
+- A grouping/sorting card renders chevrons or switches but does not change the action table -> wire it to local state and the table's filtered/sorted data pipeline.
 
 #### 5. Good/Base/Bad Cases
 
