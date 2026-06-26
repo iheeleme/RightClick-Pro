@@ -221,6 +221,101 @@ SortStepControls(
 )
 ```
 
+### Scenario: SwiftUI Settings Sheets and Icon Controls
+
+#### 1. Scope / Trigger
+
+- Trigger: changing add/edit sheets, row action buttons, sort controls, overflow menus, or other icon-only controls in `Sources/RightToolAppPreview/RightToolAppPreview.swift`.
+- This is a frontend interaction contract because icon-only controls can otherwise look clickable while lacking hover, disabled, help, or accessibility feedback.
+
+#### 2. Signatures
+
+- Reuse these local presentation components for settings editing sheets and icon controls:
+  ```swift
+  EditorSheetHeader(title:subtitle:systemImage:tint:)
+  EditorTextField(title:placeholder:helper:systemImage:text:)
+  EditorTextArea(title:helper:text:)
+  EditorSheetFooter(validationMessage:canSave:onCancel:onSave:)
+  RowIconControlLabel(systemImage:tone:isDisabled:size:iconSize:cornerRadius:)
+  RowIconButton(systemImage:accessibilityLabel:helpText:tone:isDisabled:action:)
+  ```
+
+#### 3. Contracts
+
+- Add/edit sheets must show a semantic header icon, short subtitle, grouped input fields, and a persistent footer with cancel/save actions.
+- Sheet save buttons must be disabled when required draft fields are empty; the footer must show the current validation message.
+- Sheet save actions still call the existing `SettingsViewModel` upsert/delete/toggle commands through their parent view; sheets must not write config files directly.
+- Icon-only buttons must use `RowIconControlLabel` or `RowIconButton` so hover, disabled, border, and help states stay consistent.
+- If a control opens a menu, the label should still use `RowIconControlLabel`, and menu items should use `Label` with semantic SF Symbols.
+- Destructive or hiding actions must use a destructive tone and a semantic icon such as `trash` or `eye.slash`; do not use `trash` for non-delete behavior.
+
+#### 4. Validation & Error Matrix
+
+- Required sheet draft field is empty -> keep Save disabled and show an inline footer warning.
+- Icon-only button lacks `.help` or `.accessibilityLabel` -> accessibility regression.
+- Disabled icon control still renders with active hover/accent state -> misleading affordance.
+- Menu label uses a plain `Image` while row buttons use `RowIconControlLabel` -> inconsistent interaction feedback.
+- A button icon implies delete but only disables/hides an item -> semantic mismatch.
+
+#### 5. Good/Base/Bad Cases
+
+- Good: a template editor sheet disables Save until ID, title, and default filename are present.
+- Base: an overflow menu uses `RowIconControlLabel(systemImage: "ellipsis")` and `Label("删除", systemImage: "trash")` for destructive items.
+- Bad: a sheet allows saving an empty title and relies only on later config validation.
+- Bad: an action row uses a bare pencil image for a placement menu, making it look like a direct edit button.
+
+#### 6. Tests Required
+
+- Run:
+  ```bash
+  git diff --check
+  scripts/package-macos.sh debug
+  scripts/ci-swift-check.sh debug
+  ```
+- Manually smoke-test opening add/edit sheets, empty-field Save disabled states, cancel/default keyboard shortcuts, icon-button hover states, disabled states, and overflow menus.
+
+#### 7. Wrong vs Correct
+
+Wrong:
+```swift
+Button {
+    viewModel.setActionEnabled(false, actionID: action.id)
+} label: {
+    Image(systemName: "trash")
+}
+```
+
+Correct:
+```swift
+RowIconButton(
+    systemImage: "eye.slash",
+    accessibilityLabel: "禁用 \(action.title)",
+    helpText: "从右键菜单中隐藏",
+    tone: .destructive,
+    isDisabled: !action.isEnabled
+) {
+    viewModel.setActionEnabled(false, actionID: action.id)
+}
+```
+
+Wrong:
+```swift
+Button("保存") {
+    onSave(draft)
+}
+```
+
+Correct:
+```swift
+EditorSheetFooter(
+    validationMessage: validationMessage,
+    canSave: validationMessage == nil,
+    onCancel: onCancel
+) {
+    onSave(draft)
+}
+```
+
 ### Scenario: SwiftUI App Icon and Settings Brand Icon
 
 #### 1. Scope / Trigger

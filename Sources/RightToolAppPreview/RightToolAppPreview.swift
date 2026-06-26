@@ -1704,6 +1704,114 @@ struct IconBadge: View {
     }
 }
 
+enum RowIconControlTone {
+    case neutral
+    case accent
+    case destructive
+
+    var foreground: Color {
+        switch self {
+        case .neutral:
+            return SettingsTheme.muted
+        case .accent:
+            return SettingsTheme.accent
+        case .destructive:
+            return .red
+        }
+    }
+
+    var hoverBackground: Color {
+        switch self {
+        case .neutral:
+            return SettingsTheme.accent.opacity(0.08)
+        case .accent:
+            return SettingsTheme.accent.opacity(0.12)
+        case .destructive:
+            return Color.red.opacity(0.1)
+        }
+    }
+
+    var hoverStroke: Color {
+        switch self {
+        case .neutral:
+            return SettingsTheme.accent.opacity(0.18)
+        case .accent:
+            return SettingsTheme.accent.opacity(0.24)
+        case .destructive:
+            return Color.red.opacity(0.22)
+        }
+    }
+}
+
+struct RowIconControlLabel: View {
+    let systemImage: String
+    var tone: RowIconControlTone = .neutral
+    var isDisabled = false
+    var size: CGFloat = 28
+    var iconSize: CGFloat = 13
+    var cornerRadius: CGFloat = 7
+    @State private var isHovered = false
+
+    var body: some View {
+        Image(systemName: systemImage)
+            .font(.system(size: iconSize, weight: .semibold))
+            .foregroundStyle(foreground)
+            .frame(width: size, height: size)
+            .background(background, in: RoundedRectangle(cornerRadius: cornerRadius))
+            .overlay(
+                RoundedRectangle(cornerRadius: cornerRadius)
+                    .stroke(stroke)
+            )
+            .contentShape(RoundedRectangle(cornerRadius: cornerRadius))
+            .onHover { hovering in
+                guard !isDisabled else { return }
+                isHovered = hovering
+            }
+            .animation(.easeOut(duration: 0.12), value: isHovered)
+    }
+
+    private var foreground: Color {
+        isDisabled ? SettingsTheme.muted.opacity(0.36) : tone.foreground
+    }
+
+    private var background: Color {
+        if isDisabled {
+            return Color.black.opacity(0.02)
+        }
+        return isHovered ? tone.hoverBackground : Color.white.opacity(0.62)
+    }
+
+    private var stroke: Color {
+        if isDisabled {
+            return SettingsTheme.hairline.opacity(0.65)
+        }
+        return isHovered ? tone.hoverStroke : SettingsTheme.hairline
+    }
+}
+
+struct RowIconButton: View {
+    let systemImage: String
+    let accessibilityLabel: String
+    var helpText: String? = nil
+    var tone: RowIconControlTone = .neutral
+    var isDisabled = false
+    var action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            RowIconControlLabel(
+                systemImage: systemImage,
+                tone: tone,
+                isDisabled: isDisabled
+            )
+        }
+        .buttonStyle(.plain)
+        .disabled(isDisabled)
+        .help(helpText ?? accessibilityLabel)
+        .accessibilityLabel(accessibilityLabel)
+    }
+}
+
 struct OnboardingView: View {
     @ObservedObject var viewModel: SettingsViewModel
 
@@ -2277,23 +2385,24 @@ struct DirectoryTableRow: View {
                 .labelsHidden()
                 .frame(width: 90)
 
-            HStack(spacing: 16) {
-                Button(action: onEdit) {
-                    Image(systemName: "pencil")
-                        .frame(width: 24, height: 24)
+            HStack(spacing: 10) {
+                RowIconButton(
+                    systemImage: "pencil",
+                    accessibilityLabel: "编辑 \(bookmark.displayName)",
+                    helpText: "编辑目录"
+                ) {
+                    onEdit()
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel("编辑 \(bookmark.displayName)")
 
-                Button(role: .destructive, action: onDelete) {
-                    Image(systemName: "trash")
-                        .frame(width: 24, height: 24)
+                RowIconButton(
+                    systemImage: "trash",
+                    accessibilityLabel: "删除 \(bookmark.displayName)",
+                    helpText: "删除目录",
+                    tone: .destructive
+                ) {
+                    onDelete()
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel("删除 \(bookmark.displayName)")
             }
-            .font(.system(size: 14, weight: .medium))
-            .foregroundStyle(SettingsTheme.muted)
             .frame(width: 104)
         }
         .padding(.horizontal, 18)
@@ -2694,23 +2803,33 @@ struct SortStepControls: View {
     var body: some View {
         HStack(spacing: 4) {
             Button(action: onMoveUp) {
-                Image(systemName: "arrow.up")
-                    .frame(width: 22, height: 24)
+                RowIconControlLabel(
+                    systemImage: "chevron.up",
+                    isDisabled: !canMoveUp,
+                    size: 24,
+                    iconSize: 10,
+                    cornerRadius: 6
+                )
             }
             .buttonStyle(.plain)
             .disabled(!canMoveUp)
             .help(canMoveUp ? "上移" : (disabledHelp ?? "已经在最前"))
+            .accessibilityLabel("上移")
 
             Button(action: onMoveDown) {
-                Image(systemName: "arrow.down")
-                    .frame(width: 22, height: 24)
+                RowIconControlLabel(
+                    systemImage: "chevron.down",
+                    isDisabled: !canMoveDown,
+                    size: 24,
+                    iconSize: 10,
+                    cornerRadius: 6
+                )
             }
             .buttonStyle(.plain)
             .disabled(!canMoveDown)
             .help(canMoveDown ? "下移" : (disabledHelp ?? "已经在最后"))
+            .accessibilityLabel("下移")
         }
-        .font(.system(size: 12, weight: .semibold))
-        .foregroundStyle(SettingsTheme.muted)
     }
 }
 
@@ -2752,7 +2871,7 @@ struct ActionTableHeader: View {
             Text("状态").frame(width: 56, alignment: .center)
             Text("适用范围").frame(width: 130, alignment: .leading)
             Text("类型").frame(width: 58, alignment: .leading)
-            Text("操作").frame(width: 60, alignment: .center)
+            Text("操作").frame(width: 76, alignment: .center)
         }
         .font(.system(size: 12, weight: .medium))
         .foregroundStyle(SettingsTheme.muted)
@@ -2821,41 +2940,42 @@ struct ActionEditorRow: View {
             ActionTypeBadge(action: action)
                 .frame(width: 58, alignment: .leading)
 
-            HStack(spacing: 12) {
+            HStack(spacing: 8) {
                 Menu {
                     Button {
                         viewModel.setActionPlacement(.submenu, actionID: action.id)
                     } label: {
-                        Label("放入 RightTool 子菜单", systemImage: action.placement == .submenu ? "checkmark" : "rectangle")
+                        Label("放入 RightTool 子菜单", systemImage: action.placement == .submenu ? "checkmark.circle.fill" : "rectangle")
                     }
 
                     Button {
                         viewModel.setActionPlacement(.rootMenu, actionID: action.id)
                     } label: {
-                        Label("显示在 Finder 一级菜单", systemImage: action.placement == .rootMenu ? "checkmark" : "menubar.rectangle")
+                        Label("显示在 Finder 一级菜单", systemImage: action.placement == .rootMenu ? "checkmark.circle.fill" : "menubar.rectangle")
                     }
                 } label: {
-                    Image(systemName: "pencil")
-                        .frame(width: 20, height: 20)
+                    RowIconControlLabel(
+                        systemImage: "rectangle.on.rectangle",
+                        isDisabled: !action.isEnabled
+                    )
                 }
                 .menuStyle(.button)
                 .buttonStyle(.plain)
                 .disabled(!action.isEnabled)
+                .help("调整菜单层级")
                 .accessibilityLabel("调整 \(action.title) 的菜单层级")
 
-                Button {
+                RowIconButton(
+                    systemImage: "eye.slash",
+                    accessibilityLabel: "禁用 \(action.title)",
+                    helpText: "从右键菜单中隐藏",
+                    tone: .destructive,
+                    isDisabled: !action.isEnabled
+                ) {
                     viewModel.setActionEnabled(false, actionID: action.id)
-                } label: {
-                    Image(systemName: "trash")
-                        .frame(width: 20, height: 20)
                 }
-                .buttonStyle(.plain)
-                .disabled(!action.isEnabled)
-                .accessibilityLabel("禁用 \(action.title)")
             }
-            .font(.system(size: 15, weight: .medium))
-            .foregroundStyle(SettingsTheme.muted)
-            .frame(width: 60, alignment: .center)
+            .frame(width: 76, alignment: .center)
         }
         .padding(.horizontal, 18)
         .frame(height: 56)
@@ -2884,6 +3004,7 @@ struct FlowPillGroup: View {
 struct ActionVisibilityMenu: View {
     let action: RightToolAction
     @ObservedObject var viewModel: SettingsViewModel
+    @State private var isHovered = false
 
     var body: some View {
         Menu {
@@ -2902,7 +3023,20 @@ struct ActionVisibilityMenu: View {
                     .font(.system(size: 9, weight: .bold))
                     .foregroundStyle(SettingsTheme.muted)
             }
+            .padding(.horizontal, 7)
+            .frame(height: 28)
             .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                isHovered ? SettingsTheme.accent.opacity(0.07) : Color.white.opacity(0.52),
+                in: RoundedRectangle(cornerRadius: 7)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 7)
+                    .stroke(isHovered ? SettingsTheme.accent.opacity(0.18) : SettingsTheme.hairline)
+            )
+            .contentShape(RoundedRectangle(cornerRadius: 7))
+            .onHover { isHovered = $0 }
+            .animation(.easeOut(duration: 0.12), value: isHovered)
         }
         .menuStyle(.button)
         .buttonStyle(.plain)
@@ -3458,17 +3592,32 @@ struct TemplateTableRow: View {
             )
             .frame(width: 120)
 
-            Menu {
-                Button("编辑", action: onEdit)
-                Button("删除", role: .destructive) {
-                    viewModel.deleteTemplate(template)
+            HStack(spacing: 8) {
+                RowIconButton(
+                    systemImage: "pencil",
+                    accessibilityLabel: "编辑 \(templateDisplayTitle)",
+                    helpText: "编辑模板"
+                ) {
+                    onEdit()
                 }
-            } label: {
-                Image(systemName: "ellipsis")
-                    .font(.title3)
-                    .frame(width: 32, height: 32)
+
+                Menu {
+                    Button(action: onEdit) {
+                        Label("编辑", systemImage: "pencil")
+                    }
+                    Button(role: .destructive) {
+                        viewModel.deleteTemplate(template)
+                    } label: {
+                        Label("删除", systemImage: "trash")
+                    }
+                } label: {
+                    RowIconControlLabel(systemImage: "ellipsis")
+                }
+                .buttonStyle(.plain)
+                .menuStyle(.borderlessButton)
+                .help("更多操作")
+                .accessibilityLabel("更多模板操作")
             }
-            .menuStyle(.borderlessButton)
             .frame(width: 72)
         }
         .padding(.horizontal, 18)
@@ -3849,32 +3998,31 @@ struct DeveloperTableRow: View {
             .frame(width: 60)
 
             HStack(spacing: 8) {
-                Button(action: onEdit) {
-                    Image(systemName: "pencil")
-                        .font(.system(size: 13, weight: .medium))
-                        .frame(width: 28, height: 28)
-                        .background(.white.opacity(0.7), in: RoundedRectangle(cornerRadius: 7))
-                        .overlay(RoundedRectangle(cornerRadius: 7).stroke(SettingsTheme.hairline))
+                RowIconButton(
+                    systemImage: "pencil",
+                    accessibilityLabel: "编辑 \(entrypoint.title)",
+                    helpText: "编辑入口"
+                ) {
+                    onEdit()
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel("编辑 \(entrypoint.title)")
 
                 Menu {
-                    Button("编辑", action: onEdit)
-                    Button("删除", role: .destructive) {
+                    Button(action: onEdit) {
+                        Label("编辑", systemImage: "pencil")
+                    }
+                    Button(role: .destructive) {
                         viewModel.deleteDeveloperEntrypoint(entrypoint)
+                    } label: {
+                        Label("删除", systemImage: "trash")
                     }
                 } label: {
-                    Image(systemName: "ellipsis")
-                        .font(.system(size: 14, weight: .semibold))
-                        .frame(width: 28, height: 28)
-                        .background(.white.opacity(0.7), in: RoundedRectangle(cornerRadius: 7))
-                        .overlay(RoundedRectangle(cornerRadius: 7).stroke(SettingsTheme.hairline))
+                    RowIconControlLabel(systemImage: "ellipsis")
                 }
                 .buttonStyle(.plain)
                 .menuStyle(.borderlessButton)
+                .help("更多操作")
+                .accessibilityLabel("更多开发者入口操作")
             }
-            .foregroundStyle(SettingsTheme.ink)
             .frame(width: 76)
         }
         .padding(.horizontal, 12)
@@ -4511,6 +4659,148 @@ struct FinderMenuRow: View {
     }
 }
 
+struct EditorSheetHeader: View {
+    let title: String
+    let subtitle: String
+    let systemImage: String
+    var tint: Color = SettingsTheme.accent
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 14) {
+            Image(systemName: systemImage)
+                .font(.system(size: 20, weight: .semibold))
+                .foregroundStyle(tint)
+                .frame(width: 42, height: 42)
+                .background(tint.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
+                .overlay(RoundedRectangle(cornerRadius: 8).stroke(tint.opacity(0.16)))
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .font(.system(size: 20, weight: .bold))
+                    .foregroundStyle(SettingsTheme.ink)
+                    .lineLimit(1)
+                Text(subtitle)
+                    .font(.system(size: 13))
+                    .foregroundStyle(SettingsTheme.muted)
+                    .lineLimit(2)
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 22)
+        .padding(.vertical, 18)
+        .background(.white.opacity(0.82))
+    }
+}
+
+struct EditorTextField: View {
+    let title: String
+    let placeholder: String
+    var helper: String? = nil
+    var systemImage: String? = nil
+    @Binding var text: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            Text(title)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(SettingsTheme.ink)
+
+            HStack(spacing: 9) {
+                if let systemImage {
+                    Image(systemName: systemImage)
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(SettingsTheme.muted)
+                        .frame(width: 16)
+                }
+
+                TextField(placeholder, text: $text)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 13))
+                    .lineLimit(1)
+            }
+            .padding(.horizontal, 11)
+            .frame(height: 36)
+            .background(.white, in: RoundedRectangle(cornerRadius: 8))
+            .overlay(RoundedRectangle(cornerRadius: 8).stroke(SettingsTheme.hairline))
+
+            if let helper {
+                Text(helper)
+                    .font(.system(size: 11))
+                    .foregroundStyle(SettingsTheme.muted)
+                    .lineLimit(2)
+            }
+        }
+    }
+}
+
+struct EditorTextArea: View {
+    let title: String
+    let helper: String
+    @Binding var text: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text(title)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(SettingsTheme.ink)
+                Text(helper)
+                    .font(.system(size: 11))
+                    .foregroundStyle(SettingsTheme.muted)
+            }
+
+            TextEditor(text: $text)
+                .font(.body.monospaced())
+                .scrollContentBackground(.hidden)
+                .padding(8)
+                .frame(minHeight: 176)
+                .background(.white, in: RoundedRectangle(cornerRadius: 8))
+                .overlay(RoundedRectangle(cornerRadius: 8).stroke(SettingsTheme.hairline))
+        }
+    }
+}
+
+struct EditorSheetFooter: View {
+    let validationMessage: String?
+    let canSave: Bool
+    let onCancel: () -> Void
+    let onSave: () -> Void
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Label(
+                validationMessage ?? "保存后需点击主界面的保存配置才会写入本地配置",
+                systemImage: validationMessage == nil ? "info.circle" : "exclamationmark.circle"
+            )
+            .font(.system(size: 12))
+            .foregroundStyle(validationMessage == nil ? SettingsTheme.muted : .orange)
+            .lineLimit(2)
+            .fixedSize(horizontal: false, vertical: true)
+
+            Spacer(minLength: 12)
+
+            Button("取消", role: .cancel) {
+                onCancel()
+            }
+            .keyboardShortcut(.cancelAction)
+
+            Button {
+                onSave()
+            } label: {
+                Label("保存", systemImage: "checkmark")
+                    .frame(minWidth: 64)
+            }
+            .buttonStyle(.borderedProminent)
+            .keyboardShortcut(.defaultAction)
+            .disabled(!canSave)
+        }
+        .padding(.horizontal, 22)
+        .padding(.vertical, 14)
+        .background(.white.opacity(0.86))
+    }
+}
+
 struct TemplateDraft: Identifiable {
     let id = UUID()
     var originalID: String?
@@ -4558,40 +4848,80 @@ struct TemplateEditorSheet: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text(draft.originalID == nil ? "新增模板" : "编辑模板")
-                .font(.title2.bold())
+        VStack(spacing: 0) {
+            EditorSheetHeader(
+                title: draft.originalID == nil ? "新增模板" : "编辑模板",
+                subtitle: "配置 Finder 右键菜单中的新建文件入口。",
+                systemImage: "doc.badge.plus"
+            )
 
-            Form {
-                TextField("模板 ID", text: $draft.templateID)
-                TextField("模板名称", text: $draft.title)
-                TextField("默认文件名", text: $draft.defaultFileName)
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("文本内容")
-                    TextEditor(text: $draft.contents)
-                        .font(.body.monospaced())
-                        .frame(minHeight: 180)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 6)
-                                .stroke(.quaternary)
-                        )
+            Divider()
+
+            VStack(alignment: .leading, spacing: 16) {
+                HStack(alignment: .top, spacing: 14) {
+                    EditorTextField(
+                        title: "模板 ID",
+                        placeholder: "template-custom",
+                        helper: "用于关联菜单动作，建议保持英文短横线命名。",
+                        systemImage: "number",
+                        text: $draft.templateID
+                    )
+
+                    EditorTextField(
+                        title: "模板名称",
+                        placeholder: "Markdown 文件",
+                        helper: "显示在设置页和右键菜单中的名称。",
+                        systemImage: "textformat",
+                        text: $draft.title
+                    )
                 }
+
+                EditorTextField(
+                    title: "默认文件名",
+                    placeholder: "Untitled.md",
+                    helper: "扩展名会影响菜单图标与新建文件类型。",
+                    systemImage: "doc",
+                    text: $draft.defaultFileName
+                )
+
+                EditorTextArea(
+                    title: "文本内容",
+                    helper: "支持空内容；保存后作为新建文件的初始内容。",
+                    text: $draft.contents
+                )
             }
+            .padding(22)
 
-            HStack {
-                Spacer()
-                Button("取消") {
-                    onCancel()
-                }
-                Button("保存") {
-                    onSave(draft)
-                }
-                .keyboardShortcut(.defaultAction)
+            Divider()
+
+            EditorSheetFooter(
+                validationMessage: validationMessage,
+                canSave: canSave,
+                onCancel: onCancel
+            ) {
+                onSave(draft)
             }
         }
-        .padding(24)
-        .frame(width: 520)
-        .frame(minHeight: 430)
+        .background(SettingsTheme.windowBackground)
+        .frame(width: 560)
+        .frame(minHeight: 520)
+    }
+
+    private var canSave: Bool {
+        validationMessage == nil
+    }
+
+    private var validationMessage: String? {
+        if draft.templateID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return "请填写模板 ID"
+        }
+        if draft.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return "请填写模板名称"
+        }
+        if draft.defaultFileName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return "请填写默认文件名"
+        }
+        return nil
     }
 }
 
@@ -4646,36 +4976,92 @@ struct DeveloperEntrypointEditorSheet: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text(draft.originalID == nil ? "新增开发者入口" : "编辑开发者入口")
-                .font(.title2.bold())
+        VStack(spacing: 0) {
+            EditorSheetHeader(
+                title: draft.originalID == nil ? "新增开发者入口" : "编辑开发者入口",
+                subtitle: "添加常用开发工具，Finder 右键菜单会优先显示真实应用图标。",
+                systemImage: "terminal"
+            )
 
-            Form {
-                TextField("入口 ID", text: $draft.entrypointID)
-                TextField("显示名称", text: $draft.title)
-                TextField("Bundle Identifier", text: $draft.bundleIdentifier)
-                Picker("目标模式", selection: $draft.targetMode) {
-                    ForEach(DeveloperTargetMode.allCasesForSettings, id: \.self) { mode in
-                        Text(mode.displayName).tag(mode)
+            Divider()
+
+            VStack(alignment: .leading, spacing: 16) {
+                HStack(alignment: .top, spacing: 14) {
+                    EditorTextField(
+                        title: "入口 ID",
+                        placeholder: "developer-custom",
+                        helper: "用于关联动作，保存后会同步到菜单项。",
+                        systemImage: "number",
+                        text: $draft.entrypointID
+                    )
+
+                    EditorTextField(
+                        title: "显示名称",
+                        placeholder: "Visual Studio Code",
+                        helper: "显示在右键菜单和预览列表中。",
+                        systemImage: "textformat",
+                        text: $draft.title
+                    )
+                }
+
+                EditorTextField(
+                    title: "Bundle Identifier",
+                    placeholder: "com.microsoft.VSCode",
+                    helper: "用于定位应用并显示对应 app 图标。",
+                    systemImage: "app",
+                    text: $draft.bundleIdentifier
+                )
+
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("目标模式")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(SettingsTheme.ink)
+
+                    Picker("目标模式", selection: $draft.targetMode) {
+                        ForEach(DeveloperTargetMode.allCasesForSettings, id: \.self) { mode in
+                            Text(mode.displayName).tag(mode)
+                        }
                     }
-                }
-                .pickerStyle(.radioGroup)
-            }
+                    .pickerStyle(.radioGroup)
+                    .labelsHidden()
 
-            HStack {
-                Spacer()
-                Button("取消") {
-                    onCancel()
+                    Text("决定动作触发时把当前目录、选中文件或仓库路径传给目标应用。")
+                        .font(.system(size: 11))
+                        .foregroundStyle(SettingsTheme.muted)
                 }
-                Button("保存") {
-                    onSave(draft)
-                }
-                .keyboardShortcut(.defaultAction)
+            }
+            .padding(22)
+
+            Divider()
+
+            EditorSheetFooter(
+                validationMessage: validationMessage,
+                canSave: canSave,
+                onCancel: onCancel
+            ) {
+                onSave(draft)
             }
         }
-        .padding(24)
-        .frame(width: 480)
-        .frame(minHeight: 300)
+        .background(SettingsTheme.windowBackground)
+        .frame(width: 560)
+        .frame(minHeight: 430)
+    }
+
+    private var canSave: Bool {
+        validationMessage == nil
+    }
+
+    private var validationMessage: String? {
+        if draft.entrypointID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return "请填写入口 ID"
+        }
+        if draft.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return "请填写显示名称"
+        }
+        if draft.bundleIdentifier.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return "请填写 Bundle Identifier"
+        }
+        return nil
     }
 }
 
