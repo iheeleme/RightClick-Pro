@@ -484,14 +484,24 @@ struct MenuBarContentView: View {
 
 struct SettingsRootView: View {
     @ObservedObject var viewModel: SettingsViewModel
+    @State private var visualSelection: SettingsViewModel.Section = .onboarding
+    @State private var renderedSection: SettingsViewModel.Section = .onboarding
+    @State private var selectionRevision = 0
 
     var body: some View {
         HStack(spacing: 0) {
-            SettingsSidebar(viewModel: viewModel)
+            SettingsSidebar(
+                selectedSection: visualSelection,
+                badges: sidebarBadges,
+                enabledActionCount: viewModel.enabledActionCount,
+                rootMenuActionCount: viewModel.rootMenuActionCount,
+                maxRootMenuActions: viewModel.config.maxRootMenuActions,
+                onSelect: selectSection
+            )
                 .frame(width: 280)
 
-            SettingsDetailShell(viewModel: viewModel) {
-                switch viewModel.selectedSection {
+            SettingsDetailShell(section: renderedSection, viewModel: viewModel) {
+                switch renderedSection {
                 case .onboarding:
                     OnboardingView(viewModel: viewModel)
                 case .directories:
@@ -509,6 +519,45 @@ struct SettingsRootView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .background(SettingsTheme.windowBackground)
+        .transaction { transaction in
+            transaction.animation = nil
+        }
+        .onAppear {
+            visualSelection = viewModel.selectedSection
+            renderedSection = viewModel.selectedSection
+        }
+        .onReceive(viewModel.$selectedSection) { section in
+            guard section != renderedSection else { return }
+            visualSelection = section
+            renderedSection = section
+        }
+    }
+
+    private var sidebarBadges: [SettingsViewModel.Section: String] {
+        Dictionary(
+            uniqueKeysWithValues: SettingsViewModel.Section.allCases.compactMap { section in
+                viewModel.sectionBadge(for: section).map { (section, $0) }
+            }
+        )
+    }
+
+    private func selectSection(_ section: SettingsViewModel.Section) {
+        guard visualSelection != section || renderedSection != section else {
+            return
+        }
+
+        visualSelection = section
+        selectionRevision += 1
+        let revision = selectionRevision
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.035) {
+            guard selectionRevision == revision, visualSelection == section else {
+                return
+            }
+
+            renderedSection = section
+            viewModel.selectedSection = section
+        }
     }
 }
 
@@ -544,7 +593,12 @@ private enum SettingsTheme {
 }
 
 struct SettingsSidebar: View {
-    @ObservedObject var viewModel: SettingsViewModel
+    let selectedSection: SettingsViewModel.Section
+    let badges: [SettingsViewModel.Section: String]
+    let enabledActionCount: Int
+    let rootMenuActionCount: Int
+    let maxRootMenuActions: Int
+    let onSelect: (SettingsViewModel.Section) -> Void
 
     private let sections: [SettingsViewModel.Section] = [
         .onboarding,
@@ -583,10 +637,10 @@ struct SettingsSidebar: View {
                 ForEach(sections) { section in
                     SidebarNavigationRow(
                         section: section,
-                        badge: viewModel.sectionBadge(for: section),
-                        isSelected: viewModel.selectedSection == section
+                        badge: badges[section],
+                        isSelected: selectedSection == section
                     ) {
-                        viewModel.selectedSection = section
+                        onSelect(section)
                     }
                 }
             }
@@ -594,8 +648,8 @@ struct SettingsSidebar: View {
             Spacer(minLength: 16)
 
             VStack(alignment: .leading, spacing: 8) {
-                Label("\(viewModel.enabledActionCount) 个动作启用", systemImage: "checkmark.circle")
-                Label("\(viewModel.rootMenuActionCount)/\(viewModel.config.maxRootMenuActions) 个一级菜单", systemImage: "menubar.rectangle")
+                Label("\(enabledActionCount) 个动作启用", systemImage: "checkmark.circle")
+                Label("\(rootMenuActionCount)/\(maxRootMenuActions) 个一级菜单", systemImage: "menubar.rectangle")
             }
             .font(.caption)
             .foregroundStyle(SettingsTheme.muted)
@@ -671,6 +725,7 @@ struct SidebarNavigationRow: View {
 }
 
 struct SettingsDetailShell<Content: View>: View {
+    let section: SettingsViewModel.Section
     @ObservedObject var viewModel: SettingsViewModel
     @ViewBuilder var content: Content
 
@@ -707,12 +762,12 @@ struct SettingsDetailShell<Content: View>: View {
 
     private var titleBlock: some View {
         VStack(alignment: .leading, spacing: 4) {
-                    Text(viewModel.selectedSection.rawValue)
+                    Text(section.rawValue)
                         .font(.system(size: 28, weight: .bold))
                         .foregroundStyle(SettingsTheme.ink)
                         .lineLimit(1)
                         .minimumScaleFactor(0.86)
-                    Text(viewModel.selectedSection.subtitle)
+                    Text(section.subtitle)
                         .font(.system(size: 15))
                         .foregroundStyle(SettingsTheme.muted)
                         .lineLimit(2)

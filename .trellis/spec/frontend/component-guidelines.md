@@ -226,7 +226,7 @@ VStack {
 
 **Cause**: Using a default SwiftUI `Button` for navigation rows in a dense macOS settings sidebar can defer the action until mouseUp.
 
-**Fix**: For custom sidebar navigation in `RightToolAppPreview.swift`, use a full-row hit target and select on mouseDown with `DragGesture(minimumDistance: 0)`. Keep accessibility traits so the row is still announced as a button.
+**Fix**: For custom sidebar navigation in `RightToolAppPreview.swift`, use a full-row hit target and select on mouseDown with `DragGesture(minimumDistance: 0)`. Keep accessibility traits so the row is still announced as a button. If the detail view is heavy, split selection into `visualSelection` for immediate sidebar highlight and `renderedSection` for the delayed detail rebuild.
 
 Wrong:
 ```swift
@@ -245,4 +245,13 @@ SidebarRowContent()
             .onChanged { _ in onSelect() }
     )
     .accessibilityAddTraits(.isButton)
+```
+
+For heavy detail views:
+```swift
+visualSelection = section
+DispatchQueue.main.asyncAfter(deadline: .now() + 0.035) {
+    renderedSection = section
+    viewModel.selectedSection = section
+}
 ```
