@@ -36,7 +36,7 @@ final class SettingsViewModel: ObservableObject {
             case .actions:
                 return "右键菜单管理"
             case .directories:
-                return "常用目录"
+                return "常用目录快捷直达"
             case .developer:
                 return "开发者入口"
             case .history:
@@ -522,7 +522,7 @@ struct SettingsRootView: View {
                 case .onboarding:
                     OnboardingView(viewModel: viewModel)
                 case .directories:
-                    DirectoryListView(bookmarks: viewModel.bookmarks.bookmarks, storagePath: viewModel.storagePath)
+                    DirectoryListView(bookmarks: viewModel.bookmarks.bookmarks)
                 case .actions:
                     ActionListView(viewModel: viewModel)
                 case .templates:
@@ -756,11 +756,11 @@ struct SettingsDetailShell<Content: View>: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 28)
-            .padding(.top, section == .onboarding ? 22 : 28)
+            .padding(.top, section == .directories ? 20 : (section == .onboarding ? 22 : 28))
             .padding(.bottom, section == .onboarding ? 8 : 16)
             .background(.white.opacity(0.72))
 
-            if section != .onboarding {
+            if section != .onboarding && section != .directories {
                 Rectangle()
                     .fill(SettingsTheme.hairline)
                     .frame(height: 1)
@@ -774,7 +774,7 @@ struct SettingsDetailShell<Content: View>: View {
     private var titleBlock: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(section.rawValue)
-                .font(.system(size: section == .onboarding ? 22 : 28, weight: .bold))
+                .font(.system(size: titleSize, weight: .bold))
                 .foregroundStyle(SettingsTheme.ink)
                 .lineLimit(1)
                 .minimumScaleFactor(0.86)
@@ -801,15 +801,39 @@ struct SettingsDetailShell<Content: View>: View {
 
     private var headerActions: some View {
         HStack(spacing: 12) {
-            StatusBadge(
-                message: viewModel.statusMessage,
-                tone: viewModel.statusTone,
-                isDirty: viewModel.hasUnsavedChanges
-            )
+            if section == .directories {
+                DirectoryHeaderAddButton()
+            } else {
+                StatusBadge(
+                    message: viewModel.statusMessage,
+                    tone: viewModel.statusTone,
+                    isDirty: viewModel.hasUnsavedChanges
+                )
 
-            SaveConfigButton(viewModel: viewModel)
+                SaveConfigButton(viewModel: viewModel)
+            }
         }
         .frame(alignment: .trailing)
+    }
+
+    private var titleSize: CGFloat {
+        switch section {
+        case .onboarding, .directories:
+            return 22
+        default:
+            return 28
+        }
+    }
+}
+
+struct DirectoryHeaderAddButton: View {
+    var body: some View {
+        Label("添加目录", systemImage: "plus.circle")
+            .font(.system(size: 14, weight: .semibold))
+            .foregroundStyle(.white)
+            .padding(.horizontal, 16)
+            .frame(height: 38)
+            .background(SettingsTheme.accent, in: RoundedRectangle(cornerRadius: 8))
     }
 }
 
@@ -894,6 +918,24 @@ struct OverviewPageScroll<Content: View>: View {
             .frame(maxWidth: .infinity, alignment: .topLeading)
         }
         .scrollIndicators(.hidden)
+        .background(.white.opacity(0.34))
+    }
+}
+
+struct DirectoryPageScroll<Content: View>: View {
+    @ViewBuilder var content: Content
+
+    var body: some View {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 16) {
+                content
+            }
+            .padding(.horizontal, 28)
+            .padding(.top, 4)
+            .padding(.bottom, 24)
+            .frame(maxWidth: 1040, alignment: .leading)
+            .frame(maxWidth: .infinity, alignment: .topLeading)
+        }
         .background(.white.opacity(0.34))
     }
 }
@@ -1375,7 +1417,6 @@ struct OverviewMetric: View {
 
 struct DirectoryListView: View {
     let bookmarks: [DirectoryBookmark]
-    let storagePath: String
     @State private var searchText = ""
 
     private var filteredBookmarks: [DirectoryBookmark] {
@@ -1395,14 +1436,9 @@ struct DirectoryListView: View {
     var body: some View {
         let rows = filteredBookmarks
 
-        DesignPageScroll {
-            PageToolbar {
-                SearchField(placeholder: "搜索目录名称或路径", text: $searchText)
-            } trailing: {
-                Text("共 \(bookmarks.count) 个目录")
-                    .font(.callout)
-                    .foregroundStyle(SettingsTheme.muted)
-            }
+        DirectoryPageScroll {
+            SearchField(placeholder: "搜索目录名称或路径", text: $searchText)
+                .frame(width: 360, alignment: .leading)
 
             DesignPanel(padding: 0) {
                 LazyVStack(spacing: 0) {
@@ -1419,29 +1455,9 @@ struct DirectoryListView: View {
                 }
             }
 
-            PreviewSection(
-                rootItems: [
-                    FinderMenuItem(title: "新建文件夹"),
-                    FinderMenuItem(title: "显示简介"),
-                    FinderMenuItem(title: "常用目录", systemImage: "folder", tint: SettingsTheme.accent, isHighlighted: true, hasSubmenu: true),
-                    FinderMenuItem(title: "快速操作", hasSubmenu: true),
-                    FinderMenuItem(title: "服务", hasSubmenu: true)
-                ],
-                submenuItems: previewItems
-            ) {
-                VStack(alignment: .leading, spacing: 10) {
-                    Text("右键菜单预览")
-                        .font(.headline)
-                        .foregroundStyle(SettingsTheme.ink)
-                    Text("启用的目录会出现在常用目录子菜单中，方便快速访问。")
-                        .font(.callout)
-                        .foregroundStyle(SettingsTheme.muted)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
+            DirectoryMenuPreviewPanel(items: previewItems)
 
-            HintBanner(text: "配置目录：\(storagePath)")
-                .textSelection(.enabled)
+            DirectoryHintBanner()
         }
     }
 
@@ -1463,20 +1479,90 @@ struct DirectoryListView: View {
     }
 }
 
+struct DirectoryMenuPreviewPanel: View {
+    let items: [FinderMenuItem]
+
+    var body: some View {
+        DesignPanel(padding: 0) {
+            HStack(alignment: .center, spacing: 24) {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("右键菜单预览")
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundStyle(SettingsTheme.ink)
+                    Text("在 Finder 中右键时，启用的目录将出现在右键菜单中，方便快速访问。")
+                        .font(.system(size: 13))
+                        .foregroundStyle(SettingsTheme.muted)
+                        .lineSpacing(5)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .frame(width: 220, alignment: .leading)
+
+                Spacer(minLength: 12)
+
+                HStack(alignment: .center, spacing: 22) {
+                    FinderMenuBox(items: rootMenuItems)
+                    FinderMenuBox(items: items)
+                }
+                .frame(maxWidth: .infinity, alignment: .center)
+
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 22)
+            .frame(maxWidth: .infinity, minHeight: 160, alignment: .leading)
+        }
+    }
+
+    private var rootMenuItems: [FinderMenuItem] {
+        [
+            FinderMenuItem(title: "新建文件夹"),
+            FinderMenuItem(title: "显示简介"),
+            FinderMenuItem(title: "常用目录", tint: SettingsTheme.accent, isHighlighted: true, hasSubmenu: true),
+            FinderMenuItem(title: "快速操作", hasSubmenu: true),
+            FinderMenuItem(title: "服务", hasSubmenu: true)
+        ]
+    }
+}
+
+struct DirectoryHintBanner: View {
+    var body: some View {
+        HStack(alignment: .center, spacing: 12) {
+            Image(systemName: "lightbulb")
+                .font(.system(size: 18, weight: .regular))
+                .foregroundStyle(SettingsTheme.accent)
+                .frame(width: 24)
+
+            Text("提示：")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(SettingsTheme.accent)
+
+            Text("将最常用的目录放在前面位置，访问更高效。")
+                .font(.system(size: 13))
+                .foregroundStyle(SettingsTheme.muted)
+                .lineLimit(1)
+
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 16)
+        .frame(maxWidth: .infinity, minHeight: 46)
+        .background(SettingsTheme.accent.opacity(0.055), in: RoundedRectangle(cornerRadius: 8))
+        .overlay(RoundedRectangle(cornerRadius: 8).stroke(SettingsTheme.accent.opacity(0.18)))
+    }
+}
+
 struct DirectoryTableHeader: View {
     var body: some View {
         HStack(spacing: 16) {
-            Text("排序").frame(width: 46, alignment: .leading)
-            Text("名称").frame(width: 230, alignment: .leading)
+            Text("排序").frame(width: 58, alignment: .center)
+            Text("名称").frame(width: 260, alignment: .leading)
             Text("路径").frame(maxWidth: .infinity, alignment: .leading)
-            Text("启用").frame(width: 72, alignment: .center)
-            Text("操作").frame(width: 86, alignment: .center)
+            Text("启用").frame(width: 90, alignment: .center)
+            Text("操作").frame(width: 104, alignment: .center)
         }
-        .font(.caption.weight(.semibold))
-        .foregroundStyle(SettingsTheme.muted)
+        .font(.system(size: 13, weight: .semibold))
+        .foregroundStyle(SettingsTheme.ink)
         .padding(.horizontal, 18)
-        .frame(height: 44)
-        .background(Color.black.opacity(0.015))
+        .frame(height: 38)
+        .background(.white.opacity(0.4))
     }
 }
 
@@ -1486,23 +1572,24 @@ struct DirectoryTableRow: View {
     var body: some View {
         HStack(spacing: 16) {
             Image(systemName: "grip.vertical")
-                .foregroundStyle(SettingsTheme.muted.opacity(0.55))
-                .frame(width: 46, alignment: .leading)
+                .font(.system(size: 14, weight: .medium))
+                .foregroundStyle(SettingsTheme.muted.opacity(0.7))
+                .frame(width: 58, alignment: .center)
 
             HStack(spacing: 12) {
                 Image(systemName: iconName)
-                    .font(.title3)
+                    .font(.system(size: 20, weight: .regular))
                     .foregroundStyle(tint)
-                    .frame(width: 24)
+                    .frame(width: 28)
                 Text(bookmark.displayName)
-                    .font(.callout.weight(.semibold))
+                    .font(.system(size: 14, weight: .semibold))
                     .foregroundStyle(SettingsTheme.ink)
                     .lineLimit(1)
             }
-            .frame(width: 230, alignment: .leading)
+            .frame(width: 260, alignment: .leading)
 
-            Text(bookmark.path)
-                .font(.callout)
+            Text(displayPath)
+                .font(.system(size: 13))
                 .foregroundStyle(SettingsTheme.muted)
                 .lineLimit(1)
                 .truncationMode(.middle)
@@ -1513,18 +1600,18 @@ struct DirectoryTableRow: View {
                 .toggleStyle(.switch)
                 .labelsHidden()
                 .disabled(true)
-                .frame(width: 72)
+                .frame(width: 90)
 
             HStack(spacing: 16) {
                 Image(systemName: "pencil")
                 Image(systemName: "trash")
             }
-            .font(.callout)
+            .font(.system(size: 14, weight: .medium))
             .foregroundStyle(SettingsTheme.muted)
-            .frame(width: 86)
+            .frame(width: 104)
         }
         .padding(.horizontal, 18)
-        .frame(height: 54)
+        .frame(height: 46)
     }
 
     private var iconName: String {
@@ -1542,6 +1629,20 @@ struct DirectoryTableRow: View {
         if lowercased.contains("workspace") || lowercased.contains("project") { return .orange }
         if lowercased.contains("server") || lowercased.contains("smb://") { return SettingsTheme.accent }
         return .blue
+    }
+
+    private var displayPath: String {
+        let homeCandidates = [
+            "/Users/\(NSUserName())",
+            FileManager.default.homeDirectoryForCurrentUser.path
+        ]
+
+        for home in homeCandidates where bookmark.path.hasPrefix(home) {
+            let suffix = bookmark.path.dropFirst(home.count)
+            return "~\(suffix)"
+        }
+
+        return bookmark.path
     }
 }
 
