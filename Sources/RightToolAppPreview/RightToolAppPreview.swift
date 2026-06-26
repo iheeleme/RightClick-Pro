@@ -13,7 +13,7 @@ struct RightToolAppPreview: App {
 
         Window("RightTool 设置", id: "settings") {
             SettingsRootView(viewModel: viewModel)
-                .frame(minWidth: 1120, minHeight: 760)
+                .frame(minWidth: 1180, minHeight: 760)
         }
     }
 }
@@ -488,7 +488,7 @@ struct SettingsRootView: View {
     var body: some View {
         HStack(spacing: 0) {
             SettingsSidebar(viewModel: viewModel)
-                .frame(width: 252)
+                .frame(width: 280)
 
             SettingsDetailShell(viewModel: viewModel) {
                 switch viewModel.selectedSection {
@@ -676,29 +676,24 @@ struct SettingsDetailShell<Content: View>: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack(alignment: .center, spacing: 16) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(viewModel.selectedSection.rawValue)
-                        .font(.system(size: 28, weight: .bold))
-                        .foregroundStyle(SettingsTheme.ink)
-                    Text(viewModel.selectedSection.subtitle)
-                        .font(.system(size: 15))
-                        .foregroundStyle(SettingsTheme.muted)
+            ViewThatFits(in: .horizontal) {
+                HStack(alignment: .center, spacing: 16) {
+                    titleBlock
+                        .layoutPriority(1)
+
+                    Spacer(minLength: 12)
+
+                    headerActions
                 }
 
-                Spacer()
-
-                StatusBadge(
-                    message: viewModel.statusMessage,
-                    tone: viewModel.statusTone,
-                    isDirty: viewModel.hasUnsavedChanges
-                )
-
-                SaveConfigButton(viewModel: viewModel)
+                VStack(alignment: .leading, spacing: 12) {
+                    titleBlock
+                    headerActions
+                }
             }
-            .padding(.horizontal, 34)
-            .padding(.top, 34)
-            .padding(.bottom, 18)
+            .padding(.horizontal, 28)
+            .padding(.top, 28)
+            .padding(.bottom, 16)
             .background(.white.opacity(0.72))
 
             Rectangle()
@@ -708,6 +703,34 @@ struct SettingsDetailShell<Content: View>: View {
             content
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
+    }
+
+    private var titleBlock: some View {
+        VStack(alignment: .leading, spacing: 4) {
+                    Text(viewModel.selectedSection.rawValue)
+                        .font(.system(size: 28, weight: .bold))
+                        .foregroundStyle(SettingsTheme.ink)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.86)
+                    Text(viewModel.selectedSection.subtitle)
+                        .font(.system(size: 15))
+                        .foregroundStyle(SettingsTheme.muted)
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+    }
+
+    private var headerActions: some View {
+        HStack(spacing: 12) {
+            StatusBadge(
+                message: viewModel.statusMessage,
+                tone: viewModel.statusTone,
+                isDirty: viewModel.hasUnsavedChanges
+            )
+
+            SaveConfigButton(viewModel: viewModel)
+        }
+        .frame(maxWidth: .infinity, alignment: .trailing)
     }
 }
 
@@ -768,8 +791,10 @@ struct DesignPageScroll<Content: View>: View {
             VStack(alignment: .leading, spacing: 20) {
                 content
             }
-            .padding(34)
-            .frame(maxWidth: 1060, alignment: .leading)
+            .padding(.horizontal, 28)
+            .padding(.vertical, 24)
+            .frame(maxWidth: 1040, alignment: .leading)
+            .frame(maxWidth: .infinity, alignment: .topLeading)
         }
         .background(.white.opacity(0.34))
     }
@@ -793,7 +818,7 @@ struct HintBanner: View {
     let text: String
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(alignment: .top, spacing: 12) {
             Image(systemName: "lightbulb")
                 .font(.title3)
                 .foregroundStyle(SettingsTheme.accent)
@@ -802,6 +827,7 @@ struct HintBanner: View {
                 .foregroundStyle(SettingsTheme.accent)
             Text(text)
                 .foregroundStyle(SettingsTheme.muted)
+                .fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 0)
         }
         .font(.callout)
@@ -833,9 +859,81 @@ struct SearchField: View {
             }
         }
         .padding(.horizontal, 12)
-        .frame(width: 360, height: 36)
+        .frame(minWidth: 220, maxWidth: 360, minHeight: 36)
         .background(.white, in: RoundedRectangle(cornerRadius: 8))
         .overlay(RoundedRectangle(cornerRadius: 8).stroke(SettingsTheme.hairline))
+    }
+}
+
+struct PageToolbar<Leading: View, Trailing: View>: View {
+    @ViewBuilder var leading: Leading
+    @ViewBuilder var trailing: Trailing
+
+    var body: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .center, spacing: 16) {
+                leading
+                Spacer(minLength: 16)
+                trailing
+            }
+
+            VStack(alignment: .leading, spacing: 12) {
+                leading
+                trailing
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+struct PreviewSection<Intro: View>: View {
+    let rootItems: [FinderMenuItem]
+    let submenuTitle: String?
+    let submenuItems: [FinderMenuItem]
+    @ViewBuilder var intro: Intro
+
+    init(
+        rootItems: [FinderMenuItem],
+        submenuTitle: String? = nil,
+        submenuItems: [FinderMenuItem],
+        @ViewBuilder intro: () -> Intro
+    ) {
+        self.rootItems = rootItems
+        self.submenuTitle = submenuTitle
+        self.submenuItems = submenuItems
+        self.intro = intro()
+    }
+
+    var body: some View {
+        DesignPanel {
+            ViewThatFits(in: .horizontal) {
+                HStack(alignment: .center, spacing: 24) {
+                    intro
+                        .frame(width: 260, alignment: .leading)
+                    FinderMenuPreview(
+                        title: nil,
+                        caption: nil,
+                        rootItems: rootItems,
+                        submenuTitle: submenuTitle,
+                        submenuItems: submenuItems,
+                        isFramed: false
+                    )
+                }
+
+                VStack(alignment: .leading, spacing: 18) {
+                    intro
+                    FinderMenuPreview(
+                        title: nil,
+                        caption: nil,
+                        rootItems: rootItems,
+                        submenuTitle: submenuTitle,
+                        submenuItems: submenuItems,
+                        isFramed: false
+                    )
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
     }
 }
 
@@ -858,8 +956,7 @@ struct OnboardingView: View {
 
     var body: some View {
         DesignPageScroll {
-            HStack(alignment: .top, spacing: 28) {
-                VStack(spacing: 14) {
+            LazyVGrid(columns: overviewColumns, spacing: 14) {
                     OverviewFeatureCard(
                         systemImage: "folder",
                         title: "常用目录快捷直达",
@@ -899,19 +996,22 @@ struct OnboardingView: View {
                     ) {
                         viewModel.selectedSection = .templates
                     }
-                }
-                .frame(minWidth: 470)
+            }
 
-                VStack(alignment: .leading, spacing: 18) {
-                    FinderMenuPreview(
-                        title: "Finder 右键菜单",
-                        caption: "在 Finder 右键菜单中快速访问这些功能",
-                        rootItems: overviewRootMenuItems,
-                        submenuTitle: "RightTool",
-                        submenuItems: overviewSubmenuItems
-                    )
+            PreviewSection(
+                rootItems: overviewRootMenuItems,
+                submenuTitle: "RightTool",
+                submenuItems: overviewSubmenuItems
+            ) {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Finder 右键菜单")
+                        .font(.headline)
+                        .foregroundStyle(SettingsTheme.ink)
+                    Text("在 Finder 右键菜单中快速访问这些功能。")
+                        .font(.callout)
+                        .foregroundStyle(SettingsTheme.muted)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
-                .frame(width: 310)
             }
 
             HintBanner(text: "所有功能均可在右键菜单中使用，支持按需启用与自定义配置。")
@@ -943,6 +1043,10 @@ struct OnboardingView: View {
         } message: {
             Text("这会覆盖当前菜单动作、模板、开发者入口和自动注入目录配置。")
         }
+    }
+
+    private var overviewColumns: [GridItem] {
+        [GridItem(.adaptive(minimum: 260), spacing: 14, alignment: .top)]
     }
 
     private var enabledDeveloperCount: Int {
@@ -992,35 +1096,41 @@ struct OverviewFeatureCard: View {
 
     var body: some View {
         Button(action: onOpen) {
-            HStack(spacing: 18) {
-                IconBadge(systemImage: systemImage)
+            VStack(alignment: .leading, spacing: 14) {
+                HStack(alignment: .top, spacing: 12) {
+                    IconBadge(systemImage: systemImage)
 
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(title)
-                        .font(.title3.weight(.semibold))
-                        .foregroundStyle(SettingsTheme.ink)
-                    Text(detail)
-                        .font(.callout)
-                        .foregroundStyle(SettingsTheme.muted)
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(title)
+                            .font(.headline.weight(.semibold))
+                            .foregroundStyle(SettingsTheme.ink)
+                            .lineLimit(2)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Text(detail)
+                            .font(.callout)
+                            .foregroundStyle(SettingsTheme.muted)
+                            .lineLimit(2)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
 
-                Spacer(minLength: 16)
-
-                Text(meta)
-                    .font(.callout)
-                    .foregroundStyle(SettingsTheme.muted)
-
-                Image(systemName: "chevron.right")
-                    .font(.callout.weight(.semibold))
-                    .foregroundStyle(SettingsTheme.muted)
-
-                Toggle("", isOn: .constant(isOn))
-                    .toggleStyle(.switch)
-                    .labelsHidden()
-                    .disabled(true)
+                HStack(spacing: 10) {
+                    Text(meta)
+                        .font(.caption)
+                        .foregroundStyle(SettingsTheme.muted)
+                        .lineLimit(1)
+                    Spacer(minLength: 8)
+                    Toggle("", isOn: .constant(isOn))
+                        .toggleStyle(.switch)
+                        .labelsHidden()
+                        .disabled(true)
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(SettingsTheme.muted)
+                }
             }
-            .padding(20)
-            .frame(maxWidth: .infinity, minHeight: 104, alignment: .leading)
+            .padding(16)
+            .frame(maxWidth: .infinity, minHeight: 154, alignment: .topLeading)
             .background(.white.opacity(0.92), in: RoundedRectangle(cornerRadius: 8))
             .overlay(RoundedRectangle(cornerRadius: 8).stroke(SettingsTheme.hairline))
             .shadow(color: SettingsTheme.panelShadow, radius: 16, x: 0, y: 10)
@@ -1034,16 +1144,13 @@ struct OverviewMetricStrip: View {
 
     var body: some View {
         DesignPanel(padding: 0) {
-            HStack(spacing: 0) {
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 190), spacing: 0)], spacing: 0) {
                 OverviewMetric(systemImage: "clock", title: "高效便捷", subtitle: "常用功能一步直达")
-                Divider().frame(height: 42)
                 OverviewMetric(systemImage: "shield.checkered", title: "安全可靠", subtitle: "本地运行，保护隐私")
-                Divider().frame(height: 42)
                 OverviewMetric(systemImage: "bolt", title: "轻量稳定", subtitle: "占用资源少，运行流畅")
-                Divider().frame(height: 42)
                 OverviewMetric(systemImage: "slider.horizontal.3", title: "高度可自定义", subtitle: "\(viewModel.enabledActionCount) 个动作按需启用")
             }
-            .padding(.vertical, 14)
+            .padding(.vertical, 10)
         }
     }
 }
@@ -1094,9 +1201,9 @@ struct DirectoryListView: View {
 
     var body: some View {
         DesignPageScroll {
-            HStack {
+            PageToolbar {
                 SearchField(placeholder: "搜索目录名称或路径", text: $searchText)
-                Spacer()
+            } trailing: {
                 Text("共 \(bookmarks.count) 个目录")
                     .font(.callout)
                     .foregroundStyle(SettingsTheme.muted)
@@ -1117,33 +1224,24 @@ struct DirectoryListView: View {
                 }
             }
 
-            DesignPanel {
-                HStack(alignment: .center, spacing: 30) {
-                    VStack(alignment: .leading, spacing: 10) {
-                        Text("右键菜单预览")
-                            .font(.headline)
-                            .foregroundStyle(SettingsTheme.ink)
-                        Text("在 Finder 中右键时，启用的目录将出现在常用目录子菜单中，方便快速访问。")
-                            .font(.callout)
-                            .foregroundStyle(SettingsTheme.muted)
-                            .lineLimit(4)
-                    }
-                    .frame(width: 250, alignment: .leading)
-
-                    FinderMenuPreview(
-                        title: nil,
-                        caption: nil,
-                        rootItems: [
-                            FinderMenuItem(title: "新建文件夹"),
-                            FinderMenuItem(title: "显示简介"),
-                            FinderMenuItem(title: "常用目录", systemImage: "folder", tint: SettingsTheme.accent, isHighlighted: true, hasSubmenu: true),
-                            FinderMenuItem(title: "快速操作", hasSubmenu: true),
-                            FinderMenuItem(title: "服务", hasSubmenu: true)
-                        ],
-                        submenuTitle: nil,
-                        submenuItems: previewItems,
-                        isFramed: false
-                    )
+            PreviewSection(
+                rootItems: [
+                    FinderMenuItem(title: "新建文件夹"),
+                    FinderMenuItem(title: "显示简介"),
+                    FinderMenuItem(title: "常用目录", systemImage: "folder", tint: SettingsTheme.accent, isHighlighted: true, hasSubmenu: true),
+                    FinderMenuItem(title: "快速操作", hasSubmenu: true),
+                    FinderMenuItem(title: "服务", hasSubmenu: true)
+                ],
+                submenuItems: previewItems
+            ) {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("右键菜单预览")
+                        .font(.headline)
+                        .foregroundStyle(SettingsTheme.ink)
+                    Text("启用的目录会出现在常用目录子菜单中，方便快速访问。")
+                        .font(.callout)
+                        .foregroundStyle(SettingsTheme.muted)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
 
@@ -1272,9 +1370,9 @@ struct ActionListView: View {
 
     var body: some View {
         DesignPageScroll {
-            HStack(alignment: .center, spacing: 16) {
+            PageToolbar {
                 SearchField(placeholder: "筛选动作名称、类型或分组", text: $searchText)
-                Spacer()
+            } trailing: {
                 RootMenuCapacityBadge(viewModel: viewModel)
             }
 
@@ -1294,18 +1392,23 @@ struct ActionListView: View {
                 }
             }
 
-            HStack(alignment: .top, spacing: 20) {
-                FinderMenuPreview(
-                    title: "右键菜单预览",
-                    caption: "一级菜单动作会直接出现在 Finder 右键菜单中，其他动作收纳到 RightTool 子菜单。",
+            PreviewSection(
                     rootItems: previewRootItems,
                     submenuTitle: "RightTool",
                     submenuItems: previewSubmenuItems
-                )
-                .frame(width: 360)
-
-                HintBanner(text: "一级菜单最多 \(viewModel.config.maxRootMenuActions) 个动作；超过后请放入 RightTool 子菜单。")
-                    .frame(maxWidth: .infinity, alignment: .top)
+            ) {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("右键菜单预览")
+                        .font(.headline)
+                        .foregroundStyle(SettingsTheme.ink)
+                    Text("一级菜单动作会直接出现在 Finder 右键菜单中，其他动作收纳到 RightTool 子菜单。")
+                        .font(.callout)
+                        .foregroundStyle(SettingsTheme.muted)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text("一级菜单最多 \(viewModel.config.maxRootMenuActions) 个动作。")
+                        .font(.caption)
+                        .foregroundStyle(SettingsTheme.accent)
+                }
             }
         }
     }
@@ -1478,11 +1581,11 @@ struct TemplateListView: View {
 
     var body: some View {
         DesignPageScroll {
-            HStack {
+            PageToolbar {
                 Text("共 \(viewModel.config.fileTemplates.count) 个模板")
                     .font(.callout)
                     .foregroundStyle(SettingsTheme.muted)
-                Spacer()
+            } trailing: {
                 Button {
                     editingDraft = TemplateDraft()
                 } label: {
@@ -1510,10 +1613,7 @@ struct TemplateListView: View {
                 }
             }
 
-            HStack(alignment: .top, spacing: 20) {
-                FinderMenuPreview(
-                    title: "右键菜单预览",
-                    caption: "在 Finder 中右键查看效果",
+            PreviewSection(
                     rootItems: [
                         FinderMenuItem(title: "打开"),
                         FinderMenuItem(title: "打开方式", hasSubmenu: true),
@@ -1523,11 +1623,19 @@ struct TemplateListView: View {
                     ],
                     submenuTitle: nil,
                     submenuItems: templatePreviewItems
-                )
-                .frame(width: 520)
-
-                HintBanner(text: "可通过拖拽调整顺序，右键菜单将按此顺序显示。")
-                    .frame(maxWidth: .infinity, alignment: .top)
+            ) {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("右键菜单预览")
+                        .font(.headline)
+                        .foregroundStyle(SettingsTheme.ink)
+                    Text("在 Finder 中右键查看新建文件子菜单效果。")
+                        .font(.callout)
+                        .foregroundStyle(SettingsTheme.muted)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text("右键菜单会按当前模板顺序显示。")
+                        .font(.caption)
+                        .foregroundStyle(SettingsTheme.accent)
+                }
             }
         }
         .sheet(item: $editingDraft) { draft in
@@ -1684,17 +1792,15 @@ struct DeveloperEntrypointListView: View {
 
     var body: some View {
         DesignPageScroll {
-            HStack {
+            PageToolbar {
                 Picker("入口筛选", selection: $selectedFilter) {
                     ForEach(DeveloperEntrypointFilter.allCases) { filter in
                         Text(filter.rawValue).tag(filter)
                     }
                 }
                 .pickerStyle(.segmented)
-                .frame(width: 360)
-
-                Spacer()
-
+                .frame(minWidth: 240, maxWidth: 360)
+            } trailing: {
                 Button {
                     editingDraft = DeveloperEntrypointDraft()
                 } label: {
@@ -1704,29 +1810,25 @@ struct DeveloperEntrypointListView: View {
                 .controlSize(.large)
             }
 
-            HStack(alignment: .top, spacing: 24) {
-                DesignPanel(padding: 0) {
-                    VStack(spacing: 0) {
-                        DeveloperTableHeader()
-                        if filteredEntrypoints.isEmpty {
-                            EmptyStateRow(title: "暂无开发者入口", systemImage: "terminal")
-                        } else {
-                            ForEach(filteredEntrypoints) { entrypoint in
-                                DeveloperTableRow(entrypoint: entrypoint, viewModel: viewModel) {
-                                    editingDraft = DeveloperEntrypointDraft(entrypoint: entrypoint)
-                                }
-                                if entrypoint.id != filteredEntrypoints.last?.id {
-                                    Divider()
-                                }
+            DesignPanel(padding: 0) {
+                VStack(spacing: 0) {
+                    DeveloperTableHeader()
+                    if filteredEntrypoints.isEmpty {
+                        EmptyStateRow(title: "暂无开发者入口", systemImage: "terminal")
+                    } else {
+                        ForEach(filteredEntrypoints) { entrypoint in
+                            DeveloperTableRow(entrypoint: entrypoint, viewModel: viewModel) {
+                                editingDraft = DeveloperEntrypointDraft(entrypoint: entrypoint)
+                            }
+                            if entrypoint.id != filteredEntrypoints.last?.id {
+                                Divider()
                             }
                         }
                     }
                 }
-                .frame(minWidth: 610)
+            }
 
-                FinderMenuPreview(
-                    title: "右键菜单预览",
-                    caption: "在 Finder 中右键时，将在开发者工具子菜单中显示以下内容。",
+            PreviewSection(
                     rootItems: [
                         FinderMenuItem(title: "新建文件夹"),
                         FinderMenuItem(title: "显示简介"),
@@ -1736,11 +1838,17 @@ struct DeveloperEntrypointListView: View {
                     ],
                     submenuTitle: nil,
                     submenuItems: developerPreviewItems
-                )
-                .frame(width: 300)
+            ) {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("右键菜单预览")
+                        .font(.headline)
+                        .foregroundStyle(SettingsTheme.ink)
+                    Text("在 Finder 中右键任意位置，选择「开发者工具」即可看到这些入口。")
+                        .font(.callout)
+                        .foregroundStyle(SettingsTheme.muted)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
-
-            HintBanner(text: "在 Finder 中右键任意位置，选择「开发者工具」，即可看到以上快捷入口。")
         }
         .sheet(item: $editingDraft) { draft in
             DeveloperEntrypointEditorSheet(draft: draft) { savedDraft in
@@ -1888,11 +1996,11 @@ struct OperationHistoryView: View {
 
     var body: some View {
         DesignPageScroll {
-            HStack {
+            PageToolbar {
                 Text("最近 \(fileOperationRecords.count) 条文件操作")
                     .font(.callout)
                     .foregroundStyle(SettingsTheme.muted)
-                Spacer()
+            } trailing: {
                 Button {
                     viewModel.reloadRecentOperations()
                 } label: {
@@ -1917,16 +2025,13 @@ struct OperationHistoryView: View {
                 }
             }
 
-            HStack(spacing: 18) {
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 220), spacing: 14)], spacing: 14) {
                 ForEach(fileOperationActions.prefix(4)) { action in
                     FileOperationQuickAction(action: action, viewModel: viewModel)
                 }
             }
 
-            HStack(alignment: .top, spacing: 20) {
-                FinderMenuPreview(
-                    title: "右键菜单预览",
-                    caption: "在 Finder 中右键即可使用这些文件操作。",
+            PreviewSection(
                     rootItems: [
                         FinderMenuItem(title: "打开"),
                         FinderMenuItem(title: "打开方式", hasSubmenu: true),
@@ -1938,11 +2043,19 @@ struct OperationHistoryView: View {
                     submenuItems: fileOperationActions.map {
                         FinderMenuItem(title: $0.title, systemImage: $0.kind.rowIcon, tint: SettingsTheme.accent)
                     }
-                )
-                .frame(width: 520)
-
-                HintBanner(text: "支持剪切、复制文件与文件夹，并记录最近操作历史。")
-                    .frame(maxWidth: .infinity, alignment: .top)
+            ) {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("右键菜单预览")
+                        .font(.headline)
+                        .foregroundStyle(SettingsTheme.ink)
+                    Text("在 Finder 中右键即可使用这些文件操作。")
+                        .font(.callout)
+                        .foregroundStyle(SettingsTheme.muted)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text("支持剪切、复制文件与文件夹，并记录最近操作历史。")
+                        .font(.caption)
+                        .foregroundStyle(SettingsTheme.accent)
+                }
             }
         }
     }
@@ -2137,17 +2250,32 @@ struct FinderMenuPreview: View {
                 }
             }
 
-            HStack(alignment: .center, spacing: 14) {
-                FinderMenuBox(items: rootItems)
+            ViewThatFits(in: .horizontal) {
+                HStack(alignment: .center, spacing: 12) {
+                    FinderMenuBox(items: rootItems)
 
-                if !submenuItems.isEmpty {
-                    Image(systemName: "arrow.right")
-                        .font(.headline)
-                        .foregroundStyle(SettingsTheme.accent)
-                    FinderMenuBox(title: submenuTitle, items: submenuItems)
+                    if !submenuItems.isEmpty {
+                        Image(systemName: "arrow.right")
+                            .font(.headline)
+                            .foregroundStyle(SettingsTheme.accent)
+                        FinderMenuBox(title: submenuTitle, items: submenuItems)
+                    }
                 }
+                .frame(maxWidth: .infinity, alignment: .center)
+
+                VStack(alignment: .leading, spacing: 10) {
+                    FinderMenuBox(items: rootItems)
+
+                    if !submenuItems.isEmpty {
+                        Image(systemName: "arrow.down")
+                            .font(.headline)
+                            .foregroundStyle(SettingsTheme.accent)
+                            .padding(.leading, 72)
+                        FinderMenuBox(title: submenuTitle, items: submenuItems)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .center)
             }
-            .frame(maxWidth: .infinity, alignment: .center)
         }
     }
 }
@@ -2175,7 +2303,7 @@ struct FinderMenuBox: View {
                 }
             }
         }
-        .frame(width: 178)
+        .frame(width: 166)
         .background(.white, in: RoundedRectangle(cornerRadius: 8))
         .overlay(RoundedRectangle(cornerRadius: 8).stroke(SettingsTheme.hairline))
         .shadow(color: Color.black.opacity(0.12), radius: 18, x: 0, y: 10)
@@ -2198,6 +2326,7 @@ struct FinderMenuRow: View {
                 .font(.caption)
                 .foregroundStyle(item.isHighlighted ? .white : SettingsTheme.ink)
                 .lineLimit(1)
+                .truncationMode(.tail)
 
             Spacer(minLength: 8)
 
@@ -2214,7 +2343,6 @@ struct FinderMenuRow: View {
             in: RoundedRectangle(cornerRadius: 6)
         )
         .padding(.horizontal, item.isHighlighted ? 5 : 0)
-        .padding(.vertical, item.isHighlighted ? 4 : 0)
     }
 }
 
