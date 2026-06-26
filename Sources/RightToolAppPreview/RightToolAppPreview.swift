@@ -1210,6 +1210,8 @@ struct SettingsDetailShell<Content: View>: View {
         switch section {
         case .onboarding, .directories:
             return 22
+        case .actions:
+            return 26
         default:
             return 28
         }
@@ -2207,23 +2209,6 @@ enum ActionPreviewContext: String, CaseIterable, Identifiable {
     }
 }
 
-struct ActionManagementPageScroll<Content: View>: View {
-    @ViewBuilder var content: Content
-
-    var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                content
-            }
-            .padding(.horizontal, 28)
-            .padding(.vertical, 20)
-            .frame(maxWidth: 1120, alignment: .topLeading)
-            .frame(maxWidth: .infinity, alignment: .topLeading)
-        }
-        .background(.white.opacity(0.34))
-    }
-}
-
 struct ActionListView: View {
     @ObservedObject var viewModel: SettingsViewModel
     @State private var searchText = ""
@@ -2258,36 +2243,65 @@ struct ActionListView: View {
         let actions = sortedActions
         let rows = filteredActions(from: actions)
 
-        ActionManagementPageScroll {
-            PageToolbar {
-                SearchField(placeholder: "搜索菜单项或功能...", text: $searchText)
-            } trailing: {
-                RootMenuCapacityBadge(viewModel: viewModel)
-            }
+        GeometryReader { proxy in
+            let metrics = layoutMetrics(for: proxy.size.width)
 
-            HStack(alignment: .top, spacing: 22) {
-                VStack(alignment: .leading, spacing: 16) {
-                    ActionManagementTable(
-                        rows: rows,
-                        allActions: actions,
-                        selectedFilter: $selectedFilter,
-                        counts: actionCounts,
-                        viewModel: viewModel
-                    )
+            ScrollView {
+                VStack(alignment: .leading, spacing: 14) {
+                    PageToolbar {
+                        SearchField(placeholder: "搜索菜单项或功能...", text: $searchText)
+                    } trailing: {
+                        RootMenuCapacityBadge(viewModel: viewModel)
+                    }
 
-                    ActionManagementRuleGrid(viewModel: viewModel)
+                    HStack(alignment: .top, spacing: metrics.previewWidth > 0 ? 18 : 0) {
+                        VStack(alignment: .leading, spacing: 14) {
+                            ActionManagementTable(
+                                rows: rows,
+                                allActions: actions,
+                                selectedFilter: $selectedFilter,
+                                counts: actionCounts,
+                                viewModel: viewModel
+                            )
 
-                    ActionManagementHintBar()
+                            ActionManagementRuleGrid(viewModel: viewModel)
+
+                            ActionManagementHintBar()
+                        }
+                        .frame(width: metrics.tableWidth, alignment: .topLeading)
+
+                        if metrics.previewWidth > 0 {
+                            ActionMenuPreviewCard(
+                                selectedContext: $previewContext,
+                                actions: actions
+                            )
+                            .frame(width: metrics.previewWidth)
+                        }
+                    }
+
+                    if metrics.previewWidth == 0 {
+                        ActionMenuPreviewCard(
+                            selectedContext: $previewContext,
+                            actions: actions
+                        )
+                        .frame(width: metrics.contentWidth)
+                    }
                 }
+                .padding(.horizontal, 28)
+                .padding(.vertical, 18)
+                .frame(width: metrics.contentWidth + 56, alignment: .topLeading)
                 .frame(maxWidth: .infinity, alignment: .topLeading)
-
-                ActionMenuPreviewCard(
-                    selectedContext: $previewContext,
-                    actions: actions
-                )
-                .frame(width: 292)
             }
+            .background(.white.opacity(0.34))
         }
+    }
+
+    private func layoutMetrics(for availableWidth: CGFloat) -> (contentWidth: CGFloat, tableWidth: CGFloat, previewWidth: CGFloat) {
+        let contentWidth = min(max(availableWidth - 56, 760), 1220)
+        let previewWidth: CGFloat = contentWidth >= 1050 ? 286 : 0
+        let spacing: CGFloat = previewWidth > 0 ? 18 : 0
+        let tableWidth = max(720, contentWidth - previewWidth - spacing)
+        return (contentWidth, tableWidth, previewWidth)
     }
 }
 
@@ -2417,10 +2431,10 @@ struct ActionTableHeader: View {
         HStack(spacing: 12) {
             Text("").frame(width: 20)
             Text("菜单项").frame(maxWidth: .infinity, alignment: .leading)
-            Text("状态").frame(width: 70, alignment: .center)
-            Text("适用范围").frame(width: 152, alignment: .leading)
-            Text("类型").frame(width: 72, alignment: .leading)
-            Text("操作").frame(width: 76, alignment: .center)
+            Text("状态").frame(width: 56, alignment: .center)
+            Text("适用范围").frame(width: 130, alignment: .leading)
+            Text("类型").frame(width: 58, alignment: .leading)
+            Text("操作").frame(width: 60, alignment: .center)
         }
         .font(.system(size: 12, weight: .medium))
         .foregroundStyle(SettingsTheme.muted)
@@ -2457,8 +2471,10 @@ struct ActionEditorRow: View {
                         .foregroundStyle(SettingsTheme.muted)
                         .lineLimit(1)
                 }
+                .layoutPriority(2)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
+            .layoutPriority(3)
 
             Toggle("启用", isOn: Binding(
                 get: { action.isEnabled },
@@ -2466,13 +2482,14 @@ struct ActionEditorRow: View {
             ))
             .toggleStyle(.switch)
             .labelsHidden()
-            .frame(width: 70)
+            .scaleEffect(0.86)
+            .frame(width: 56)
 
             FlowPillGroup(items: action.visibilityPills)
-                .frame(width: 152, alignment: .leading)
+                .frame(width: 130, alignment: .leading)
 
             ActionTypeBadge(action: action)
-                .frame(width: 72, alignment: .leading)
+                .frame(width: 58, alignment: .leading)
 
             HStack(spacing: 12) {
                 Menu {
@@ -2508,10 +2525,10 @@ struct ActionEditorRow: View {
             }
             .font(.system(size: 15, weight: .medium))
             .foregroundStyle(SettingsTheme.muted)
-            .frame(width: 76, alignment: .center)
+            .frame(width: 60, alignment: .center)
         }
         .padding(.horizontal, 18)
-        .frame(height: 58)
+        .frame(height: 56)
         .opacity(action.isEnabled ? 1 : 0.6)
     }
 }

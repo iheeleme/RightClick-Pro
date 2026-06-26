@@ -370,3 +370,44 @@ LazyVStack(spacing: 0) {
     }
 }
 ```
+
+### Common Mistake: Unbounded Settings Layouts Inside ScrollView
+
+**Symptom**: A settings page looks correct in code but renders with columns squeezed, titles missing, or a right-side preview panel pushed outside the visible window.
+
+**Cause**: A vertical `ScrollView` can give child content a loose width proposal. Combining that with `HStack`, `.frame(maxWidth: .infinity)`, and fixed-width trailing columns lets the primary table consume too much width or collapse its flexible title column.
+
+**Fix**: Use `GeometryReader` at the page boundary to calculate a deterministic content width, then assign explicit widths to the main table and optional preview panel. Give the title/name column higher `layoutPriority`, and keep fixed trailing columns compact.
+
+Wrong:
+```swift
+ScrollView {
+    HStack {
+        SettingsTable()
+            .frame(maxWidth: .infinity)
+        SettingsPreview()
+            .frame(width: 292)
+    }
+}
+```
+
+Correct:
+```swift
+GeometryReader { proxy in
+    let contentWidth = min(max(proxy.size.width - 56, 760), 1220)
+    let previewWidth: CGFloat = contentWidth >= 1050 ? 286 : 0
+    let tableWidth = contentWidth - previewWidth - (previewWidth > 0 ? 18 : 0)
+
+    ScrollView {
+        HStack(spacing: previewWidth > 0 ? 18 : 0) {
+            SettingsTable()
+                .frame(width: tableWidth)
+            if previewWidth > 0 {
+                SettingsPreview()
+                    .frame(width: previewWidth)
+            }
+        }
+        .frame(width: contentWidth + 56, alignment: .topLeading)
+    }
+}
+```
