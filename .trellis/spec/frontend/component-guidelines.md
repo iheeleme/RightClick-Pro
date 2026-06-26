@@ -196,3 +196,26 @@ config.developerEntrypoints.map {
     FinderMenuItem(title: $0.title, systemImage: developerIcon(for: $0))
 }
 ```
+
+### Common Mistake: Duplicating Native macOS Window Controls
+
+**Symptom**: The settings window shows two sets of red/yellow/green controls in the upper-left corner.
+
+**Cause**: A custom design mockup included traffic-light dots, but the real SwiftUI `Window` already renders native macOS window controls.
+
+**Fix**: Do not render decorative window-control dots inside `SettingsRootView`, `SettingsSidebar`, or other content views that live inside a real macOS window.
+
+Wrong:
+```swift
+VStack {
+    WindowControlDots()
+    SettingsSidebarContent()
+}
+```
+
+Correct:
+```swift
+VStack {
+    SettingsSidebarContent()
+}
+```

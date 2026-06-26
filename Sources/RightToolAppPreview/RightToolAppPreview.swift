@@ -557,8 +557,6 @@ struct SettingsSidebar: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 26) {
-            WindowControlDots()
-
             HStack(spacing: 12) {
                 ZStack {
                     RoundedRectangle(cornerRadius: 8)
@@ -613,17 +611,6 @@ struct SettingsSidebar: View {
                 .fill(SettingsTheme.hairline)
                 .frame(width: 1)
         }
-    }
-}
-
-struct WindowControlDots: View {
-    var body: some View {
-        HStack(spacing: 8) {
-            Circle().fill(Color(red: 1.0, green: 0.36, blue: 0.30))
-            Circle().fill(Color(red: 1.0, green: 0.75, blue: 0.22))
-            Circle().fill(Color(red: 0.21, green: 0.78, blue: 0.28))
-        }
-        .frame(width: 54, height: 12)
     }
 }
 
