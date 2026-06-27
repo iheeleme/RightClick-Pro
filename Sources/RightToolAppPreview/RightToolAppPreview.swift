@@ -2306,13 +2306,15 @@ struct DirectoryMenuPreviewPanel: View {
     }
 
     private var rootMenuItems: [FinderMenuItem] {
-        [
-            FinderMenuItem(title: "新建文件夹"),
-            FinderMenuItem(title: "显示简介"),
-            FinderMenuItem(title: "常用目录", tint: SettingsTheme.accent, isHighlighted: true, hasSubmenu: true),
-            FinderMenuItem(title: "快速操作", hasSubmenu: true),
-            FinderMenuItem(title: "服务", hasSubmenu: true)
-        ]
+        FinderPreviewRootMenu.standardContainerMenu(
+            highlighting: FinderMenuItem(
+                title: "常用目录",
+                systemImage: "folder",
+                tint: .blue,
+                isHighlighted: true,
+                hasSubmenu: true
+            )
+        )
     }
 }
 
@@ -3998,19 +4000,15 @@ struct TemplateMenuPreviewPanel: View {
     }
 
     private var rootMenuItems: [FinderMenuItem] {
-        [
-            FinderMenuItem(title: "打开"),
-            FinderMenuItem(title: "打开方式", hasSubmenu: true),
-            FinderMenuItem(title: "移动到废纸篓"),
-            FinderMenuItem(title: "显示简介"),
-            FinderMenuItem(title: "重新命名"),
-            FinderMenuItem(title: "压缩“示例文件夹”"),
-            FinderMenuItem(title: "复制"),
-            FinderMenuItem(title: "制作替身"),
-            FinderMenuItem(title: "快速查看"),
-            FinderMenuItem(title: "新建文件", tint: SettingsTheme.accent, isHighlighted: true, hasSubmenu: true),
-            FinderMenuItem(title: "服务", hasSubmenu: true)
-        ]
+        FinderPreviewRootMenu.standardContainerMenu(
+            highlighting: FinderMenuItem(
+                title: "新建文件",
+                systemImage: "doc.badge.plus",
+                tint: SettingsTheme.accent,
+                isHighlighted: true,
+                hasSubmenu: true
+            )
+        )
     }
 }
 
@@ -4364,17 +4362,15 @@ struct DeveloperMenuPreviewCard: View {
     }
 
     private var rootMenuItems: [FinderMenuItem] {
-        [
-            FinderMenuItem(title: "新建文件夹"),
-            FinderMenuItem(title: "显示简介"),
-            FinderMenuItem(title: "开发者工具", systemImage: "chevron.left.forwardslash.chevron.right", tint: SettingsTheme.accent, isHighlighted: true, hasSubmenu: true),
-            FinderMenuItem(title: "快速操作", hasSubmenu: true),
-            FinderMenuItem(title: "拷贝"),
-            FinderMenuItem(title: "粘贴"),
-            FinderMenuItem(title: "显示查看选项"),
-            FinderMenuItem(title: "标签..."),
-            FinderMenuItem(title: "服务", hasSubmenu: true)
-        ]
+        FinderPreviewRootMenu.standardContainerMenu(
+            highlighting: FinderMenuItem(
+                title: "开发者工具",
+                systemImage: "chevron.left.forwardslash.chevron.right",
+                tint: SettingsTheme.accent,
+                isHighlighted: true,
+                hasSubmenu: true
+            )
+        )
     }
 
     private var submenuItems: [FinderMenuItem] {
@@ -4505,13 +4501,15 @@ struct OperationHistoryView: View {
             }
 
             PreviewSection(
-                    rootItems: [
-                        FinderMenuItem(title: "打开"),
-                        FinderMenuItem(title: "打开方式", hasSubmenu: true),
-                        FinderMenuItem(title: "移动到废纸篓"),
-                        FinderMenuItem(title: "文件操作", systemImage: "folder", tint: SettingsTheme.accent, isHighlighted: true, hasSubmenu: true),
-                        FinderMenuItem(title: "服务", hasSubmenu: true)
-                    ],
+                    rootItems: FinderPreviewRootMenu.standardContainerMenu(
+                        highlighting: FinderMenuItem(
+                            title: "文件操作",
+                            systemImage: "scissors",
+                            tint: SettingsTheme.accent,
+                            isHighlighted: true,
+                            hasSubmenu: true
+                        )
+                    ),
                     submenuTitle: nil,
                     submenuItems: previewActions.map {
                         FinderMenuItem(
@@ -4730,6 +4728,7 @@ struct FinderMenuItem: Identifiable {
     var tint: Color = SettingsTheme.muted
     var isHighlighted = false
     var hasSubmenu = false
+    var startsSection = false
 
     init(
         title: String,
@@ -4738,6 +4737,7 @@ struct FinderMenuItem: Identifiable {
         tint: Color = SettingsTheme.muted,
         isHighlighted: Bool = false,
         hasSubmenu: Bool = false,
+        startsSection: Bool = false,
         id: String? = nil
     ) {
         self.title = title
@@ -4745,7 +4745,8 @@ struct FinderMenuItem: Identifiable {
         self.tint = tint
         self.isHighlighted = isHighlighted
         self.hasSubmenu = hasSubmenu
-        self.id = id ?? "\(title)|\(Self.iconIdentity(self.icon))|\(isHighlighted)|\(hasSubmenu)"
+        self.startsSection = startsSection
+        self.id = id ?? "\(title)|\(Self.iconIdentity(self.icon))|\(isHighlighted)|\(hasSubmenu)|\(startsSection)"
     }
 
     private static func iconIdentity(_ icon: MenuIconDescriptor?) -> String {
@@ -4764,6 +4765,27 @@ struct FinderMenuItem: Identifiable {
         case .folder:
             return "folder"
         }
+    }
+}
+
+private enum FinderPreviewRootMenu {
+    static func standardContainerMenu(highlighting item: FinderMenuItem) -> [FinderMenuItem] {
+        var highlightedItem = item
+        highlightedItem.startsSection = true
+
+        return [
+            FinderMenuItem(title: "打开"),
+            FinderMenuItem(title: "打开方式", hasSubmenu: true),
+            FinderMenuItem(title: "移到废纸篓", startsSection: true),
+            FinderMenuItem(title: "显示简介", startsSection: true),
+            FinderMenuItem(title: "重新命名"),
+            FinderMenuItem(title: "压缩 “示例文件夹”"),
+            FinderMenuItem(title: "复制"),
+            FinderMenuItem(title: "制作替身"),
+            FinderMenuItem(title: "快速查看"),
+            highlightedItem,
+            FinderMenuItem(title: "服务", hasSubmenu: true, startsSection: true)
+        ]
     }
 }
 
@@ -4872,7 +4894,13 @@ struct FinderMenuBox: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            ForEach(items) { item in
+            ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
+                if item.startsSection && index > 0 {
+                    Divider()
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 4)
+                }
+
                 FinderMenuRow(item: item)
             }
         }
