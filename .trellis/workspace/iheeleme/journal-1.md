@@ -72,3 +72,36 @@ Verified and archived the reinstall self-healing fix: Finder extension bootstrap
 ### Next Steps
 
 - None - task complete
+
+
+## Session 3: Fill Trellis project guidelines
+
+**Date**: 2026-06-27
+**Task**: Fill Trellis project guidelines
+**Branch**: `main`
+
+### Summary
+
+Filled RightTool backend and frontend Trellis specs from the actual SwiftPM/macOS codebase: documented Core storage, ActionRunner, Finder extension, XPC, packaging, SwiftUI settings state, component, type-safety, and quality conventions; removed template placeholders and verified with diff checks plus SwiftPM CI.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `99ce051` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
