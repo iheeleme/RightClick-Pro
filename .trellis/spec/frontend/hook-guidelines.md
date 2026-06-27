@@ -1,51 +1,48 @@
-# Hook Guidelines
+# SwiftUI State and Binding Guidelines
 
-> How hooks are used in this project.
+This project does not use React hooks. Treat this file as the SwiftUI equivalent: local view state, bindings, sheet triggers, and lifecycle callbacks.
 
----
+## Local View State
 
-## Overview
+Use `@State` for UI-only state that does not need to persist:
 
-<!--
-Document your project's hook conventions here.
+- Selected filters: `ActionManagementFilter`, `DeveloperEntrypointFilter`.
+- Preview context: `ActionPreviewContext`.
+- Grouping/sorting modes for action management.
+- Sheet drafts: `TemplateDraft?`, `DeveloperEntrypointDraft?`.
+- Hover/presentation flags in compact controls.
 
-Questions to answer:
-- What custom hooks do you have?
-- How do you handle data fetching?
-- What are the naming conventions?
-- How do you share stateful logic?
--->
+Reference file: `Sources/RightToolAppPreview/RightToolAppPreview.swift`.
 
-(To be filled by the team)
+## Shared State
 
----
+Use `@ObservedObject var viewModel: SettingsViewModel` in child views. The app root owns the model as `@StateObject`.
 
-## Custom Hook Patterns
+- `RightToolAppPreview` creates `@StateObject private var viewModel = SettingsViewModel.bootstrap()`.
+- Section views observe the same model so config edits, status messages, and recent operations stay in sync.
+- Child views call `SettingsViewModel` commands instead of mutating persisted state independently.
 
-<!-- How to create and structure custom hooks -->
+## Bindings
 
-(To be filled by the team)
+Use explicit `Binding(get:set:)` when a UI control edits a model item inside an array:
 
----
+```swift
+Toggle("", isOn: Binding(
+    get: { action.isEnabled },
+    set: { viewModel.setActionEnabled($0, actionID: action.id) }
+))
+```
 
-## Data Fetching
+This pattern keeps array lookup and validation in `SettingsViewModel`.
 
-<!-- How data fetching is handled (React Query, SWR, etc.) -->
+## Sheet Triggers
 
-(To be filled by the team)
+- Use optional draft state for edit sheets.
+- Use integer request counters (`templateAddRequest`, `developerEntrypointAddRequest`) when a header button outside the list should open a sheet in the list view.
+- Draft save closures call `upsertTemplate` or `upsertDeveloperEntrypoint`; they do not write files.
 
----
+## Lifecycle Callbacks
 
-## Naming Conventions
-
-<!-- Hook naming rules (use*, etc.) -->
-
-(To be filled by the team)
-
----
-
-## Common Mistakes
-
-<!-- Hook-related mistakes your team has made -->
-
-(To be filled by the team)
+- Use `onChange` for local UI request signals only.
+- Use `reloadRecentOperations()` for operation-log refreshes, not repeated direct reads inside view bodies.
+- Avoid expensive filesystem reads in `body`; derive display data from `@Published` model values.

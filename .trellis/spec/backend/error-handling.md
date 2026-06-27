@@ -1,51 +1,50 @@
 # Error Handling
 
-> How errors are handled in this project.
-
----
-
-## Overview
-
-<!--
-Document your project's error handling conventions here.
-
-Questions to answer:
-- What error types do you define?
-- How are errors propagated?
-- How are errors logged?
-- How are errors returned to clients?
--->
-
-(To be filled by the team)
-
----
+RightTool favors typed errors at Core boundaries, user-facing Chinese `LocalizedError` messages for action/settings failures, and best-effort diagnostics at process adapters.
 
 ## Error Types
 
-<!-- Custom error classes/types -->
+Use focused `Error` enums near the owning domain:
 
-(To be filled by the team)
+- `StorageError` for missing App Group or required storage files.
+- `BookmarkError` for missing or invalid bookmark resolution.
+- `AuthorizationError` for paths outside configured monitored/common directories.
+- `FileOperationError` for invalid file operations, conflicts, and cancellation.
+- `ActionRunnerError` for action lookup, unsupported kinds, missing payloads, and missing related config.
+- `RightToolXPCClientError` for unavailable XPC service or missing replies.
+- `SettingsValidationError` for settings UI save validation.
 
----
+Reference files: `Sources/RightToolCore/Storage.swift`, `BookmarkModels.swift`, `Authorization.swift`, `FileOperations.swift`, `ActionRunner.swift`, `XPCAdapter.swift`, `Sources/RightToolAppPreview/RightToolAppPreview.swift`.
 
-## Error Handling Patterns
+## Propagation Rules
 
-<!-- Try-catch patterns, error propagation -->
+- Core service methods should throw typed errors when callers can recover or record a failure.
+- `ActionRunner.run(_:)` is the fault boundary for file/app actions. It catches errors, returns `ActionResult(status: .failure, message: error.localizedDescription)`, and appends a failure `OperationRecord`.
+- XPC adapter decode/encode failures should reply with `NSError`; successful runner failures are still encoded as `ActionResult`.
+- Finder extension should log failures with `NSLog` and avoid crashing Finder.
+- Settings UI should catch persistence/validation errors and surface them via `statusMessage` and `statusTone`.
 
-(To be filled by the team)
+## Validation Patterns
 
----
+- Validate authorized paths before file mutations in `ActionRunner`.
+- Validate `RightToolConfig` before saving from settings UI.
+- Validate root-menu count against `config.maxRootMenuActions` both when promoting an action and on save.
+- Validate template and developer IDs for emptiness and duplicates before persisting.
+- Validate filenames by rejecting empty strings and `/`.
 
-## API Error Responses
+Reference files: `Sources/RightToolCore/ActionRunner.swift`, `FileOperations.swift`, `Sources/RightToolAppPreview/RightToolAppPreview.swift`.
 
-<!-- Standard error response format -->
+## Cancellation
 
-(To be filled by the team)
+Use explicit cancellation states when a user or resolver cancels an operation:
 
----
+- `FileConflictResolution.cancel` throws `FileOperationError.cancelled`.
+- `ActionResultStatus.cancelled` and `OperationRecordStatus.cancelled` exist for future UI flows.
+- Current fixed conflict resolver defaults to `.keepBoth`; do not silently replace files.
 
-## Common Mistakes
+## Anti-Patterns
 
-<!-- Error handling mistakes your team has made -->
-
-(To be filled by the team)
+- Do not ignore errors in Core services that mutate files or storage.
+- Do not crash the Finder extension for config/bootstrap/XPC failures.
+- Do not return `nil` for missing action payloads; throw `ActionRunnerError.missingPayload`.
+- Do not convert all failures to strings before the process boundary; keep typed errors until the UI/XPC/log boundary.

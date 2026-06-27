@@ -6,47 +6,54 @@
 
 ## Overview
 
-<!--
-Document your project's quality standards here.
-
-Questions to answer:
-- What patterns are forbidden?
-- What linting rules do you enforce?
-- What are your testing requirements?
-- What code review standards apply?
--->
-
-(To be filled by the team)
+RightTool quality checks center on SwiftPM compilation/tests, Finder extension packaging validation, and source-backed contracts. The project currently has no lint tool beyond Swift compiler checks and `git diff --check`.
 
 ---
 
 ## Forbidden Patterns
 
-<!-- Patterns that should never be used and why -->
-
-(To be filled by the team)
+- Finder extension performing file mutations directly. Route all mutations through XPC to `ActionRunner`.
+- Finder menu leaf items relying on `representedObject` for action payloads. Finder copies menu items and may drop it; use stable `tag` values.
+- Default monitored directories derived from the sandbox container home.
+- Packaging with `macos-latest` runner labels. Use explicit runner labels from `.github/workflows/package-macos.yml`.
+- Adding a new action kind without updating Core execution, menu presentation, settings display/editing, and tests.
+- Direct storage writes from SwiftUI child views.
 
 ---
 
 ## Required Patterns
 
-<!-- Patterns that must always be used -->
-
-(To be filled by the team)
+- Shared behavior belongs in `RightToolCore`.
+- File mutations must validate authorized paths before touching disk.
+- Storage writes must use `JSONFileStore` or `JSONLineOperationLog`.
+- Finder extension startup must bootstrap config before assigning `FIFinderSyncController.default().directoryURLs`.
+- Menu icon semantics must come from `MenuIconResolver` in Core and be rendered at the UI/process boundary.
+- Test doubles should use existing in-memory/recording types where possible.
 
 ---
 
 ## Testing Requirements
 
-<!-- What level of testing is expected -->
-
-(To be filled by the team)
+- Run `scripts/ci-swift-check.sh debug` for Swift changes.
+- Run `scripts/package-macos.sh debug` for App/Finder extension/XPC/packaging changes.
+- Run targeted tests for changed Core behavior, for example:
+  ```bash
+  swift test --filter MenuBuilderTests
+  swift test --filter ActionRunnerTests
+  swift test --filter ConfigurationBootstrapperTests
+  ```
+- Run `bash -n scripts/ci-swift-check.sh scripts/package-macos.sh` after shell script edits.
+- Run `ruby -e 'require "yaml"; YAML.load_file(".github/workflows/package-macos.yml")'` after workflow edits.
 
 ---
 
 ## Code Review Checklist
 
-<!-- What reviewers should check -->
+- Does the change preserve process boundaries: Finder extension renders, XPC transports, ActionRunner mutates?
+- Are new Codable fields backward compatible with existing JSON where practical?
+- Are path and bookmark changes tested with temporary directories?
+- Does settings UI mutate through `SettingsViewModel` commands?
+- Does packaging still produce a discoverable Finder Sync `.appex` and both ActionRunner XPC placements?
 
 ### Scenario: macOS GitHub Actions Packaging
 

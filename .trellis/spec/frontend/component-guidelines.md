@@ -6,55 +6,59 @@
 
 ## Overview
 
-<!--
-Document your project's component conventions here.
-
-Questions to answer:
-- What component patterns do you use?
-- How are props defined?
-- How do you handle composition?
-- What accessibility standards apply?
--->
-
-(To be filled by the team)
+RightTool settings components are native SwiftUI views with a restrained macOS utility feel. They should be dense, scannable, and directly connected to `SettingsViewModel` commands and `RightToolCore` data.
 
 ---
 
 ## Component Structure
 
-<!-- Standard structure of a component file -->
+- Screen views own local UI state such as filters, preview context, grouping, sorting, and active sheet drafts.
+- Row/table components receive model values plus explicit callbacks or a shared `SettingsViewModel`.
+- Shared shells (`DesignPanel`, `SettingsDetailShell`, `PreviewSection`) provide layout consistency.
+- Editor sheets compose `EditorSheetHeader`, `EditorTextField`, `EditorTextArea`, and `EditorSheetFooter`.
+- Finder menu previews use `FinderMenuPreview`, `FinderMenuBox`, `FinderMenuRow`, `FinderMenuItem`, and `MenuIconView`.
 
-(To be filled by the team)
+Reference examples: `ActionListView`, `ActionManagementTable`, `TemplateListView`, `DeveloperEntrypointListView`, `OperationHistoryView`.
 
 ---
 
 ## Props Conventions
 
-<!-- How props should be defined and typed -->
-
-(To be filled by the team)
+- Pass Core model values by value (`RightToolAction`, `FileTemplate`, `DeveloperEntrypoint`, `OperationRecord`).
+- Pass `@ObservedObject var viewModel: SettingsViewModel` when the component edits config or needs shared status/count state.
+- Pass `@Binding` only for local UI controls owned by the parent, such as selected filters or preview context.
+- Prefer explicit callbacks for simple row actions: `onEdit`, `onMoveUp`, `onMoveDown`.
+- Keep widths/stable frames in table rows so toggles, menu buttons, and icon controls do not resize the layout.
 
 ---
 
 ## Styling Patterns
 
-<!-- How styles are applied (CSS modules, styled-components, Tailwind, etc.) -->
-
-(To be filled by the team)
+- Use `SettingsTheme` colors and existing primitives before adding new styling.
+- Use `DesignPanel` for repeated framed groups; avoid nesting panels inside panels.
+- Use compact row heights and table headers for operational pages.
+- Use `RowIconButton` / `RowIconControlLabel` for icon-only edit, delete, and reorder controls.
+- Use `MenuIconResolver` and `MenuIconView` for action/template/developer/directory icons.
+- Prefer explicit fixed row/control dimensions for tables and preview menus.
 
 ---
 
 ## Accessibility
 
-<!-- A11y requirements and patterns -->
-
-(To be filled by the team)
+- Icon-only buttons must have `accessibilityLabel` and `.help(...)`.
+- Toggle labels may be hidden visually only when the surrounding row names the target clearly.
+- Destructive controls should use the destructive tone and describe the target in the label.
+- Text fields and editor areas need visible titles and helper text in sheets.
+- Long paths should use truncation and `.textSelection(.enabled)` where users may need to copy them.
 
 ---
 
 ## Common Mistakes
 
-<!-- Component-related mistakes your team has made -->
+- Adding a visual edit/delete/reorder affordance without a `SettingsViewModel` command.
+- Hard-coding Finder preview rows instead of deriving them from config or `MenuBuilder`.
+- Duplicating app/file/folder icon lookup instead of using `MenuIconDescriptor`.
+- Letting native menu checkmarks be the only selected state for compact editing controls.
 
 ### Scenario: SwiftUI Settings Editing Surfaces
 
@@ -246,7 +250,7 @@ SortStepControls(
 - Reuse these local presentation components for settings editing sheets and icon controls:
   ```swift
   EditorSheetHeader(title:subtitle:systemImage:tint:)
-  EditorTextField(title:placeholder:helper:systemImage:text:)
+  EditorTextField(...)
   EditorTextArea(title:helper:text:)
   EditorSheetFooter(validationMessage:canSave:onCancel:onSave:)
   RowIconControlLabel(systemImage:tone:isDisabled:size:iconSize:cornerRadius:)

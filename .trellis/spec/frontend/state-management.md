@@ -1,51 +1,58 @@
 # State Management
 
-> How state is managed in this project.
-
----
-
-## Overview
-
-<!--
-Document your project's state management conventions here.
-
-Questions to answer:
-- What state management solution do you use?
-- How is local vs global state decided?
-- How do you handle server state?
-- What are the patterns for derived state?
--->
-
-(To be filled by the team)
-
----
+Settings state is centralized in `SettingsViewModel`. It bridges Core storage models to SwiftUI screens and owns persistence commands.
 
 ## State Categories
 
-<!-- Local state, global state, server state, URL state -->
+| State | Owner | Examples |
+|-------|-------|----------|
+| Durable config | `RightToolCore` JSON files via `SettingsViewModel` | `RightToolConfig`, `DirectoryBookmarkCatalog` |
+| View model state | `SettingsViewModel` | `selectedSection`, `statusMessage`, `statusTone`, `hasUnsavedChanges`, `recentOperations` |
+| Local UI state | Individual views | filters, grouping modes, preview context, editing drafts |
+| Derived state | Computed properties/functions | enabled action count, root menu progress, sidebar badges |
 
-(To be filled by the team)
+Reference file: `Sources/RightToolAppPreview/RightToolAppPreview.swift`.
 
----
+## Persistence Rules
 
-## When to Use Global State
+- `SettingsViewModel.loadOrBootstrap()` uses `ConfigurationBootstrapper` and applies the result.
+- `saveConfig()` validates and writes both `bookmarks.json` and `config.json`.
+- Directory add/edit/delete operations currently save immediately through `saveDirectoryChanges`.
+- Template/action/developer edits mark unsaved changes and require the main save action.
+- `reloadRecentOperations()` reads `operation-log.jsonl` and keeps the latest 80 reversed for display.
 
-<!-- Criteria for promoting state to global -->
+## Command Rules
 
-(To be filled by the team)
+Use command methods for mutations:
 
----
+- Actions: `setActionEnabled`, `setActionPlacement`, `toggleActionVisibility`, `moveAction`.
+- Templates: `upsertTemplate`, `deleteTemplate`, `moveTemplate`.
+- Developer entries: `upsertDeveloperEntrypoint`, `deleteDeveloperEntrypoint`, `moveDeveloperEntrypoint`.
+- Directories: `addDirectoryBookmarkFromPanel`, `replaceDirectoryBookmarkFromPanel`, `deleteDirectoryBookmark`, `setDirectoryBookmarkEnabled`, `moveDirectoryBookmark`.
 
-## Server State
+Commands must keep related config references synchronized. Examples:
 
-<!-- How server data is cached and synchronized -->
+- Adding a `FileTemplate` creates or updates a matching `.createFile` action.
+- Deleting a `FileTemplate` removes matching `.createFile` actions.
+- Adding a `DeveloperEntrypoint` creates or updates a matching `.openInApp` action.
+- Deleting a directory removes monitored/common IDs and generated directory actions.
+- Moving templates/developer entries/directories normalizes associated action order values.
 
-(To be filled by the team)
+## Validation
 
----
+Before persisting, validate:
 
-## Common Mistakes
+- Enabled root actions do not exceed `maxRootMenuActions`.
+- Template IDs/titles/default filenames are non-empty.
+- Template and developer IDs are unique.
+- Developer titles and bundle identifiers are non-empty.
+- File names do not contain `/`.
 
-<!-- State management mistakes your team has made -->
+Use `SettingsValidationError` for user-facing save errors.
 
-(To be filled by the team)
+## Anti-Patterns
+
+- Do not mutate `config.actions` from child views without a ViewModel command.
+- Do not let an action lose all `ActionVisibility` cases.
+- Do not add config entries without back-reference actions.
+- Do not treat a preview-only filter/sort as persisted unless it updates `RightToolConfig`.

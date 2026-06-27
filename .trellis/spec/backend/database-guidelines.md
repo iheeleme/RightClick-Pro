@@ -1,51 +1,61 @@
-# Database Guidelines
+# File-Backed Storage Guidelines
 
-> Database patterns and conventions for this project.
+RightTool has no database layer. Durable state is file-backed JSON/JSONL in an App Group container when available, with an Application Support fallback for unsigned/local preview builds.
 
----
+## Storage Layout
 
-## Overview
+`RightToolStoragePaths` defines the complete storage contract:
 
-<!--
-Document your project's database conventions here.
+```text
+baseURL/
+├── config.json
+├── bookmarks.json
+├── cut-clipboard.json
+└── operation-log.jsonl
+```
 
-Questions to answer:
-- What ORM/query library do you use?
-- How are migrations managed?
-- What are the naming conventions for tables/columns?
-- How do you handle transactions?
--->
+Reference files: `Sources/RightToolCore/Storage.swift`, `OperationLogStore.swift`, `CutClipboardStore.swift`, `docs/architecture.md`.
 
-(To be filled by the team)
+## JSON Stores
 
----
+- Use `JSONFileStore<Value: Codable>` for structured JSON files.
+- Writes must be atomic via `Data.write(..., .atomic)`.
+- Use `load(default:)` for optional/defaulted state and `loadRequired()` only when absence is a hard failure.
+- Keep JSON output pretty-printed and sorted through the existing `JSONFileStore` encoder.
+- Do not hand-roll ad hoc JSON parsing or string replacement for `config.json` or `bookmarks.json`.
 
-## Query Patterns
+## Operation Log
 
-<!-- How should queries be written? Batch operations? -->
+- Use `JSONLineOperationLog` for `operation-log.jsonl`.
+- Append by loading existing records, adding the new record, capping to `maxRecords`, and atomically rewriting the file.
+- The default cap is 500 records. Settings UI currently displays the latest 80 in reverse chronological order.
+- Invalid JSONL lines are ignored by `loadRecent()` through `try?`; do not make the UI fail just because one historical line is corrupt.
 
-(To be filled by the team)
+Reference tests: `Tests/RightToolCoreTests/StorageTests.swift`.
 
----
+## App Group and Fallback Rules
 
-## Migrations
+- Prefer `RightToolStoragePaths.defaultForCurrentProcess()` for production paths.
+- Use `RightToolStoragePaths.appGroup(identifier:)` only when absence should be reported as `StorageError.appGroupContainerUnavailable`.
+- Use `RIGHTTOOL_STORAGE_PATH` only for the ActionRunner process/testing override in `Sources/RightToolActionRunnerService/main.swift`.
+- Default preview configuration may be created by either the app or Finder extension; both must use the same storage path resolution.
 
-<!-- How to create and run migrations -->
+## Config Repair Rules
 
-(To be filled by the team)
+`ConfigurationBootstrapper` is the only place that creates or repairs default config/bookmark state.
 
----
+- Bootstrap must preserve unrelated user configuration.
+- Missing available default bookmarks may be appended.
+- Missing monitored/common IDs for available defaults may be appended.
+- Missing generated directory actions may be appended.
+- Existing sandbox-container bookmark paths must be remapped to the real user home.
+- Bookmark IDs, display names, bookmark data, and timestamps must be preserved during path sanitization.
 
-## Naming Conventions
+Reference tests: `Tests/RightToolCoreTests/ConfigurationBootstrapperTests.swift`.
 
-<!-- Table names, column names, index names -->
+## Anti-Patterns
 
-(To be filled by the team)
-
----
-
-## Common Mistakes
-
-<!-- Database-related mistakes your team has made -->
-
-(To be filled by the team)
+- Do not use `FileManager.homeDirectoryForCurrentUser` as the source of default monitored directories from sandboxed processes; use the bootstrapper's real-home resolution.
+- Do not write storage files directly from child SwiftUI views.
+- Do not remove or reorder unrelated user actions while repairing defaults.
+- Do not introduce a database or migration framework until the JSON contract is proven insufficient.

@@ -1,51 +1,41 @@
 # Logging Guidelines
 
-> How logging is done in this project.
+RightTool has two logging surfaces: durable user operation history and process diagnostics.
 
----
+## Durable Operation History
 
-## Overview
+Use `OperationRecord` plus `JSONLineOperationLog` for user-visible history.
 
-<!--
-Document your project's logging conventions here.
+- Record the `actionID`, `OperationKind`, `OperationRecordStatus`, source paths, destination paths, and a short message.
+- Successful actions are logged by `ActionRunner.log(action:request:result:)`.
+- Failures caught by `ActionRunner.run(_:)` should append a failure record with `kind: .unsupported` when the exact kind is unavailable.
+- Bootstrap writes an initial success record when creating `operation-log.jsonl`.
+- Keep the log capped. The default cap is 500 records.
 
-Questions to answer:
-- What logging library do you use?
-- What are the log levels and when to use each?
-- What should be logged?
-- What should NOT be logged (PII, secrets)?
--->
+Reference files: `Sources/RightToolCore/OperationLogStore.swift`, `ActionRunner.swift`, `ConfigurationBootstrapper.swift`, `Tests/RightToolCoreTests/StorageTests.swift`.
 
-(To be filled by the team)
+## Process Diagnostics
 
----
+Use `NSLog` only at AppKit/Finder process boundaries:
 
-## Log Levels
+- Finder extension bootstrap failure.
+- Finder menu action dispatch without a pending payload tag.
+- XPC action success or failure from the Finder extension.
 
-<!-- When to use each level: debug, info, warn, error -->
+Reference file: `Sources/RightToolFinderExtension/FinderSyncController.swift`.
 
-(To be filled by the team)
+## Shell Script Output
 
----
+Packaging scripts should fail loudly for hard gates and stay best-effort for local PlugInKit enablement.
 
-## Structured Logging
+- Hard gates: unsupported config, invalid Xcode env pairing, missing icon source, invalid Finder extension binary, missing XPC service, deep codesign verification.
+- Best effort: `pluginkit` unavailable or local `pluginkit -a` / `pluginkit -e use` failures.
 
-<!-- Log format, required fields -->
+Reference file: `scripts/package-macos.sh`.
 
-(To be filled by the team)
+## What Not To Log
 
----
-
-## What to Log
-
-<!-- Important events to log -->
-
-(To be filled by the team)
-
----
-
-## What NOT to Log
-
-<!-- Sensitive data, PII, secrets -->
-
-(To be filled by the team)
+- Do not log bookmark data or security-scoped bookmark base64 strings.
+- Do not log full config JSON for normal success paths.
+- Do not add noisy debug prints inside Core services; prefer XCTest assertions.
+- Do not make operation history a debug log sink. It is a user-facing audit trail.
