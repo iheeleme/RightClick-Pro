@@ -2870,7 +2870,7 @@ struct ActionTableHeader: View {
             Text("菜单项").frame(maxWidth: .infinity, alignment: .leading)
             Text("状态").frame(width: 56, alignment: .center)
             Text("适用范围").frame(width: 130, alignment: .leading)
-            Text("菜单层级").frame(width: 90, alignment: .leading)
+            Text("菜单层级").frame(width: 112, alignment: .leading)
             Text("类型").frame(width: 58, alignment: .leading)
             Text("操作").frame(width: 40, alignment: .center)
         }
@@ -2939,7 +2939,7 @@ struct ActionEditorRow: View {
                 .frame(width: 130, alignment: .leading)
 
             ActionPlacementMenu(action: action, viewModel: viewModel)
-                .frame(width: 90, alignment: .leading)
+                .frame(width: 112, alignment: .leading)
 
             ActionTypeBadge(action: action)
                 .frame(width: 58, alignment: .leading)
@@ -3028,37 +3028,23 @@ struct ActionPlacementMenu: View {
     let action: RightToolAction
     @ObservedObject var viewModel: SettingsViewModel
     @State private var isHovered = false
+    @State private var isPresented = false
 
     var body: some View {
-        Menu {
-            Button {
-                viewModel.setActionPlacement(.rootMenu, actionID: action.id)
-            } label: {
-                Label(
-                    "显示在 Finder 一级菜单",
-                    systemImage: action.placement == .rootMenu ? "checkmark.circle.fill" : "menubar.rectangle"
-                )
-            }
-
-            Button {
-                viewModel.setActionPlacement(.submenu, actionID: action.id)
-            } label: {
-                Label(
-                    "放入功能分组菜单",
-                    systemImage: action.placement == .submenu ? "checkmark.circle.fill" : "rectangle.3.group"
-                )
-            }
+        Button {
+            isPresented.toggle()
         } label: {
             HStack(spacing: 6) {
-                Image(systemName: action.placement == .rootMenu ? "menubar.rectangle" : "rectangle.3.group")
-                    .font(.system(size: 11, weight: .semibold))
+                Image(systemName: action.placement.systemImage)
+                    .font(.system(size: 10, weight: .semibold))
                     .foregroundStyle(placementTint)
-                    .frame(width: 14)
+                    .frame(width: 13)
 
                 Text(action.placement.displayName)
-                    .font(.system(size: 11, weight: .semibold))
+                    .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(placementTint)
                     .lineLimit(1)
+                    .minimumScaleFactor(0.92)
 
                 Spacer(minLength: 0)
 
@@ -3078,13 +3064,38 @@ struct ActionPlacementMenu: View {
                     .stroke(isHovered ? placementTint.opacity(0.22) : SettingsTheme.hairline)
             )
             .contentShape(RoundedRectangle(cornerRadius: 7))
-            .onHover { isHovered = $0 }
+            .onHover { hovering in
+                isHovered = action.isEnabled && hovering
+            }
             .animation(.easeOut(duration: 0.12), value: isHovered)
         }
-        .menuStyle(.button)
         .buttonStyle(.plain)
+        .disabled(!action.isEnabled)
         .help("设置 \(action.title) 的菜单层级")
         .accessibilityLabel("设置 \(action.title) 的菜单层级")
+        .popover(isPresented: $isPresented, arrowEdge: .top) {
+            VStack(spacing: 6) {
+                ActionPlacementOptionRow(
+                    placement: .rootMenu,
+                    title: "显示在 Finder 一级菜单",
+                    subtitle: "直接出现在右键菜单中",
+                    isSelected: action.placement == .rootMenu
+                ) {
+                    select(.rootMenu)
+                }
+
+                ActionPlacementOptionRow(
+                    placement: .submenu,
+                    title: "放入功能分组菜单",
+                    subtitle: "归入新建文件、开发者工具等分组",
+                    isSelected: action.placement == .submenu
+                ) {
+                    select(.submenu)
+                }
+            }
+            .padding(8)
+            .frame(width: 252)
+        }
     }
 
     private var placementTint: Color {
@@ -3094,6 +3105,84 @@ struct ActionPlacementMenu: View {
         case .submenu:
             return SettingsTheme.muted
         }
+    }
+
+    private func select(_ placement: ActionPlacement) {
+        guard action.placement != placement else {
+            isPresented = false
+            return
+        }
+        viewModel.setActionPlacement(placement, actionID: action.id)
+        isPresented = false
+    }
+}
+
+struct ActionPlacementOptionRow: View {
+    let placement: ActionPlacement
+    let title: String
+    let subtitle: String
+    let isSelected: Bool
+    let action: () -> Void
+    @State private var isHovered = false
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 10) {
+                Image(systemName: placement.systemImage)
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(iconColor)
+                    .frame(width: 20, height: 20)
+                    .background(iconColor.opacity(isSelected ? 0.13 : 0.08), in: RoundedRectangle(cornerRadius: 5))
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(isSelected ? SettingsTheme.accent : SettingsTheme.ink)
+                        .lineLimit(1)
+
+                    Text(subtitle)
+                        .font(.system(size: 11))
+                        .foregroundStyle(SettingsTheme.muted)
+                        .lineLimit(1)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(isSelected ? SettingsTheme.accent : SettingsTheme.hairline.opacity(0.85))
+                    .frame(width: 16)
+            }
+            .padding(.horizontal, 9)
+            .frame(height: 48)
+            .background(rowBackground, in: RoundedRectangle(cornerRadius: 7))
+            .overlay(
+                RoundedRectangle(cornerRadius: 7)
+                    .stroke(rowStroke)
+            )
+            .contentShape(RoundedRectangle(cornerRadius: 7))
+        }
+        .buttonStyle(.plain)
+        .onHover { isHovered = $0 }
+        .animation(.easeOut(duration: 0.12), value: isHovered)
+        .animation(.easeOut(duration: 0.12), value: isSelected)
+    }
+
+    private var iconColor: Color {
+        isSelected ? SettingsTheme.accent : SettingsTheme.muted
+    }
+
+    private var rowBackground: Color {
+        if isSelected {
+            return SettingsTheme.accent.opacity(0.09)
+        }
+        return isHovered ? SettingsTheme.accent.opacity(0.05) : Color.white.opacity(0.64)
+    }
+
+    private var rowStroke: Color {
+        if isSelected {
+            return SettingsTheme.accent.opacity(0.22)
+        }
+        return isHovered ? SettingsTheme.accent.opacity(0.16) : SettingsTheme.hairline
     }
 }
 
@@ -5270,6 +5359,15 @@ private extension ActionPlacement {
             return "一级菜单"
         case .submenu:
             return "分组菜单"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .rootMenu:
+            return "menubar.rectangle"
+        case .submenu:
+            return "rectangle.3.group"
         }
     }
 }
