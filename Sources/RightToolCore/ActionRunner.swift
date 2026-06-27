@@ -24,7 +24,7 @@ public enum ActionRunnerError: Error, Equatable, LocalizedError {
         case .developerEntrypointNotFound(let id):
             return "找不到开发者入口：\(id)"
         case .emptyClipboard:
-            return "RightTool 剪切板为空"
+            return "RightClick Pro 剪切板为空"
         }
     }
 }

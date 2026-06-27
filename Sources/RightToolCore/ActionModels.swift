@@ -2,8 +2,8 @@ import Foundation
 
 public enum RightToolConstants {
     public static let currentSchemaVersion = 1
-    public static let defaultAppGroupIdentifier = "group.com.righttool.app"
-    public static let defaultXPCServiceName = "com.righttool.app.ActionRunner"
+    public static let defaultAppGroupIdentifier = "group.com.iheeleme.rightclickpro"
+    public static let defaultXPCServiceName = "com.iheeleme.rightclickpro.ActionRunner"
     public static let defaultMaxRootMenuActions = 5
 }
 
@@ -343,6 +343,7 @@ public extension RightToolConstants {
     static let defaultCommandTimeoutSeconds = 60
     static let minimumCommandTimeoutSeconds = 5
     static let maximumCommandTimeoutSeconds = 600
-    static let pendingCommandRunNotificationName = "com.righttool.app.pending-command-run"
-    static let mainAppBundleIdentifier = "com.righttool.app"
+    static let pendingCommandRunNotificationName = "com.iheeleme.rightclickpro.pending-command-run"
+    static let mainAppBundleIdentifier = "com.iheeleme.rightclickpro"
+    static let commandEnvironmentKeychainService = "com.iheeleme.rightclickpro.command-env"
 }

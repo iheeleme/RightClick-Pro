@@ -257,6 +257,7 @@ case .currentDirectory:
 - Packaging command:
   ```bash
   scripts/package-macos.sh <release|debug>
+  RIGHTTOOL_PACKAGE_DMG=1 scripts/package-macos.sh <release|debug>
   ```
 - Finder extension bootstrap before monitored-directory registration:
   ```swift
@@ -276,11 +277,16 @@ case .currentDirectory:
   ```
 - Preview bundle identifiers and entitlements:
   ```text
-  BUNDLE_IDENTIFIER=com.righttool.app
-  XPC_BUNDLE_IDENTIFIER=com.righttool.app.ActionRunner
-  FINDER_EXTENSION_BUNDLE_IDENTIFIER=com.righttool.app.FinderExtension
-  APP_GROUP_IDENTIFIER=group.com.righttool.app
+  APP_NAME=RightClick Pro
+  BUNDLE_IDENTIFIER=com.iheeleme.rightclickpro
+  XPC_BUNDLE_IDENTIFIER=com.iheeleme.rightclickpro.ActionRunner
+  FINDER_EXTENSION_BUNDLE_IDENTIFIER=com.iheeleme.rightclickpro.FinderExtension
+  APP_GROUP_IDENTIFIER=group.com.iheeleme.rightclickpro
   CODE_SIGN_IDENTITY=-
+  ```
+- Manual workflow input:
+  ```yaml
+  package_dmg: true | false
   ```
 - Preview app and Finder extension entitlements include app sandbox, App Group, user-selected read/write, and app-scope bookmarks.
 - Preview ActionRunner XPC entitlements include App Group but intentionally omit app sandbox for local smoke tests against auto-injected Desktop/Documents/Downloads/Code paths. Runtime authorization must still validate all file mutations against configured monitored/common directories.
@@ -289,6 +295,7 @@ case .currentDirectory:
 
 - GitHub workflow must use explicit macOS runner labels, not `macos-latest`, to avoid packaging drift when GitHub changes aliases.
 - The default packaging path is SwiftPM preview bundling while no complete Xcode project exists.
+- The SwiftPM preview app bundle's user-facing name is `RightClick Pro.app`; Swift target/module/type names may still use `RightTool*` during the current development phase.
 - The SwiftPM preview bundle must still include `Contents/PlugIns/RightToolFinderExtension.appex`.
 - The preview bundle must place `RightToolActionRunner.xpc` in `Contents/XPCServices/` and also inside `RightToolFinderExtension.appex/Contents/XPCServices/` so `NSXPCConnection(serviceName:)` can resolve the service from the main app and the Finder extension process.
 - The preview Finder Sync `.appex` must be a Mach-O `EXECUTE` binary linked with `_NSExtensionMain`; a Swift dylib inside an `.appex` is not a valid Finder Sync extension bundle for PlugInKit discovery.
@@ -304,15 +311,22 @@ case .currentDirectory:
 - For local preview smoke tests, the packaging script should explicitly register the just-built `.appex` path with `pluginkit -a` before applying `pluginkit -e use`; enabling by identifier alone only affects already-discovered extension records and may miss reinstalls.
 - When both `RIGHTTOOL_XCODE_PROJECT` and `RIGHTTOOL_XCODE_SCHEME` are configured, packaging must use `xcodebuild archive`.
 - If only one Xcode variable is configured, packaging must fail instead of silently falling back to SwiftPM preview output.
-- Artifacts are written to `dist/*.zip`.
+- Zip artifacts are written to `dist/RightClick Pro-<version>-<arch>-preview.zip`.
+- `RIGHTTOOL_PACKAGE_DMG=1` creates an additional compressed read-only `UDZO` artifact at `dist/RightClick Pro-<version>-<arch>-preview.dmg`.
+- DMG contents must include `RightClick Pro.app`, an `/Applications` alias, and `README.txt`.
+- `README.txt` must cover drag-to-Applications installation, the non-Developer-ID/non-notarized warning, Finder Extension enablement, and the `killall Finder` fallback.
+- `RIGHTTOOL_PACKAGE_DMG=1` is supported only on the SwiftPM preview bundle path until the Xcode archive/export path has a concrete `.app` output contract.
 - The current default artifacts are non-notarized test builds. Developer ID signing/notarization requires a separate secrets/keychain flow.
 
 #### 4. Validation & Error Matrix
 
 - Unsupported configuration argument -> exit 64.
+- Unsupported `RIGHTTOOL_PACKAGE_DMG` value -> exit 64.
 - Only one of `RIGHTTOOL_XCODE_PROJECT` / `RIGHTTOOL_XCODE_SCHEME` is set -> exit 64.
+- `RIGHTTOOL_PACKAGE_DMG=1` with a configured Xcode archive path -> exit 64 before archive.
 - `RIGHTTOOL_XCODE_PROJECT` path is missing -> exit 66.
 - No Xcode variables are set -> build SwiftPM preview bundle.
+- `RIGHTTOOL_PACKAGE_DMG=1` and `hdiutil` is unavailable -> exit 69.
 - Preview Finder Sync binary is not `EXECUTE` -> exit 65.
 - Preview Finder Sync extension point is not `com.apple.FinderSync` -> exit 65.
 - Finder extension starts before config/bookmark files exist -> bootstrap creates defaults before assigning `directoryURLs`.
@@ -325,16 +339,20 @@ case .currentDirectory:
 - `pluginkit` unavailable on the runner -> skip registration/enablement without failing packaging.
 - `pluginkit -a` or `pluginkit -e use` fails during local preview enablement -> do not fail packaging; the bundle validation remains the hard gate.
 - No `dist/*.zip` output in GitHub Actions -> artifact upload must fail.
+- DMG smoke mount lacks `RightClick Pro.app`, `Applications`, or `README.txt` -> exit 65.
 
 #### 5. Good/Base/Bad Cases
 
-- Good: tag `v1.2.3` produces `RightTool-1.2.3-<arch>-preview.zip` containing `RightToolFinderExtension.appex` as an `_NSExtensionMain` executable, or an exported Xcode archive artifact.
+- Good: tag `v1.2.3` produces `RightClick Pro-1.2.3-<arch>-preview.zip` containing `RightToolFinderExtension.appex` as an `_NSExtensionMain` executable, or an exported Xcode archive artifact.
+- Good: `RIGHTTOOL_PACKAGE_DMG=1 scripts/package-macos.sh debug` produces zip plus `RightClick Pro-<version>-<arch>-preview.dmg`, then mounts the DMG and verifies the app, Applications alias, and README.
 - Good: Finder starts the extension before the app has opened; the extension bootstraps config/bookmarks and assigns real-home Desktop/Downloads/Documents/Code URLs to `directoryURLs`.
 - Good: an older install has Desktop/Downloads/Documents only and `~/Code` exists; bootstrap appends the `code` bookmark, monitors it, and adds `open-directory-code`, `move-to-code`, and `copy-to-code`.
-- Good: rebuilding/reinstalling a local preview registers the new `RightToolFinderExtension.appex` path, then enables `com.righttool.app.FinderExtension`.
+- Good: rebuilding/reinstalling a local preview registers the new `RightToolFinderExtension.appex` path, then enables `com.iheeleme.rightclickpro.FinderExtension`.
 - Base: manual workflow dispatch with no Xcode env vars produces a SwiftPM preview bundle with App, app-local XPC service, extension-local XPC service, Finder extension, and shared core dylib.
-- Bad: bootstrap writes `~/Library/Containers/com.righttool.app/Data/Desktop` as a monitored directory, so the Finder menu never appears on the user's real Desktop.
-- Bad: the packaging script only runs `pluginkit -e use -i com.righttool.app.FinderExtension`; after reinstall, PlugInKit may still know only an old or missing physical extension path.
+- Base: manual workflow dispatch with `package_dmg=false` uploads only zip output in a clean runner workspace.
+- Bad: bootstrap writes `~/Library/Containers/com.iheeleme.rightclickpro/Data/Desktop` as a monitored directory, so the Finder menu never appears on the user's real Desktop.
+- Bad: the packaging script only runs `pluginkit -e use -i com.iheeleme.rightclickpro.FinderExtension`; after reinstall, PlugInKit may still know only an old or missing physical extension path.
+- Bad: workflow upload glob includes `.dmg` but the runner workspace contains a stale DMG from an unrelated previous build.
 - Bad: `RIGHTTOOL_XCODE_PROJECT` set without `RIGHTTOOL_XCODE_SCHEME` silently falls back to preview bundling.
 - Bad: preview bundle contains `Contents/PlugIns/RightToolFinderExtension.appex` but the appex executable is a `DYLIB`.
 
@@ -355,11 +373,13 @@ case .currentDirectory:
 - Run preview package validation:
   ```bash
   scripts/package-macos.sh debug
-  codesign --verify --deep --strict --verbose=2 dist/staging/RightTool.app
-  otool -hv dist/staging/RightTool.app/Contents/PlugIns/RightToolFinderExtension.appex/Contents/MacOS/RightToolFinderExtension
-  test -x dist/staging/RightTool.app/Contents/XPCServices/RightToolActionRunner.xpc/Contents/MacOS/RightToolActionRunner
-  test -x dist/staging/RightTool.app/Contents/PlugIns/RightToolFinderExtension.appex/Contents/XPCServices/RightToolActionRunner.xpc/Contents/MacOS/RightToolActionRunner
-  codesign -d --entitlements :- dist/staging/RightTool.app/Contents/PlugIns/RightToolFinderExtension.appex/Contents/XPCServices/RightToolActionRunner.xpc
+  RIGHTTOOL_PACKAGE_DMG=1 scripts/package-macos.sh debug
+  codesign --verify --deep --strict --verbose=2 "dist/staging/RightClick Pro.app"
+  otool -hv "dist/staging/RightClick Pro.app/Contents/PlugIns/RightToolFinderExtension.appex/Contents/MacOS/RightToolFinderExtension"
+  test -x "dist/staging/RightClick Pro.app/Contents/XPCServices/RightToolActionRunner.xpc/Contents/MacOS/RightToolActionRunner"
+  test -x "dist/staging/RightClick Pro.app/Contents/PlugIns/RightToolFinderExtension.appex/Contents/XPCServices/RightToolActionRunner.xpc/Contents/MacOS/RightToolActionRunner"
+  codesign -d --entitlements :- "dist/staging/RightClick Pro.app/Contents/PlugIns/RightToolFinderExtension.appex/Contents/XPCServices/RightToolActionRunner.xpc"
+  hdiutil imageinfo "dist/RightClick Pro-<version>-<arch>-preview.dmg"
   ```
 - Run Swift type checks or `swift test` where the local toolchain allows it.
 - For future Xcode project work, run at least one GitHub Actions workflow dispatch before calling packaging complete.
@@ -386,6 +406,16 @@ Correct:
 RIGHTTOOL_XCODE_PROJECT=RightTool.xcodeproj \
 RIGHTTOOL_XCODE_SCHEME=RightTool \
 scripts/package-macos.sh release
+```
+
+Wrong:
+```bash
+RIGHTTOOL_PACKAGE_DMG=true scripts/package-macos.sh debug
+```
+
+Correct:
+```bash
+RIGHTTOOL_PACKAGE_DMG=1 scripts/package-macos.sh debug
 ```
 
 Wrong:
@@ -445,7 +475,7 @@ Correct:
 ```xml
 <key>com.apple.security.application-groups</key>
 <array>
-  <string>group.com.righttool.app</string>
+  <string>group.com.iheeleme.rightclickpro</string>
 </array>
 ```
 for the preview ActionRunner XPC entitlement file, with path authorization enforced in `ActionRunner`.

@@ -1,6 +1,6 @@
-# RightTool Architecture
+# RightClick Pro Architecture
 
-RightTool is split into a lightweight Finder Sync extension and a user-level XPC ActionRunner.
+RightClick Pro is split into a lightweight Finder Sync extension and a user-level XPC ActionRunner. Swift target/module names still use `RightTool*` during the current development phase.
 
 ```text
 Finder
@@ -32,10 +32,10 @@ Config writes use atomic file replacement via `Data.write(..., .atomic)`. Operat
 Unsigned/local preview builds may not have an App Group entitlement. In that case, the runtime falls back to:
 
 ```text
-~/Library/Application Support/com.righttool.app
+~/Library/Application Support/com.iheeleme.rightclickpro
 ```
 
-On machines where `group.com.righttool.app` is available, the app writes default preview configuration there. The bootstrapper injects existing Desktop, Downloads, Documents, and Code directories as monitored/common directories.
+On machines where `group.com.iheeleme.rightclickpro` is available, the app writes default preview configuration there. The bootstrapper injects existing Desktop, Downloads, Documents, and Code directories as monitored/common directories.
 
 ## Authorization Model
 
@@ -48,7 +48,7 @@ Finder Sync copies menu items through Finder before dispatching the selected com
 The current development machine has Swift Command Line Tools but no full Xcode installation selected, so SwiftPM tests cover the core module. The preview packaging script manually embeds:
 
 ```text
-RightTool.app
+RightClick Pro.app
 ├── Contents/PlugIns/RightToolFinderExtension.appex
 │   └── Contents/XPCServices/RightToolActionRunner.xpc
 └── Contents/XPCServices/RightToolActionRunner.xpc

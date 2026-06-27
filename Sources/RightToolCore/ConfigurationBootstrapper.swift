@@ -73,7 +73,7 @@ public struct ConfigurationBootstrapper {
                     kind: .unsupported,
                     status: .success,
                     destinationPaths: [paths.baseURL.path],
-                    message: "RightTool 默认配置已自动注入"
+                    message: "RightClick Pro 默认配置已自动注入"
                 )
             )
         }

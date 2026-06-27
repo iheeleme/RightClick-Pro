@@ -58,7 +58,7 @@ final class FinderSyncController: FIFinderSync {
         do {
             _ = try ConfigurationBootstrapper().bootstrap(paths: paths)
         } catch {
-            NSLog("RightTool Finder extension bootstrap failed: \(error.localizedDescription)")
+            NSLog("RightClick Pro Finder extension bootstrap failed: \(error.localizedDescription)")
         }
     }
 
@@ -107,10 +107,10 @@ final class FinderSyncController: FIFinderSync {
     @objc(performRightToolAction:)
     func performRightToolAction(_ sender: NSMenuItem) {
         guard let pending = pendingMenuActions[sender.tag] else {
-            NSLog("RightTool Finder extension received menu action without pending payload for tag: \(sender.tag)")
+            NSLog("RightClick Pro Finder extension received menu action without pending payload for tag: \(sender.tag)")
             return
         }
-        NSLog("RightTool Finder extension performing action: \(pending.actionID)")
+        NSLog("RightClick Pro Finder extension performing action: \(pending.actionID)")
         let request = ActionRequest(actionID: pending.actionID, context: pending.context)
         sendToActionRunner(request)
     }
@@ -123,9 +123,9 @@ final class FinderSyncController: FIFinderSync {
         xpcClient.perform(request) { result in
             switch result {
             case .success(let actionResult):
-                NSLog("RightTool ActionRunner result for \(request.actionID): \(actionResult.status.rawValue) \(actionResult.message)")
+                NSLog("RightClick Pro ActionRunner result for \(request.actionID): \(actionResult.status.rawValue) \(actionResult.message)")
             case .failure(let error):
-                NSLog("RightTool ActionRunner failed for \(request.actionID): \(error.localizedDescription)")
+                NSLog("RightClick Pro ActionRunner failed for \(request.actionID): \(error.localizedDescription)")
             }
         }
     }
@@ -150,23 +150,23 @@ final class FinderSyncController: FIFinderSync {
                 object: nil
             )
             launchMainAppForCommandWindow()
-            NSLog("RightTool queued command template for main app: \(request.actionID)")
+            NSLog("RightClick Pro queued command template for main app: \(request.actionID)")
         } catch {
-            NSLog("RightTool failed to queue command template \(request.actionID): \(error.localizedDescription)")
+            NSLog("RightClick Pro failed to queue command template \(request.actionID): \(error.localizedDescription)")
         }
         return true
     }
 
     private func launchMainAppForCommandWindow() {
         guard let appURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: RightToolConstants.mainAppBundleIdentifier) else {
-            NSLog("RightTool main app bundle not found: \(RightToolConstants.mainAppBundleIdentifier)")
+            NSLog("RightClick Pro main app bundle not found: \(RightToolConstants.mainAppBundleIdentifier)")
             return
         }
         let configuration = NSWorkspace.OpenConfiguration()
         configuration.activates = true
         NSWorkspace.shared.openApplication(at: appURL, configuration: configuration) { _, error in
             if let error {
-                NSLog("RightTool failed to open main app: \(error.localizedDescription)")
+                NSLog("RightClick Pro failed to open main app: \(error.localizedDescription)")
             }
         }
     }

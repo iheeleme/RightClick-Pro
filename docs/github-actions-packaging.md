@@ -1,6 +1,6 @@
 # GitHub Actions Packaging
 
-RightTool uses `.github/workflows/package-macos.yml` to build and upload macOS artifacts from GitHub Actions.
+RightClick Pro uses `.github/workflows/package-macos.yml` to build and upload macOS artifacts from GitHub Actions.
 
 ## What the Workflow Does
 
@@ -19,13 +19,14 @@ Use manual dispatch with:
 ```text
 version=0.1.0-test.1
 configuration=release
+package_dmg=false
 ```
 
 The uploaded artifacts will be named like:
 
 ```text
-RightTool-arm64-0.1.0-test.1
-RightTool-x86_64-0.1.0-test.1
+RightClick Pro-arm64-0.1.0-test.1
+RightClick Pro-x86_64-0.1.0-test.1
 ```
 
 ## Current Artifact
@@ -33,14 +34,14 @@ RightTool-x86_64-0.1.0-test.1
 The repository currently has a Swift Package scaffold, not a complete Xcode `.app` project. Because of that, the workflow produces a SwiftPM preview bundle:
 
 ```text
-dist/RightTool-<version>-<arch>-preview.zip
+dist/RightClick Pro-<version>-<arch>-preview.zip
 ```
 
 The preview bundle contains:
 
 ```text
-RightTool.app
-├── Contents/MacOS/RightTool
+RightClick Pro.app
+├── Contents/MacOS/RightClick Pro
 ├── Contents/PlugIns/RightToolFinderExtension.appex
 │   └── Contents/XPCServices/RightToolActionRunner.xpc
 ├── Contents/XPCServices/RightToolActionRunner.xpc
@@ -51,6 +52,39 @@ RightTool.app
 The Finder Sync extension is manually linked with `_NSExtensionMain` so PlugInKit can discover it during local testing. The ActionRunner XPC service is embedded in both the app and the Finder extension bundle so `NSXPCConnection(serviceName:)` can resolve it from either process. The bundle is ad-hoc signed when `codesign` is available, but it is not Developer ID signed or notarized. Downloaded builds may still require removing quarantine before local testing.
 
 The preview app and Finder Sync extension are sandboxed and include App Group, user-selected read/write, and app-scope bookmark entitlements. The preview ActionRunner XPC service is signed with the App Group entitlement but without app sandboxing so local smoke tests can exercise the auto-injected Desktop/Documents/Downloads/Code directories. Runtime authorization still rejects paths outside the configured monitored/common directory set.
+
+Default identifiers for the current preview distribution are:
+
+```text
+BUNDLE_IDENTIFIER=com.iheeleme.rightclickpro
+XPC_BUNDLE_IDENTIFIER=com.iheeleme.rightclickpro.ActionRunner
+FINDER_EXTENSION_BUNDLE_IDENTIFIER=com.iheeleme.rightclickpro.FinderExtension
+APP_GROUP_IDENTIFIER=group.com.iheeleme.rightclickpro
+```
+
+## Internal DMG
+
+DMG packaging is opt-in for internal/self-test distribution:
+
+```bash
+RIGHTTOOL_PACKAGE_DMG=1 scripts/package-macos.sh release
+```
+
+The script still creates the zip and also writes:
+
+```text
+dist/RightClick Pro-<version>-<arch>-preview.dmg
+```
+
+The DMG is compressed read-only `UDZO` and contains:
+
+```text
+RightClick Pro.app
+Applications -> /Applications
+README.txt
+```
+
+`README.txt` covers drag-to-Applications installation, the non-Developer-ID/non-notarized warning, Finder Extension enablement, and the `killall Finder` fallback when the right-click menu does not appear. The packaging script mounts the DMG after creation and validates those three entries before it succeeds.
 
 ## Switching to Full Xcode Packaging
 

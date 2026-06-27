@@ -156,7 +156,7 @@ public protocol CommandSecretStoring {
 public final class KeychainCommandSecretStore: CommandSecretStoring {
     private let service: String
 
-    public init(service: String = "com.righttool.app.command-env") {
+    public init(service: String = RightToolConstants.commandEnvironmentKeychainService) {
         self.service = service
     }
 

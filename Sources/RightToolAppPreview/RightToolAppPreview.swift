@@ -9,11 +9,11 @@ struct RightToolAppPreview: App {
     @StateObject private var viewModel = SettingsViewModel.bootstrap()
 
     var body: some Scene {
-        MenuBarExtra("RightTool", systemImage: "contextualmenu.and.cursorarrow") {
+        MenuBarExtra("RightClick Pro", systemImage: "contextualmenu.and.cursorarrow") {
             MenuBarContentView(viewModel: viewModel)
         }
 
-        Window("RightTool 设置", id: "settings") {
+        Window("RightClick Pro 设置", id: "settings") {
             SettingsRootView(viewModel: viewModel)
                 .frame(minWidth: 1180, idealWidth: 1448, maxWidth: .infinity, minHeight: 760, idealHeight: 980, maxHeight: .infinity)
         }
@@ -253,6 +253,50 @@ final class SettingsViewModel: NSObject, ObservableObject {
             setStatus("配置已保存，重新打开 Finder 右键菜单后生效", tone: .success)
         } catch {
             setStatus("保存失败：\(error.localizedDescription)", tone: .error)
+        }
+    }
+
+    func openFinderExtensionSettings() {
+        guard let url = URL(string: "x-apple.systempreferences:com.apple.ExtensionsPreferences?extensionPointIdentifier=com.apple.FinderSync") else {
+            setStatus("无法打开 Finder 扩展设置，请手动前往系统设置 > 隐私与安全性 > 扩展", tone: .error)
+            return
+        }
+
+        if NSWorkspace.shared.open(url) {
+            setStatus("已打开系统设置，请启用 RightClick Pro Finder Extension", tone: .neutral)
+        } else {
+            setStatus("无法打开系统设置，请手动前往隐私与安全性 > 扩展 > Finder 扩展", tone: .warning)
+        }
+    }
+
+    func restartFinder() {
+        setStatus("正在重启 Finder，Finder 窗口会短暂关闭并重新打开", tone: .warning)
+
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: "/usr/bin/killall")
+            process.arguments = ["Finder"]
+
+            let message: String
+            let tone: StatusTone
+            do {
+                try process.run()
+                process.waitUntilExit()
+                if process.terminationStatus == 0 {
+                    message = "Finder 已重启，请重新打开右键菜单检查扩展入口"
+                    tone = .success
+                } else {
+                    message = "重启 Finder 失败，请在终端手动运行 killall Finder"
+                    tone = .error
+                }
+            } catch {
+                message = "重启 Finder 失败：\(error.localizedDescription)"
+                tone = .error
+            }
+
+            DispatchQueue.main.async {
+                self?.setStatus(message, tone: tone)
+            }
         }
     }
 
@@ -1493,7 +1537,7 @@ final class CommandRunViewModel: ObservableObject {
     private func requestWorkingDirectoryAuthorization(for directory: URL) -> URL? {
         let panel = NSOpenPanel()
         panel.title = "授权命令工作目录"
-        panel.message = "RightTool 需要访问该目录后才能在里面运行命令：\(directory.path)"
+        panel.message = "RightClick Pro 需要访问该目录后才能在里面运行命令：\(directory.path)"
         panel.prompt = "授权并运行"
         panel.canChooseFiles = false
         panel.canChooseDirectories = true
@@ -1688,7 +1732,7 @@ final class CommandRunWindowCoordinator {
             backing: .buffered,
             defer: false
         )
-        window.title = "RightTool 命令运行"
+        window.title = "RightClick Pro 命令运行"
         window.isReleasedWhenClosed = false
         window.backgroundColor = SettingsTheme.windowBackgroundColor
         window.contentViewController = NSHostingController(rootView: view)
@@ -1792,7 +1836,7 @@ struct MenuBarContentView: View {
             openSettings(section: .onboarding)
         }
         Divider()
-        Button("退出 RightTool") {
+        Button("退出 RightClick Pro") {
             NSApplication.shared.terminate(nil)
         }
     }
@@ -2863,6 +2907,8 @@ struct OnboardingView: View {
 
     var body: some View {
         OverviewPageScroll {
+            FinderExtensionSetupBanner(viewModel: viewModel)
+
             HStack(alignment: .top, spacing: 40) {
                 VStack(alignment: .leading, spacing: 16) {
                     Text("功能总览")
@@ -2959,6 +3005,54 @@ struct OnboardingView: View {
             FinderMenuItem(title: "剪切 / 粘贴文件", systemImage: "scissors", tint: SettingsTheme.accent, hasSubmenu: true),
             FinderMenuItem(title: "新建文件", systemImage: "doc", tint: SettingsTheme.accent, hasSubmenu: true)
         ]
+    }
+}
+
+struct FinderExtensionSetupBanner: View {
+    @ObservedObject var viewModel: SettingsViewModel
+
+    var body: some View {
+        DesignPanel {
+            HStack(alignment: .center, spacing: 16) {
+                IconBadge(systemImage: "puzzlepiece.extension", tint: .orange)
+
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("启用 Finder 扩展")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(SettingsTheme.ink)
+                    Text("在系统设置里启用 RightClick Pro Finder Extension；如果菜单仍未出现，重启 Finder 会短暂关闭并重新打开 Finder 窗口。")
+                        .font(.system(size: 12))
+                        .foregroundStyle(SettingsTheme.muted)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .layoutPriority(1)
+
+                Spacer(minLength: 12)
+
+                HStack(spacing: 10) {
+                    Button {
+                        viewModel.openFinderExtensionSettings()
+                    } label: {
+                        Label("打开扩展设置", systemImage: "gearshape")
+                            .frame(minWidth: 112)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
+                    .help("打开系统设置中的 Finder 扩展页面")
+
+                    Button {
+                        viewModel.restartFinder()
+                    } label: {
+                        Label("重启 Finder", systemImage: "arrow.clockwise")
+                            .frame(minWidth: 96)
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.large)
+                    .help("会短暂关闭并重新打开 Finder 窗口")
+                }
+                .fixedSize(horizontal: true, vertical: false)
+            }
+        }
     }
 }
 
@@ -5292,7 +5386,7 @@ struct CommandMenuPreviewPanel: View {
                 Text("实时命令窗口")
                     .font(.headline)
                     .foregroundStyle(SettingsTheme.ink)
-                Text("从 Finder 右键触发后，RightTool 会自动打开实时输出窗口。")
+                Text("从 Finder 右键触发后，RightClick Pro 会自动打开实时输出窗口。")
                     .font(.callout)
                     .foregroundStyle(SettingsTheme.muted)
                     .fixedSize(horizontal: false, vertical: true)

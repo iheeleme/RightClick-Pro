@@ -26,7 +26,7 @@ public struct RightToolStoragePaths: Equatable {
 
     public static func applicationSupport(
         fileManager: FileManager = .default,
-        bundleIdentifier: String = "com.righttool.app"
+        bundleIdentifier: String = RightToolConstants.mainAppBundleIdentifier
     ) -> RightToolStoragePaths {
         let baseURL = fileManager.homeDirectoryForCurrentUser
             .appendingPathComponent("Library")

@@ -31,7 +31,7 @@ final class ConfigurationBootstrapperTests: XCTestCase {
         let processHome = baseDirectory
             .appendingPathComponent("Library")
             .appendingPathComponent("Containers")
-            .appendingPathComponent("com.righttool.app")
+            .appendingPathComponent(RightToolConstants.mainAppBundleIdentifier)
             .appendingPathComponent("Data")
         let realHome = baseDirectory.appendingPathComponent("real-home")
         try FileManager.default.createDirectory(
@@ -63,7 +63,7 @@ final class ConfigurationBootstrapperTests: XCTestCase {
         let processHome = baseDirectory
             .appendingPathComponent("Library")
             .appendingPathComponent("Containers")
-            .appendingPathComponent("com.righttool.app")
+            .appendingPathComponent(RightToolConstants.mainAppBundleIdentifier)
             .appendingPathComponent("Data")
         let realHome = baseDirectory.appendingPathComponent("real-home")
         let createdAt = Date(timeIntervalSince1970: 100)
@@ -113,7 +113,7 @@ final class ConfigurationBootstrapperTests: XCTestCase {
         let processHome = baseDirectory
             .appendingPathComponent("Library")
             .appendingPathComponent("Containers")
-            .appendingPathComponent("com.righttool.app")
+            .appendingPathComponent(RightToolConstants.mainAppBundleIdentifier)
             .appendingPathComponent("Data")
         let realHome = baseDirectory.appendingPathComponent("real-home")
         let desktop = realHome.appendingPathComponent("Desktop")

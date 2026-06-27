@@ -2,23 +2,32 @@
 set -euo pipefail
 
 CONFIGURATION="${1:-release}"
-APP_NAME="${APP_NAME:-RightTool}"
-BUNDLE_IDENTIFIER="${BUNDLE_IDENTIFIER:-com.righttool.app}"
-XPC_BUNDLE_IDENTIFIER="${XPC_BUNDLE_IDENTIFIER:-com.righttool.app.ActionRunner}"
-FINDER_EXTENSION_BUNDLE_IDENTIFIER="${FINDER_EXTENSION_BUNDLE_IDENTIFIER:-com.righttool.app.FinderExtension}"
-APP_GROUP_IDENTIFIER="${APP_GROUP_IDENTIFIER:-group.com.righttool.app}"
+APP_NAME="${APP_NAME:-RightClick Pro}"
+BUNDLE_IDENTIFIER="${BUNDLE_IDENTIFIER:-com.iheeleme.rightclickpro}"
+XPC_BUNDLE_IDENTIFIER="${XPC_BUNDLE_IDENTIFIER:-com.iheeleme.rightclickpro.ActionRunner}"
+FINDER_EXTENSION_BUNDLE_IDENTIFIER="${FINDER_EXTENSION_BUNDLE_IDENTIFIER:-com.iheeleme.rightclickpro.FinderExtension}"
+APP_GROUP_IDENTIFIER="${APP_GROUP_IDENTIFIER:-group.com.iheeleme.rightclickpro}"
 CODE_SIGN_IDENTITY="${CODE_SIGN_IDENTITY:--}"
 ARTIFACT_SUFFIX="${ARTIFACT_SUFFIX:-$(uname -m)}"
 DIST_DIR="${DIST_DIR:-dist}"
 DERIVED_DATA_PATH="${DERIVED_DATA_PATH:-DerivedData}"
 APP_ICON_SOURCE="${APP_ICON_SOURCE:-design/icon.png}"
 APP_ICON_NAME="${APP_ICON_NAME:-RightToolIcon}"
+RIGHTTOOL_PACKAGE_DMG="${RIGHTTOOL_PACKAGE_DMG:-0}"
 PACKAGED_FINDER_EXTENSION_PATH=""
 
 case "$CONFIGURATION" in
   release|debug) ;;
   *)
     echo "Unsupported configuration: $CONFIGURATION" >&2
+    exit 64
+    ;;
+esac
+
+case "$RIGHTTOOL_PACKAGE_DMG" in
+  0|1) ;;
+  *)
+    echo "Unsupported RIGHTTOOL_PACKAGE_DMG value: $RIGHTTOOL_PACKAGE_DMG. Use 1 to build a DMG." >&2
     exit 64
     ;;
 esac
@@ -172,7 +181,7 @@ write_finder_extension_info_plist() {
   <key>CFBundleDevelopmentRegion</key>
   <string>en</string>
   <key>CFBundleDisplayName</key>
-  <string>RightTool Finder Extension</string>
+  <string>$APP_NAME Finder Extension</string>
   <key>CFBundleExecutable</key>
   <string>RightToolFinderExtension</string>
   <key>CFBundleIdentifier</key>
@@ -463,6 +472,96 @@ validate_preview_bundle() {
   fi
 }
 
+write_dmg_readme() {
+  local readme_path="$1"
+  cat > "$readme_path" <<README
+${APP_NAME} 内测构建
+
+安装方式
+1. 将 "${APP_NAME}.app" 拖到 Applications。
+2. 从 Applications 打开 ${APP_NAME}。
+
+安全提示
+这个构建用于自用/内测分发，未使用 Developer ID 签名，也未公证。
+如果 macOS 阻止打开，可以到 系统设置 > 隐私与安全性 中允许打开；
+也可以在 Finder 中右键 "${APP_NAME}.app"，选择“打开”，再确认打开。
+
+启用 Finder Extension
+1. 打开 ${APP_NAME}。
+2. 前往 系统设置 > 隐私与安全性 > 扩展 > Finder 扩展。
+3. 启用 "${APP_NAME} Finder Extension"。
+
+如果 Finder 右键菜单没有出现
+1. 确认 Finder 扩展已启用。
+2. 重新打开 Finder 右键菜单。
+3. 如仍未出现，重启 Finder：
+   killall Finder
+
+技术信息
+App Bundle ID: ${BUNDLE_IDENTIFIER}
+Finder Extension Bundle ID: ${FINDER_EXTENSION_BUNDLE_IDENTIFIER}
+App Group: ${APP_GROUP_IDENTIFIER}
+README
+}
+
+smoke_test_dmg() {
+  local dmg_path="$1"
+  local mount_dir="$PWD/$DIST_DIR/dmg-smoke-mount"
+
+  rm -rf "$mount_dir"
+  mkdir -p "$mount_dir"
+
+  hdiutil attach "$dmg_path" -readonly -nobrowse -mountpoint "$mount_dir" >/dev/null
+
+  local status=0
+  if [[ ! -d "$mount_dir/$APP_NAME.app" ]]; then
+    echo "DMG smoke test failed: missing $APP_NAME.app" >&2
+    status=65
+  fi
+  if [[ ! -L "$mount_dir/Applications" ]]; then
+    echo "DMG smoke test failed: missing Applications alias" >&2
+    status=65
+  fi
+  if [[ ! -f "$mount_dir/README.txt" ]]; then
+    echo "DMG smoke test failed: missing README.txt" >&2
+    status=65
+  fi
+
+  hdiutil detach "$mount_dir" >/dev/null || hdiutil detach "$mount_dir" -force >/dev/null
+  rm -rf "$mount_dir"
+
+  if [[ "$status" -ne 0 ]]; then
+    exit "$status"
+  fi
+}
+
+package_preview_dmg() {
+  local app_path="$1"
+  local dmg_root="$PWD/$DIST_DIR/dmg-root"
+  local dmg_path="$PWD/$DIST_DIR/$APP_NAME-$(version_name)-$ARTIFACT_SUFFIX-preview.dmg"
+
+  if ! command -v hdiutil >/dev/null 2>&1; then
+    echo "hdiutil is required to build a DMG." >&2
+    exit 69
+  fi
+
+  rm -rf "$dmg_root" "$dmg_path"
+  mkdir -p "$dmg_root"
+
+  ditto "$app_path" "$dmg_root/$APP_NAME.app"
+  ln -s /Applications "$dmg_root/Applications"
+  write_dmg_readme "$dmg_root/README.txt"
+
+  hdiutil create \
+    -volname "$APP_NAME" \
+    -srcfolder "$dmg_root" \
+    -format UDZO \
+    -ov \
+    "$dmg_path" >/dev/null
+
+  smoke_test_dmg "$dmg_path"
+}
+
 package_swiftpm_preview_bundle() {
   local staging="$PWD/$DIST_DIR/staging"
   local app_path="$staging/$APP_NAME.app"
@@ -498,8 +597,8 @@ package_swiftpm_preview_bundle() {
   build_finder_extension_bundle "$manual_build_dir/core" "$appex_path"
   ditto "$xpc_path" "$appex_xpc_path"
 
-  cat > "$app_path/Contents/Resources/PACKAGING-NOTES.txt" <<'NOTES'
-RightTool SwiftPM preview bundle.
+  cat > "$app_path/Contents/Resources/PACKAGING-NOTES.txt" <<NOTES
+${APP_NAME} SwiftPM preview bundle.
 
 This artifact is useful for validating the menu-bar app scaffold and embedded
 ActionRunner binary. It includes a manually packaged Finder Sync .appex for
@@ -514,6 +613,9 @@ NOTES
 
   mkdir -p "$DIST_DIR"
   ditto -c -k --keepParent "$app_path" "$DIST_DIR/$APP_NAME-$(version_name)-$ARTIFACT_SUFFIX-preview.zip"
+  if [[ "$RIGHTTOOL_PACKAGE_DMG" == "1" ]]; then
+    package_preview_dmg "$app_path"
+  fi
   PACKAGED_FINDER_EXTENSION_PATH="$appex_path"
 }
 
@@ -529,6 +631,11 @@ enable_finder_extension() {
 
   pluginkit -e use -i "$FINDER_EXTENSION_BUNDLE_IDENTIFIER" >/dev/null 2>&1 || true
 }
+
+if [[ "$RIGHTTOOL_PACKAGE_DMG" == "1" && -n "${RIGHTTOOL_XCODE_PROJECT:-}" && -n "${RIGHTTOOL_XCODE_SCHEME:-}" ]]; then
+  echo "RIGHTTOOL_PACKAGE_DMG=1 is only supported for the SwiftPM preview bundle path." >&2
+  exit 64
+fi
 
 if ! package_xcode_archive_if_configured; then
   package_swiftpm_preview_bundle
