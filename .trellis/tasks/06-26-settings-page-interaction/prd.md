@@ -61,16 +61,16 @@
 
 ## Acceptance Criteria (evolving)
 
-* [ ] 设置窗口打开后，用户能在首屏看到 RightTool 当前配置是否已加载、右键功能是否已有基础配置。
-* [ ] 用户能更快切换和理解各设置分区。
-* [ ] 目录、菜单动作、模板、开发者入口列表比当前纯文本列表更易扫描。
-* [ ] 用户能在设置页修改并保存菜单动作启用状态和菜单层级。
-* [ ] 用户能在设置页新增/编辑/删除文本模板。
-* [ ] 用户能在设置页新增/编辑/删除开发者入口。
-* [ ] 最近操作页能展示真实 `operation-log.jsonl` 数据。
-* [ ] 保存、删除、重新注入默认设置都有明确的即时反馈。
-* [ ] 设置页主要分区包含合适图标、状态标签和更丰富的信息层次。
-* [ ] 本地预览包能构建通过。
+* [x] 设置窗口打开后，用户能在首屏看到 RightTool 当前配置是否已加载、右键功能是否已有基础配置。
+* [x] 用户能更快切换和理解各设置分区。
+* [x] 目录、菜单动作、模板、开发者入口列表比当前纯文本列表更易扫描。
+* [x] 用户能在设置页修改并保存菜单动作启用状态和菜单层级。
+* [x] 用户能在设置页新增/编辑/删除文本模板。
+* [x] 用户能在设置页新增/编辑/删除开发者入口。
+* [x] 最近操作页能展示真实 `operation-log.jsonl` 数据。
+* [x] 保存、删除、重新注入默认设置都有明确的即时反馈。
+* [x] 设置页主要分区包含合适图标、状态标签和更丰富的信息层次。
+* [x] 本地预览包能构建通过。
 
 ## Definition of Done
 
@@ -112,3 +112,14 @@
 * `JSONFileStore.save` 已支持原子写入，可用于设置页保存配置。
 * `DirectoryBookmark` 支持 `bookmarkDataBase64`，但真实添加目录需要 `NSOpenPanel` + security-scoped bookmark 生成，复杂度高于普通配置编辑。
 * 项目 frontend spec 仍是通用占位，具体 SwiftUI 约定可在本任务后补充。
+
+## Verification Notes
+
+* 2026-06-27 自动验证通过：
+  * `git diff --check`
+  * `swift build --target RightToolAppPreview`
+  * `scripts/ci-swift-check.sh debug`
+  * `scripts/package-macos.sh debug`
+  * 预览包中 `RightToolIcon.icns` / `RightToolIcon.png` 存在。
+  * Finder Sync `.appex` 二进制为 Mach-O `EXECUTE`。
+* 手动打开设置窗口验证主要交互：待用户在本机窗口中确认。
