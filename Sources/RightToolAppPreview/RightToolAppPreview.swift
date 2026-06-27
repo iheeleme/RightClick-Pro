@@ -383,6 +383,11 @@ final class SettingsViewModel: NSObject, ObservableObject {
     }
 
     func upsertDeveloperEntrypoint(_ entrypoint: DeveloperEntrypoint, replacing originalID: String?) {
+        if let duplicate = duplicateDeveloperEntrypoint(bundleIdentifier: entrypoint.bundleIdentifier, excluding: originalID) {
+            setStatus("应用已存在：\(duplicate.title)", tone: .warning)
+            return
+        }
+
         if let originalID, let index = config.developerEntrypoints.firstIndex(where: { $0.id == originalID }) {
             config.developerEntrypoints[index] = entrypoint
             updateDeveloperBackReferences(from: originalID, to: entrypoint.id)
@@ -403,6 +408,31 @@ final class SettingsViewModel: NSObject, ObservableObject {
 
     func requestAddDeveloperEntrypoint() {
         developerEntrypointAddRequest += 1
+    }
+
+    @MainActor
+    func makeDeveloperEntrypointDraftFromSelectedApplication(
+        replacing draft: DeveloperEntrypointDraft? = nil
+    ) -> DeveloperEntrypointDraft? {
+        guard let application = selectDeveloperApplication() else {
+            return nil
+        }
+
+        if let duplicate = duplicateDeveloperEntrypoint(
+            bundleIdentifier: application.bundleIdentifier,
+            excluding: draft?.originalID
+        ) {
+            setStatus("应用已存在：\(duplicate.title)", tone: .warning)
+            return nil
+        }
+
+        if var draft {
+            draft.apply(application: application)
+            return draft
+        }
+
+        let entrypointID = uniqueDeveloperEntrypointID(base: "developer-\(slug(for: application.displayName))")
+        return DeveloperEntrypointDraft(application: application, entrypointID: entrypointID)
     }
 
     func moveDeveloperEntrypoint(_ entrypoint: DeveloperEntrypoint, visibleEntrypointIDs: [String], offset: Int) {
@@ -970,6 +1000,19 @@ final class SettingsViewModel: NSObject, ObservableObject {
         return "\(fallback)-\(index)"
     }
 
+    private func uniqueDeveloperEntrypointID(base: String) -> String {
+        let fallback = base == "developer-" ? "developer" : base
+        if !config.developerEntrypoints.contains(where: { $0.id == fallback }) {
+            return fallback
+        }
+
+        var index = 2
+        while config.developerEntrypoints.contains(where: { $0.id == "\(fallback)-\(index)" }) {
+            index += 1
+        }
+        return "\(fallback)-\(index)"
+    }
+
     private func normalizedDirectoryPath(for url: URL) -> String {
         normalizedDirectoryPath(url.path)
     }
@@ -981,6 +1024,70 @@ final class SettingsViewModel: NSObject, ObservableObject {
     private func directoryDisplayName(for url: URL) -> String {
         let name = url.lastPathComponent.trimmingCharacters(in: .whitespacesAndNewlines)
         return name.isEmpty ? url.path : name
+    }
+
+    @MainActor
+    private func selectDeveloperApplication() -> DeveloperApplicationSelection? {
+        let panel = NSOpenPanel()
+        panel.title = "选择本地应用"
+        panel.message = "请选择要加入 Finder 右键菜单的 macOS 应用。"
+        panel.prompt = "选择应用"
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.canCreateDirectories = false
+        panel.allowsMultipleSelection = false
+        panel.treatsFilePackagesAsDirectories = false
+        panel.allowedContentTypes = [.applicationBundle]
+        panel.directoryURL = URL(fileURLWithPath: "/Applications", isDirectory: true)
+
+        guard panel.runModal() == .OK, let url = panel.url else {
+            return nil
+        }
+        return developerApplicationSelection(for: url.standardizedFileURL)
+    }
+
+    private func developerApplicationSelection(for url: URL) -> DeveloperApplicationSelection? {
+        guard url.pathExtension.lowercased() == "app", let bundle = Bundle(url: url) else {
+            setStatus("请选择有效的 macOS 应用", tone: .warning)
+            return nil
+        }
+
+        guard
+            let bundleIdentifier = bundle.bundleIdentifier?.trimmingCharacters(in: .whitespacesAndNewlines),
+            !bundleIdentifier.isEmpty
+        else {
+            setStatus("无法读取应用的 Bundle Identifier", tone: .warning)
+            return nil
+        }
+
+        let displayName = [
+            bundle.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String,
+            bundle.object(forInfoDictionaryKey: "CFBundleName") as? String,
+            url.deletingPathExtension().lastPathComponent
+        ]
+            .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .first { !$0.isEmpty } ?? bundleIdentifier
+
+        return DeveloperApplicationSelection(
+            displayName: displayName,
+            bundleIdentifier: bundleIdentifier,
+            url: url
+        )
+    }
+
+    private func duplicateDeveloperEntrypoint(
+        bundleIdentifier: String,
+        excluding originalID: String?
+    ) -> DeveloperEntrypoint? {
+        let normalized = bundleIdentifier.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !normalized.isEmpty else {
+            return nil
+        }
+
+        return config.developerEntrypoints.first { entrypoint in
+            entrypoint.id != originalID &&
+                entrypoint.bundleIdentifier.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == normalized
+        }
     }
 
     private func slug(for value: String) -> String {
@@ -5273,7 +5380,13 @@ struct DeveloperEntrypointListView: View {
             DeveloperHintBanner()
         }
         .sheet(item: $editingDraft) { draft in
-            DeveloperEntrypointEditorSheet(draft: draft) { savedDraft in
+            DeveloperEntrypointEditorSheet(
+                draft: draft,
+                existingEntrypoints: viewModel.config.developerEntrypoints,
+                onSelectApplication: { currentDraft in
+                    viewModel.makeDeveloperEntrypointDraftFromSelectedApplication(replacing: currentDraft)
+                }
+            ) { savedDraft in
                 viewModel.upsertDeveloperEntrypoint(savedDraft.makeEntrypoint(), replacing: savedDraft.originalID)
                 editingDraft = nil
             } onCancel: {
@@ -6617,20 +6730,37 @@ struct CommandTemplateEditorSheet: View {
     }
 }
 
+struct DeveloperApplicationSelection {
+    var displayName: String
+    var bundleIdentifier: String
+    var url: URL
+}
+
 struct DeveloperEntrypointDraft: Identifiable {
     let id = UUID()
     var originalID: String?
     var entrypointID: String
     var title: String
     var bundleIdentifier: String
+    var applicationPath: String?
     var targetMode: DeveloperTargetMode
 
     init() {
         let suffix = UUID().uuidString.prefix(8).lowercased()
         originalID = nil
         entrypointID = "developer-custom-\(suffix)"
-        title = "自定义入口"
+        title = ""
         bundleIdentifier = ""
+        applicationPath = nil
+        targetMode = .currentDirectory
+    }
+
+    init(application: DeveloperApplicationSelection, entrypointID: String) {
+        originalID = nil
+        self.entrypointID = entrypointID
+        title = application.displayName
+        bundleIdentifier = application.bundleIdentifier
+        applicationPath = application.url.path
         targetMode = .currentDirectory
     }
 
@@ -6639,7 +6769,14 @@ struct DeveloperEntrypointDraft: Identifiable {
         entrypointID = entrypoint.id
         title = entrypoint.title
         bundleIdentifier = entrypoint.bundleIdentifier
+        applicationPath = NSWorkspace.shared.urlForApplication(withBundleIdentifier: entrypoint.bundleIdentifier)?.path
         targetMode = entrypoint.targetMode
+    }
+
+    mutating func apply(application: DeveloperApplicationSelection) {
+        title = application.displayName
+        bundleIdentifier = application.bundleIdentifier
+        applicationPath = application.url.path
     }
 
     func makeEntrypoint() -> DeveloperEntrypoint {
@@ -6654,15 +6791,22 @@ struct DeveloperEntrypointDraft: Identifiable {
 
 struct DeveloperEntrypointEditorSheet: View {
     @State private var draft: DeveloperEntrypointDraft
+    @State private var didAttemptInitialApplicationSelection = false
+    let existingEntrypoints: [DeveloperEntrypoint]
+    let onSelectApplication: (DeveloperEntrypointDraft) -> DeveloperEntrypointDraft?
     let onSave: (DeveloperEntrypointDraft) -> Void
     let onCancel: () -> Void
 
     init(
         draft: DeveloperEntrypointDraft,
+        existingEntrypoints: [DeveloperEntrypoint],
+        onSelectApplication: @escaping (DeveloperEntrypointDraft) -> DeveloperEntrypointDraft?,
         onSave: @escaping (DeveloperEntrypointDraft) -> Void,
         onCancel: @escaping () -> Void
     ) {
         _draft = State(initialValue: draft)
+        self.existingEntrypoints = existingEntrypoints
+        self.onSelectApplication = onSelectApplication
         self.onSave = onSave
         self.onCancel = onCancel
     }
@@ -6671,7 +6815,7 @@ struct DeveloperEntrypointEditorSheet: View {
         VStack(spacing: 0) {
             EditorSheetHeader(
                 title: draft.originalID == nil ? "新增开发者入口" : "编辑开发者入口",
-                subtitle: "添加常用开发工具，Finder 右键菜单会优先显示真实应用图标。",
+                subtitle: "从本地应用生成快捷入口，Finder 右键菜单会优先显示真实应用图标。",
                 systemImage: "terminal"
             )
 
@@ -6696,13 +6840,11 @@ struct DeveloperEntrypointEditorSheet: View {
                     )
                 }
 
-                EditorTextField(
-                    title: "Bundle Identifier",
-                    placeholder: "com.microsoft.VSCode",
-                    helper: "用于定位应用并显示对应 app 图标。",
-                    systemImage: "app",
-                    text: $draft.bundleIdentifier
-                )
+                DeveloperApplicationPickerCard(draft: draft) {
+                    if let updatedDraft = onSelectApplication(draft) {
+                        draft = updatedDraft
+                    }
+                }
 
                 VStack(alignment: .leading, spacing: 10) {
                     Text("目标模式")
@@ -6737,6 +6879,9 @@ struct DeveloperEntrypointEditorSheet: View {
         .background(SettingsTheme.windowBackground)
         .frame(width: 560)
         .frame(minHeight: 430)
+        .onAppear {
+            requestInitialApplicationSelectionIfNeeded()
+        }
     }
 
     private var canSave: Bool {
@@ -6751,9 +6896,102 @@ struct DeveloperEntrypointEditorSheet: View {
             return "请填写显示名称"
         }
         if draft.bundleIdentifier.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            return "请填写 Bundle Identifier"
+            return "请先选择本地应用"
+        }
+        if let duplicate = existingEntrypoints.first(where: { entrypoint in
+            entrypoint.id != draft.originalID &&
+                entrypoint.bundleIdentifier.trimmingCharacters(in: .whitespacesAndNewlines).caseInsensitiveCompare(
+                    draft.bundleIdentifier.trimmingCharacters(in: .whitespacesAndNewlines)
+                ) == .orderedSame
+        }) {
+            return "这个应用已存在：\(duplicate.title)"
         }
         return nil
+    }
+
+    private func requestInitialApplicationSelectionIfNeeded() {
+        guard
+            !didAttemptInitialApplicationSelection,
+            draft.originalID == nil,
+            draft.bundleIdentifier.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        else {
+            return
+        }
+
+        didAttemptInitialApplicationSelection = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+            if let updatedDraft = onSelectApplication(draft) {
+                draft = updatedDraft
+            }
+        }
+    }
+}
+
+struct DeveloperApplicationPickerCard: View {
+    let draft: DeveloperEntrypointDraft
+    let onSelectApplication: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("本地应用")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(SettingsTheme.ink)
+
+            HStack(alignment: .center, spacing: 12) {
+                MenuIconView(
+                    icon: appIcon,
+                    tint: SettingsTheme.accent,
+                    size: 30,
+                    font: .system(size: 18, weight: .semibold)
+                )
+                .frame(width: 38, height: 38)
+                .background(SettingsTheme.accent.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(draft.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "未选择应用" : draft.title)
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(SettingsTheme.ink)
+                        .lineLimit(1)
+
+                    Text(draft.bundleIdentifier.isEmpty ? "请选择一个 .app 应用" : draft.bundleIdentifier)
+                        .font(.system(size: 11))
+                        .foregroundStyle(SettingsTheme.muted)
+                        .lineLimit(1)
+                        .textSelection(.enabled)
+
+                    if let path = draft.applicationPath, !path.isEmpty {
+                        Text(path)
+                            .font(.system(size: 11))
+                            .foregroundStyle(SettingsTheme.muted)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                            .textSelection(.enabled)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+                Button {
+                    onSelectApplication()
+                } label: {
+                    Label(draft.bundleIdentifier.isEmpty ? "选择应用" : "更换应用", systemImage: "app.badge")
+                        .lineLimit(1)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.regular)
+            }
+            .padding(12)
+            .background(SettingsTheme.surfaceElevated, in: RoundedRectangle(cornerRadius: 8))
+            .overlay(RoundedRectangle(cornerRadius: 8).stroke(SettingsTheme.hairline))
+
+            Text("Bundle Identifier 会从所选应用自动读取，不需要手动填写。")
+                .font(.system(size: 11))
+                .foregroundStyle(SettingsTheme.muted)
+                .lineLimit(2)
+        }
+    }
+
+    private var appIcon: MenuIconDescriptor {
+        draft.bundleIdentifier.isEmpty ? .systemSymbol("app") : .appBundleIdentifier(draft.bundleIdentifier)
     }
 }
 

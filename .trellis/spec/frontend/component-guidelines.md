@@ -335,6 +335,78 @@ EditorSheetFooter(
 }
 ```
 
+### Scenario: Developer Entrypoint App Picker
+
+#### 1. Scope / Trigger
+
+- Trigger: changing the add/edit flow for `DeveloperEntrypoint` rows in `Sources/RightToolAppPreview/RightToolAppPreview.swift`.
+- This is a settings UX contract because user-selected apps are persisted as `DeveloperEntrypoint.bundleIdentifier` and later rendered in Finder menus with real app icons.
+
+#### 2. Signatures
+
+- Add flow should create drafts from a local app selection:
+  ```swift
+  makeDeveloperEntrypointDraftFromSelectedApplication(replacing: nil)
+  ```
+- Edit flow should replace the app through the same picker, preserving ID and target mode:
+  ```swift
+  makeDeveloperEntrypointDraftFromSelectedApplication(replacing: currentDraft)
+  ```
+- Persisted model remains unchanged:
+  ```swift
+  DeveloperEntrypoint(id:title:bundleIdentifier:targetMode:)
+  ```
+
+#### 3. Contracts
+
+- Clicking "添加快捷入口" opens an `NSOpenPanel` for `.applicationBundle` first; do not start with an empty manual Bundle Identifier form.
+- The selected `.app` must be parsed with `Bundle(url:)`, and the draft must derive `bundleIdentifier` from the bundle rather than user text.
+- Display name should default from `CFBundleDisplayName`, then `CFBundleName`, then the app filename.
+- The editor sheet may let users edit display name, entry ID, and target mode, but Bundle Identifier must be read-only app metadata.
+- Editing an existing entry should show current app information and a "更换应用" action.
+- Duplicate app bundle identifiers should be blocked, excluding the entry currently being edited.
+
+#### 4. Validation & Error Matrix
+
+- User cancels app panel -> no draft opens and no config mutation happens.
+- Selected item is not a valid `.app` bundle -> show a visible warning status.
+- Selected app has no Bundle Identifier -> show a visible warning status.
+- Selected app's Bundle Identifier already exists on another entry -> show "应用已存在" and do not create or save a duplicate.
+- Draft has empty title, ID, or Bundle Identifier -> keep sheet Save disabled with an inline validation message.
+
+#### 5. Good/Base/Bad Cases
+
+- Good: user clicks "添加快捷入口", selects `/Applications/Cursor.app`, confirms display name and target mode, then saves.
+- Good: user edits an existing VS Code entry and uses "更换应用" to switch to Cursor while preserving the entry's stable ID unless they edit it.
+- Base: existing configs with bundle identifiers still load because the persisted schema is unchanged.
+- Bad: a sheet asks the user to type `com.microsoft.VSCode` manually during normal add/edit flow.
+- Bad: adding Cursor twice creates two indistinguishable Finder menu entries.
+
+#### 6. Tests Required
+
+- Run direct Swift type checks or `swift build --target RightToolAppPreview` when the local SwiftPM manifest toolchain works.
+- Run `scripts/package-macos.sh debug`.
+- Run `git diff --check`.
+- Manually smoke-test add, cancel, invalid selection, duplicate selection, edit, and "更换应用" flows.
+
+#### 7. Wrong vs Correct
+
+Wrong:
+```swift
+EditorTextField(
+    title: "Bundle Identifier",
+    placeholder: "com.microsoft.VSCode",
+    text: $draft.bundleIdentifier
+)
+```
+
+Correct:
+```swift
+DeveloperApplicationPickerCard(draft: draft) {
+    draft = selectApplication(replacing: draft)
+}
+```
+
 ### Scenario: SwiftUI App Icon and Settings Brand Icon
 
 #### 1. Scope / Trigger
