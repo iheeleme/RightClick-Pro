@@ -14,7 +14,7 @@ struct RightToolAppPreview: App {
 
         Window("RightTool 设置", id: "settings") {
             SettingsRootView(viewModel: viewModel)
-                .frame(minWidth: 1180, idealWidth: 1448, maxWidth: 1448, minHeight: 760, idealHeight: 980)
+                .frame(minWidth: 1180, idealWidth: 1448, maxWidth: .infinity, minHeight: 760, idealHeight: 980, maxHeight: .infinity)
         }
         .windowStyle(.hiddenTitleBar)
     }
@@ -958,6 +958,7 @@ struct SettingsRootView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(SettingsTheme.windowBackground)
         .background(SettingsWindowChromeConfigurator())
         .ignoresSafeArea(.container, edges: .top)
