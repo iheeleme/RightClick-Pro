@@ -2967,14 +2967,26 @@ struct FlowPillGroup: View {
     let items: [String]
 
     var body: some View {
+        let visibleItems = Array(items.prefix(2))
+        let remainingCount = max(0, items.count - visibleItems.count)
+
         HStack(spacing: 6) {
-            ForEach(items.prefix(2), id: \.self) { item in
+            ForEach(visibleItems, id: \.self) { item in
                 Text(item)
                     .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(SettingsTheme.muted)
                     .padding(.horizontal, 7)
                     .frame(height: 22)
                     .background(Color.black.opacity(0.045), in: RoundedRectangle(cornerRadius: 5))
+            }
+
+            if remainingCount > 0 {
+                Text("+\(remainingCount)")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(SettingsTheme.accent)
+                    .padding(.horizontal, 6)
+                    .frame(height: 22)
+                    .background(SettingsTheme.accent.opacity(0.08), in: RoundedRectangle(cornerRadius: 5))
             }
         }
         .lineLimit(1)
@@ -2985,16 +2997,11 @@ struct ActionVisibilityMenu: View {
     let action: RightToolAction
     @ObservedObject var viewModel: SettingsViewModel
     @State private var isHovered = false
+    @State private var isPresented = false
 
     var body: some View {
-        Menu {
-            ForEach(ActionVisibility.allCases, id: \.self) { visibility in
-                Button {
-                    viewModel.toggleActionVisibility(visibility, actionID: action.id)
-                } label: {
-                    Label(visibility.displayName, systemImage: action.visibility.contains(visibility) ? "checkmark" : "rectangle")
-                }
-            }
+        Button {
+            isPresented.toggle()
         } label: {
             HStack(spacing: 6) {
                 FlowPillGroup(items: action.visibilityPills)
@@ -3015,12 +3022,124 @@ struct ActionVisibilityMenu: View {
                     .stroke(isHovered ? SettingsTheme.accent.opacity(0.18) : SettingsTheme.hairline)
             )
             .contentShape(RoundedRectangle(cornerRadius: 7))
-            .onHover { isHovered = $0 }
+            .onHover { hovering in
+                isHovered = action.isEnabled && hovering
+            }
             .animation(.easeOut(duration: 0.12), value: isHovered)
         }
-        .menuStyle(.button)
         .buttonStyle(.plain)
+        .disabled(!action.isEnabled)
         .help("调整 \(action.title) 的显示位置")
+        .accessibilityLabel("调整 \(action.title) 的显示位置")
+        .popover(isPresented: $isPresented, arrowEdge: .top) {
+            VStack(alignment: .leading, spacing: 6) {
+                ForEach(ActionVisibility.allCases, id: \.self) { visibility in
+                    let isSelected = action.visibility.contains(visibility)
+                    ActionVisibilityOptionRow(
+                        visibility: visibility,
+                        isSelected: isSelected,
+                        isOnlySelection: isSelected && action.visibility.count == 1
+                    ) {
+                        viewModel.toggleActionVisibility(visibility, actionID: action.id)
+                    }
+                }
+
+                HStack(spacing: 6) {
+                    Image(systemName: "info.circle")
+                        .font(.system(size: 10, weight: .semibold))
+                    Text("至少保留一个显示位置，可多选。")
+                        .font(.system(size: 10))
+                }
+                .foregroundStyle(SettingsTheme.muted)
+                .padding(.horizontal, 4)
+                .padding(.top, 2)
+            }
+            .padding(8)
+            .frame(width: 238)
+        }
+    }
+}
+
+struct ActionVisibilityOptionRow: View {
+    let visibility: ActionVisibility
+    let isSelected: Bool
+    let isOnlySelection: Bool
+    let action: () -> Void
+    @State private var isHovered = false
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 10) {
+                Image(systemName: visibility.systemImage)
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(iconColor)
+                    .frame(width: 20, height: 20)
+                    .background(iconColor.opacity(isSelected ? 0.13 : 0.08), in: RoundedRectangle(cornerRadius: 5))
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(visibility.displayName)
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(isSelected ? SettingsTheme.accent : SettingsTheme.ink)
+                        .lineLimit(1)
+
+                    Text(subtitle)
+                        .font(.system(size: 11))
+                        .foregroundStyle(isOnlySelection ? .orange : SettingsTheme.muted)
+                        .lineLimit(1)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+                Image(systemName: trailingSystemImage)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(trailingColor)
+                    .frame(width: 16)
+            }
+            .padding(.horizontal, 9)
+            .frame(height: 48)
+            .background(rowBackground, in: RoundedRectangle(cornerRadius: 7))
+            .overlay(
+                RoundedRectangle(cornerRadius: 7)
+                    .stroke(rowStroke)
+            )
+            .contentShape(RoundedRectangle(cornerRadius: 7))
+        }
+        .buttonStyle(.plain)
+        .onHover { isHovered = $0 }
+        .animation(.easeOut(duration: 0.12), value: isHovered)
+        .animation(.easeOut(duration: 0.12), value: isSelected)
+    }
+
+    private var subtitle: String {
+        if isOnlySelection {
+            return "至少保留一个显示位置"
+        }
+        return isSelected ? "当前已启用" : visibility.helperText
+    }
+
+    private var iconColor: Color {
+        isSelected ? SettingsTheme.accent : SettingsTheme.muted
+    }
+
+    private var trailingSystemImage: String {
+        isSelected ? "checkmark.circle.fill" : "circle"
+    }
+
+    private var trailingColor: Color {
+        isSelected ? SettingsTheme.accent : SettingsTheme.hairline.opacity(0.85)
+    }
+
+    private var rowBackground: Color {
+        if isSelected {
+            return SettingsTheme.accent.opacity(0.09)
+        }
+        return isHovered ? SettingsTheme.accent.opacity(0.05) : Color.white.opacity(0.64)
+    }
+
+    private var rowStroke: Color {
+        if isSelected {
+            return SettingsTheme.accent.opacity(0.22)
+        }
+        return isHovered ? SettingsTheme.accent.opacity(0.16) : SettingsTheme.hairline
     }
 }
 
@@ -5432,6 +5551,28 @@ private extension ActionVisibility {
             return "空白处"
         case .toolbar:
             return "工具栏"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .selection:
+            return "checkmark.rectangle"
+        case .container:
+            return "rectangle.dashed"
+        case .toolbar:
+            return "sidebar.right"
+        }
+    }
+
+    var helperText: String {
+        switch self {
+        case .selection:
+            return "选中项目时显示"
+        case .container:
+            return "右键空白处时显示"
+        case .toolbar:
+            return "Finder 工具栏菜单中显示"
         }
     }
 }

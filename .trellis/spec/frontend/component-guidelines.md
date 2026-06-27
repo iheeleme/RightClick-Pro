@@ -167,6 +167,7 @@ Button("保存配置") {
 - Settings menu rows must render `MenuIconDescriptor` through `MenuIconView`; application actions use installed app icons, templates use file type icons, directories use path/folder icons, and unsupported cases fall back to semantic SF Symbols.
 - Sorting controls must call `SettingsViewModel` commands that update `RightToolAction.order`, `fileTemplates`, `developerEntrypoints`, or bookmark order as appropriate; sorting UI must update the table and the Finder preview in the same interaction.
 - Display-condition controls must mutate `RightToolAction.visibility` through `SettingsViewModel` and must prevent leaving an action with no visible invocation.
+- Display-condition controls must show selected and unselected visibility states distinctly; do not rely only on native menu checkmarks for this editing surface.
 - Action-management rows must expose the `ActionPlacement` choice as a visible table control, such as `"一级菜单"` / `"分组菜单"`, not only behind an unlabeled icon-only menu.
 - Placement controls must keep the compact row label readable and must show the current placement with a selected state that is visually distinct from hover/highlight state.
 - Finder menu previews for the action-management surface should render `MenuBuilder` output instead of flat action rows, so root items and functional group submenus match the real Finder extension.
@@ -182,6 +183,7 @@ Button("保存配置") {
 - Developer, template, or directory rows hard-code SF Symbols instead of using `MenuIconResolver` / `MenuIconView` -> icons drift from the real Finder menu and app icons disappear.
 - Table shows a drag handle or arrow controls but does not update persisted ordering -> bug; wire it to an explicit move command and normalize associated action orders.
 - Visibility pills are rendered as inert labels -> bug when the surface claims display-condition editing; expose a menu or remove the edit affordance.
+- Visibility selection relies only on a tiny native checkmark and gives no clear selected/unselected card state -> display polish bug.
 - Preview shows root actions and group submenu rows as one flat action list -> bug; use `MenuBuilder` presentation and compact/top-aligned preview boxes.
 - Placement switching is hidden behind an unlabeled icon-only control -> discoverability bug; use a labeled placement control in the action row.
 - Placement row text truncates common labels such as `"分组菜单"` or selected state relies only on native blue hover highlight -> display polish bug.
