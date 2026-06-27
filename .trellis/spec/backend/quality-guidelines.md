@@ -161,6 +161,10 @@ PendingCommandRunRequest(
   ```swift
   developerTargetURL(for entrypoint: DeveloperEntrypoint, context: FinderContext) -> URL
   ```
+- App opener planner:
+  ```swift
+  DeveloperAppOpenPlanner.plan(for: entrypoint, targetURL: targetURL, appURL: appURL)
+  ```
 
 #### 3. Contracts
 
@@ -172,6 +176,10 @@ PendingCommandRunRequest(
 - The Finder extension must keep passing the raw `FinderContext` through XPC; it must not resolve developer target URLs itself.
 - `ActionRunner` owns target resolution so validation and operation logging use the same final URL.
 - `ConfigurationBootstrapper` may repair built-in Terminal / VS Code / Cursor entries from old `.currentDirectory` defaults to `.dynamic` only when ID, title, and bundle identifier still match the built-in entry.
+- Workspace-oriented developer apps should prefer a source-backed CLI opener when available, for example Codex `codex app <workspace>` or VS Code-family `code <workspace>`.
+- CLI opener candidates must be existence-checked with `FileManager.isExecutableFile` before invocation; missing candidates fall back to `NSWorkspace.open`.
+- When the resolved dynamic target is a file and the selected app is opened through a workspace CLI, pass the file's parent directory as the workspace.
+- Unknown apps must keep the previous `NSWorkspace.open([targetURL], withApplicationAt:)` behavior.
 
 #### 4. Validation & Error Matrix
 
@@ -179,6 +187,8 @@ PendingCommandRunRequest(
 - Dynamic container invocation with non-empty `selectedItems` -> use `targetDirectory`.
 - Resolved target outside authorized monitored/common directories -> existing `AuthorizedPathValidator` failure.
 - Existing user-customized developer entrypoint -> do not force target mode migration unless it still matches a built-in entry exactly.
+- Recognized developer app with missing bundled/global CLI -> fall back to `NSWorkspace.open` instead of failing.
+- CLI `Process.run()` failure -> return `AppOpeningError.cannotOpen(executableURL.path)`.
 - Unknown future enum raw value in stored JSON -> config decode fails until a migration is added; add Codable compatibility tests if introducing such migration.
 
 #### 5. Good/Base/Bad Cases
@@ -186,19 +196,25 @@ PendingCommandRunRequest(
 - Good: selecting `~/Code/App` and choosing "在 Cursor 打开" opens Cursor with `~/Code/App`.
 - Good: right-clicking blank space in `~/Code` and choosing the same entry opens Cursor with `~/Code`.
 - Good: Finder toolbar action opens the selected item when Finder has an active selection, otherwise the current directory.
+- Good: selecting `~/Code/App` and choosing "在 Codex 打开" invokes the app-bundled Codex CLI with `app ~/Code/App`.
+- Good: selecting `~/Code/App/README.md` and choosing a workspace CLI app opens `~/Code/App` as the workspace.
 - Base: existing custom entry with `.selectedItemDirectory` keeps that explicit behavior.
+- Base: a recognized app whose CLI helper is absent still opens through macOS Launch Services.
 - Bad: Finder Sync rewrites `.container` requests into selected-item paths before sending XPC.
 - Bad: changing `.currentDirectory` semantics to mean dynamic, breaking explicit old configurations.
+- Bad: invoking a hard-coded CLI path without checking that it exists and is executable.
 
 #### 6. Tests Required
 
 - Unit-test `ActionRunner` dynamic target resolution for selection, container, no-selection fallback, and toolbar fallback.
 - Unit-test bootstrap repair for built-in developer entries previously saved with `.currentDirectory`.
+- Unit-test `DeveloperAppOpenPlanner` for Codex, VS Code-family, JetBrains, documented editor CLIs, file-to-parent workspace conversion, and unknown-app fallback.
 - Run:
   ```bash
   git diff --check
   swift test --filter ActionRunnerTests
   swift test --filter ConfigurationBootstrapperTests
+  swift test --filter AppOpeningTests
   scripts/package-macos.sh debug
   scripts/ci-swift-check.sh debug
   ```

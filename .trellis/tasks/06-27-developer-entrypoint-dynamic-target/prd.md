@@ -24,6 +24,9 @@
 * 已安装配置中的内置默认入口如果仍保持旧的 `currentDirectory` 默认值，应在启动自修复时迁移为动态模式。
 * 设置页目标模式选择器展示“动态”模式，并用中文文案解释其行为。
 * 保留已有三种模式，避免破坏用户已有配置。
+* 对 Codex、VS Code、Cursor、JetBrains 系、Zed、Sublime Text、TextMate、Nova、Xcode 等开发工具，优先使用可打开工作区目录的 CLI 入口。
+* 本机未安装的应用不能靠本地 bundle 检查确认时，候选入口必须来自官方文档、本机一手 CLI 帮助或常见 VS Code 派生应用包结构，并在运行时检测可执行文件存在后才调用。
+* 如果识别到应用但候选 CLI 不存在，必须回退到原有 `NSWorkspace.open` 行为，避免新增适配导致应用完全打不开。
 
 ## Acceptance Criteria
 
@@ -34,6 +37,10 @@
 * [x] 已安装配置中的旧默认入口会自修复为动态模式。
 * [x] 设置页新增/编辑入口时默认目标为动态模式，并可显式选择其他模式。
 * [x] Core 单元测试覆盖 selection、container、toolbar/fallback 场景。
+* [x] Codex 使用应用包内 `codex app <workspace>` 打开工作区目录。
+* [x] VS Code / Cursor / Windsurf / Trae 使用各自应用包内 CLI 打开工作区目录。
+* [x] JetBrains / Zed / Sublime Text / TextMate / Nova 入口在候选 CLI 存在时走命令打开目录。
+* [x] 未识别或未找到 CLI 的应用回退到 `NSWorkspace.open`。
 
 ## Definition of Done
 
@@ -73,7 +80,7 @@ The dynamic decision belongs in `ActionRunner` because it is shared runtime beha
 
 * Changing command template working directory behavior.
 * Opening multiple selected items in one developer app invocation.
-* Adding per-app custom dynamic strategies.
+* Adding every known developer app as a built-in default entry.
 * Changing Finder menu placement or visibility rules.
 
 ## Technical Notes
@@ -81,8 +88,12 @@ The dynamic decision belongs in `ActionRunner` because it is shared runtime beha
 * Relevant files:
   * `Sources/RightToolCore/ActionModels.swift`
   * `Sources/RightToolCore/ActionRunner.swift`
+  * `Sources/RightToolCore/AppOpening.swift`
   * `Sources/RightToolAppPreview/RightToolAppPreview.swift`
   * `Tests/RightToolCoreTests/ActionRunnerTests.swift`
+  * `Tests/RightToolCoreTests/AppOpeningTests.swift`
+* Research:
+  * `.trellis/tasks/06-27-developer-entrypoint-dynamic-target/research/workspace-openers.md`
 * Relevant specs:
   * `.trellis/spec/backend/directory-structure.md`
   * `.trellis/spec/backend/quality-guidelines.md`
