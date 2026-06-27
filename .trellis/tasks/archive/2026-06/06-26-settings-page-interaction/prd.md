@@ -122,4 +122,4 @@
   * `scripts/package-macos.sh debug`
   * 预览包中 `RightToolIcon.icns` / `RightToolIcon.png` 存在。
   * Finder Sync `.appex` 二进制为 Mach-O `EXECUTE`。
-* 手动打开设置窗口验证主要交互：待用户在本机窗口中确认。
+* 手动打开设置窗口验证主要交互：用户已于 2026-06-27 确认通过。
