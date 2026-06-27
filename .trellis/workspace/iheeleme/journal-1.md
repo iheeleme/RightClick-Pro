@@ -139,3 +139,36 @@ Completed the settings page interaction task: verified configuration status over
 ### Next Steps
 
 - None - task complete
+
+
+## Session 5: Command template runner and authorization fixes
+
+**Date**: 2026-06-27
+**Task**: Command template runner and authorization fixes
+**Branch**: `main`
+
+### Summary
+
+Implemented command templates with live terminal output, dark-mode settings fixes, Finder-triggered command windows, and main-app-owned directory authorization to avoid repeated macOS other-app-data prompts.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `4fc45ae` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
