@@ -117,6 +117,8 @@ write_app_info_plist() {
   <string>$BUNDLE_IDENTIFIER</string>
   <key>CFBundleIconFile</key>
   <string>$APP_ICON_NAME</string>
+  <key>CFBundleDisplayName</key>
+  <string>$APP_NAME</string>
   <key>CFBundleInfoDictionaryVersion</key>
   <string>6.0</string>
   <key>CFBundleName</key>

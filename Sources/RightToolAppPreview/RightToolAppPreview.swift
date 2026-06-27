@@ -3,17 +3,34 @@ import RightToolCore
 import SwiftUI
 import UniformTypeIdentifiers
 
+private enum AppMetadata {
+    static let displayName = "RightClick Pro"
+
+    static var versionText: String {
+        let info = Bundle.main.infoDictionary ?? [:]
+        let version = (info["CFBundleShortVersionString"] as? String)
+            .flatMap { $0.isEmpty ? nil : $0 } ?? "0.0.0-dev"
+        let build = (info["CFBundleVersion"] as? String)
+            .flatMap { $0.isEmpty ? nil : $0 }
+
+        guard let build, build != version else {
+            return "版本 \(version)"
+        }
+        return "版本 \(version) (\(build))"
+    }
+}
+
 @main
 struct RightToolAppPreview: App {
     @NSApplicationDelegateAdaptor(RightToolAppDelegate.self) private var appDelegate
     @StateObject private var viewModel = SettingsViewModel.bootstrap()
 
     var body: some Scene {
-        MenuBarExtra("RightClick Pro", systemImage: "contextualmenu.and.cursorarrow") {
+        MenuBarExtra(AppMetadata.displayName, systemImage: "contextualmenu.and.cursorarrow") {
             MenuBarContentView(viewModel: viewModel)
         }
 
-        Window("RightClick Pro 设置", id: "settings") {
+        Window("\(AppMetadata.displayName) 设置", id: "settings") {
             SettingsRootView(viewModel: viewModel)
                 .frame(minWidth: 1180, idealWidth: 1448, maxWidth: .infinity, minHeight: 760, idealHeight: 980, maxHeight: .infinity)
         }
@@ -22,8 +39,20 @@ struct RightToolAppPreview: App {
 }
 
 final class RightToolAppDelegate: NSObject, NSApplicationDelegate {
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        applyApplicationMenuTitle()
+    }
+
+    func applicationDidBecomeActive(_ notification: Notification) {
+        applyApplicationMenuTitle()
+    }
+
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         false
+    }
+
+    private func applyApplicationMenuTitle() {
+        NSApplication.shared.mainMenu?.items.first?.title = AppMetadata.displayName
     }
 }
 
@@ -263,7 +292,7 @@ final class SettingsViewModel: NSObject, ObservableObject {
         }
 
         if NSWorkspace.shared.open(url) {
-            setStatus("已打开系统设置，请启用 RightClick Pro Finder Extension", tone: .neutral)
+            setStatus("已打开系统设置，请启用 \(AppMetadata.displayName) Finder Extension", tone: .neutral)
         } else {
             setStatus("无法打开系统设置，请手动前往隐私与安全性 > 扩展 > Finder 扩展", tone: .warning)
         }
@@ -1537,7 +1566,7 @@ final class CommandRunViewModel: ObservableObject {
     private func requestWorkingDirectoryAuthorization(for directory: URL) -> URL? {
         let panel = NSOpenPanel()
         panel.title = "授权命令工作目录"
-        panel.message = "RightClick Pro 需要访问该目录后才能在里面运行命令：\(directory.path)"
+        panel.message = "\(AppMetadata.displayName) 需要访问该目录后才能在里面运行命令：\(directory.path)"
         panel.prompt = "授权并运行"
         panel.canChooseFiles = false
         panel.canChooseDirectories = true
@@ -1732,7 +1761,7 @@ final class CommandRunWindowCoordinator {
             backing: .buffered,
             defer: false
         )
-        window.title = "RightClick Pro 命令运行"
+        window.title = "\(AppMetadata.displayName) 命令运行"
         window.isReleasedWhenClosed = false
         window.backgroundColor = SettingsTheme.windowBackgroundColor
         window.contentViewController = NSHostingController(rootView: view)
@@ -1836,7 +1865,7 @@ struct MenuBarContentView: View {
             openSettings(section: .onboarding)
         }
         Divider()
-        Button("退出 RightClick Pro") {
+        Button("退出 \(AppMetadata.displayName)") {
             NSApplication.shared.terminate(nil)
         }
     }
@@ -2168,12 +2197,16 @@ struct SettingsSidebar: View {
                     .shadow(color: SettingsTheme.accent.opacity(0.18), radius: 14, x: 0, y: 8)
 
                 VStack(alignment: .leading, spacing: 3) {
-                    Text("RightClick Pro")
+                    Text(AppMetadata.displayName)
                         .font(.system(size: 15, weight: .bold))
                         .foregroundStyle(SettingsTheme.ink)
                     Text("Mac 右键效率工具")
                         .font(.system(size: 12))
                         .foregroundStyle(SettingsTheme.muted)
+                    Text(AppMetadata.versionText)
+                        .font(.system(size: 11))
+                        .foregroundStyle(SettingsTheme.muted.opacity(0.82))
+                        .monospacedDigit()
                 }
             }
 
@@ -3020,7 +3053,7 @@ struct FinderExtensionSetupBanner: View {
                     Text("启用 Finder 扩展")
                         .font(.system(size: 15, weight: .semibold))
                         .foregroundStyle(SettingsTheme.ink)
-                    Text("在系统设置里启用 RightClick Pro Finder Extension；如果菜单仍未出现，重启 Finder 会短暂关闭并重新打开 Finder 窗口。")
+                    Text("在系统设置里启用 \(AppMetadata.displayName) Finder Extension；如果菜单仍未出现，重启 Finder 会短暂关闭并重新打开 Finder 窗口。")
                         .font(.system(size: 12))
                         .foregroundStyle(SettingsTheme.muted)
                         .fixedSize(horizontal: false, vertical: true)
@@ -5386,7 +5419,7 @@ struct CommandMenuPreviewPanel: View {
                 Text("实时命令窗口")
                     .font(.headline)
                     .foregroundStyle(SettingsTheme.ink)
-                Text("从 Finder 右键触发后，RightClick Pro 会自动打开实时输出窗口。")
+                Text("从 Finder 右键触发后，\(AppMetadata.displayName) 会自动打开实时输出窗口。")
                     .font(.callout)
                     .foregroundStyle(SettingsTheme.muted)
                     .fixedSize(horizontal: false, vertical: true)
