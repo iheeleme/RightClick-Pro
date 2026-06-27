@@ -172,3 +172,36 @@ Implemented command templates with live terminal output, dark-mode settings fixe
 ### Next Steps
 
 - None - task complete
+
+
+## Session 6: Developer entrypoint app picker
+
+**Date**: 2026-06-27
+**Task**: Developer entrypoint app picker
+**Branch**: `main`
+
+### Summary
+
+Implemented app-based selection for developer shortcut entries: add/edit flows now use a local .app picker, auto-read bundle identifiers, prevent duplicate apps, update UI copy, and record the frontend guideline.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `79e94a4` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
