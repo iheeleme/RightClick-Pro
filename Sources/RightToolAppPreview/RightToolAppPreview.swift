@@ -5,6 +5,7 @@ import UniformTypeIdentifiers
 
 @main
 struct RightToolAppPreview: App {
+    @NSApplicationDelegateAdaptor(RightToolAppDelegate.self) private var appDelegate
     @StateObject private var viewModel = SettingsViewModel.bootstrap()
 
     var body: some Scene {
@@ -20,12 +21,19 @@ struct RightToolAppPreview: App {
     }
 }
 
-final class SettingsViewModel: ObservableObject {
+final class RightToolAppDelegate: NSObject, NSApplicationDelegate {
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
+        false
+    }
+}
+
+final class SettingsViewModel: NSObject, ObservableObject {
     enum Section: String, CaseIterable, Identifiable {
         case onboarding = "概览"
         case actions = "右键菜单管理"
         case directories = "常用目录快捷直达"
         case developer = "开发者快捷入口"
+        case commands = "命令模板"
         case history = "剪切 / 粘贴文件"
         case templates = "新建文件模板"
 
@@ -41,6 +49,8 @@ final class SettingsViewModel: ObservableObject {
                 return "常用目录快捷直达"
             case .developer:
                 return "开发者快捷入口"
+            case .commands:
+                return "命令模板"
             case .history:
                 return "文件操作"
             case .templates:
@@ -58,6 +68,8 @@ final class SettingsViewModel: ObservableObject {
                 return "folder"
             case .developer:
                 return "chevron.left.forwardslash.chevron.right"
+            case .commands:
+                return "terminal"
             case .history:
                 return "scissors"
             case .templates:
@@ -75,6 +87,8 @@ final class SettingsViewModel: ObservableObject {
                 return "管理常用目录，快速访问，提高工作效率。"
             case .developer:
                 return "管理开发者常用工具、仓库与目录的快捷入口，支持在 Finder 右键菜单中快速打开。"
+            case .commands:
+                return "配置可重复执行的命令模板，并用实时输出窗口观察运行结果。"
             case .history:
                 return "查看剪切、复制、粘贴等文件操作记录与菜单入口。"
             case .templates:
@@ -113,9 +127,32 @@ final class SettingsViewModel: ObservableObject {
     @Published var recentOperations: [OperationRecord] = []
     @Published var developerEntrypointAddRequest = 0
     @Published var templateAddRequest = 0
+    @Published var commandTemplateAddRequest = 0
     @Published var actionSearchText = ""
 
     private var paths = RightToolStoragePaths.defaultForCurrentProcess()
+    private let commandSecretStore = KeychainCommandSecretStore()
+
+    override init() {
+        super.init()
+        DistributedNotificationCenter.default().addObserver(
+            self,
+            selector: #selector(handlePendingCommandRunNotification),
+            name: Notification.Name(RightToolConstants.pendingCommandRunNotificationName),
+            object: nil
+        )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handlePendingCommandRunNotification),
+            name: NSApplication.didBecomeActiveNotification,
+            object: nil
+        )
+    }
+
+    deinit {
+        DistributedNotificationCenter.default().removeObserver(self)
+        NotificationCenter.default.removeObserver(self)
+    }
 
     static func bootstrap() -> SettingsViewModel {
         let viewModel = SettingsViewModel()
@@ -149,6 +186,7 @@ final class SettingsViewModel: ObservableObject {
         case .actions: count = enabledActionCount
         case .templates: count = config.fileTemplates.count
         case .developer: count = config.developerEntrypoints.count
+        case .commands: count = config.commandTemplates.count
         case .history: count = recentOperations.count
         default: return nil
         }
@@ -165,7 +203,7 @@ final class SettingsViewModel: ObservableObject {
         var sections: [Section] {
             switch self {
             case .guided: return [.onboarding]
-            case .editing: return [.actions, .directories, .developer, .history, .templates]
+            case .editing: return [.actions, .directories, .developer, .commands, .templates]
             case .records: return [.history]
             }
         }
@@ -181,6 +219,7 @@ final class SettingsViewModel: ObservableObject {
             } else {
                 setStatus("已加载本地配置", tone: .neutral)
             }
+            checkForPendingCommandRun()
         } catch {
             setStatus("配置加载失败：\(error.localizedDescription)", tone: .error)
         }
@@ -227,6 +266,12 @@ final class SettingsViewModel: ObservableObject {
         } catch {
             recentOperations = []
             setStatus("读取最近操作失败：\(error.localizedDescription)", tone: .error)
+        }
+    }
+
+    @objc private func handlePendingCommandRunNotification() {
+        DispatchQueue.main.async { [weak self] in
+            self?.checkForPendingCommandRun()
         }
     }
 
@@ -385,6 +430,75 @@ final class SettingsViewModel: ObservableObject {
         markUnsaved("开发者入口顺序已更新")
     }
 
+    func upsertCommandTemplate(_ draft: CommandTemplateDraft) {
+        do {
+            let template = try draft.makeTemplate(secretStore: commandSecretStore)
+            if let originalID = draft.originalID, let index = config.commandTemplates.firstIndex(where: { $0.id == originalID }) {
+                deleteRemovedCommandSecrets(oldTemplate: config.commandTemplates[index], newTemplate: template)
+                config.commandTemplates[index] = template
+                updateCommandBackReferences(from: originalID, to: template.id)
+            } else {
+                config.commandTemplates.append(template)
+            }
+            syncCommandAction(for: template, originalID: draft.originalID)
+            markUnsaved("命令模板已更新")
+        } catch {
+            setStatus("保存命令模板失败：\(error.localizedDescription)", tone: .error)
+        }
+    }
+
+    func deleteCommandTemplate(_ template: CommandTemplate) {
+        for variable in template.environment where variable.isSensitive {
+            if let reference = variable.secretReference {
+                try? commandSecretStore.delete(reference: reference)
+            }
+        }
+        config.commandTemplates.removeAll { $0.id == template.id }
+        config.actions.removeAll { action in
+            action.kind == .runCommand && action.payload.commandTemplateID == template.id
+        }
+        markUnsaved("命令模板已删除，关联动作已移除")
+    }
+
+    func requestAddCommandTemplate() {
+        commandTemplateAddRequest += 1
+    }
+
+    func moveCommandTemplate(_ template: CommandTemplate, offset: Int) {
+        guard
+            let sourceIndex = config.commandTemplates.firstIndex(where: { $0.id == template.id })
+        else {
+            return
+        }
+
+        let targetIndex = sourceIndex + offset
+        guard config.commandTemplates.indices.contains(targetIndex) else {
+            return
+        }
+
+        config.commandTemplates.swapAt(sourceIndex, targetIndex)
+        normalizeCommandActionOrder()
+        markUnsaved("命令模板顺序已更新")
+    }
+
+    func runCommandTemplateFromSettings(_ template: CommandTemplate) {
+        guard let action = config.actions.first(where: { $0.kind == .runCommand && $0.payload.commandTemplateID == template.id }) else {
+            setStatus("找不到命令模板对应菜单动作", tone: .warning)
+            return
+        }
+        let targetBookmark = bookmarks.bookmarks.first
+        let targetDirectory = targetBookmark.map { URL(fileURLWithPath: $0.path) } ?? URL(fileURLWithPath: NSHomeDirectory())
+        let request = PendingCommandRunRequest(
+            actionID: action.id,
+            context: FinderContext(invocation: .container, targetDirectory: targetDirectory)
+        )
+        CommandRunWindowCoordinator.shared.open(
+            request: request,
+            paths: paths,
+            onFinish: { [weak self] in self?.reloadRecentOperations() }
+        )
+    }
+
     @MainActor
     func addDirectoryBookmarkFromPanel() {
         guard let url = selectDirectoryURL() else {
@@ -516,6 +630,15 @@ final class SettingsViewModel: ObservableObject {
         }
     }
 
+    private func updateCommandBackReferences(from oldID: String, to newID: String) {
+        guard oldID != newID else {
+            return
+        }
+        for index in config.actions.indices where config.actions[index].payload.commandTemplateID == oldID {
+            config.actions[index].payload.commandTemplateID = newID
+        }
+    }
+
     private func syncTemplateAction(for template: FileTemplate, originalID: String?) {
         if let index = config.actions.firstIndex(where: { action in
             action.kind == .createFile && (action.payload.templateID == template.id || action.payload.templateID == originalID)
@@ -571,6 +694,22 @@ final class SettingsViewModel: ObservableObject {
         }
     }
 
+    private func normalizeCommandActionOrder() {
+        let baseOrder = config.actions
+            .filter { $0.kind == .runCommand }
+            .map(\.order)
+            .min() ?? nextActionOrder
+
+        for (index, template) in config.commandTemplates.enumerated() {
+            guard let actionIndex = config.actions.firstIndex(where: {
+                $0.kind == .runCommand && $0.payload.commandTemplateID == template.id
+            }) else {
+                continue
+            }
+            config.actions[actionIndex].order = baseOrder + index * 10
+        }
+    }
+
     private func syncDeveloperAction(for entrypoint: DeveloperEntrypoint, originalID: String?) {
         if let index = config.actions.firstIndex(where: { action in
             action.kind == .openInApp && (
@@ -594,6 +733,60 @@ final class SettingsViewModel: ObservableObject {
                 order: nextActionOrder,
                 payload: ActionPayload(developerEntrypointID: entrypoint.id)
             )
+        )
+    }
+
+    private func syncCommandAction(for template: CommandTemplate, originalID: String?) {
+        if let index = config.actions.firstIndex(where: { action in
+            action.kind == .runCommand && (
+                action.payload.commandTemplateID == template.id ||
+                    action.payload.commandTemplateID == originalID
+            )
+        }) {
+            config.actions[index].title = template.title
+            config.actions[index].payload.commandTemplateID = template.id
+            config.actions[index].group = .commandTemplates
+            return
+        }
+
+        config.actions.append(
+            RightToolAction(
+                id: uniqueActionID(base: "run-\(template.id)"),
+                title: template.title,
+                kind: .runCommand,
+                visibility: [.selection, .container],
+                placement: .submenu,
+                group: .commandTemplates,
+                order: nextActionOrder,
+                payload: ActionPayload(commandTemplateID: template.id)
+            )
+        )
+    }
+
+    private func deleteRemovedCommandSecrets(oldTemplate: CommandTemplate, newTemplate: CommandTemplate) {
+        let newReferences = Set(newTemplate.environment.compactMap(\.secretReference))
+        for variable in oldTemplate.environment where variable.isSensitive {
+            guard
+                let reference = variable.secretReference,
+                !newReferences.contains(reference)
+            else {
+                continue
+            }
+            try? commandSecretStore.delete(reference: reference)
+        }
+    }
+
+    private func checkForPendingCommandRun() {
+        let store = JSONFileStore<PendingCommandRunRequest>(url: paths.pendingCommandRunURL)
+        guard let request = try? store.loadRequired() else {
+            return
+        }
+        try? FileManager.default.removeItem(at: paths.pendingCommandRunURL)
+        NSApplication.shared.activate(ignoringOtherApps: true)
+        CommandRunWindowCoordinator.shared.open(
+            request: request,
+            paths: paths,
+            onFinish: { [weak self] in self?.reloadRecentOperations() }
         )
     }
 
@@ -727,6 +920,13 @@ final class SettingsViewModel: ObservableObject {
     }
 
     private func securityBookmarkDataBase64(for url: URL) -> String? {
+        let didAccess = url.startAccessingSecurityScopedResource()
+        defer {
+            if didAccess {
+                url.stopAccessingSecurityScopedResource()
+            }
+        }
+
         guard let data = try? url.bookmarkData(
             options: [.withSecurityScope],
             includingResourceValuesForKeys: nil,
@@ -848,6 +1048,38 @@ final class SettingsViewModel: ObservableObject {
                 throw SettingsValidationError.emptyBundleIdentifier
             }
         }
+
+        var commandIDs = Set<String>()
+        for template in config.commandTemplates {
+            guard !template.id.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                throw SettingsValidationError.emptyCommandTemplateID
+            }
+            guard commandIDs.insert(template.id).inserted else {
+                throw SettingsValidationError.duplicateID(template.id)
+            }
+            guard !template.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                throw SettingsValidationError.emptyCommandTemplateTitle
+            }
+            guard !template.command.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                throw SettingsValidationError.emptyCommand
+            }
+            guard (RightToolConstants.minimumCommandTimeoutSeconds...RightToolConstants.maximumCommandTimeoutSeconds).contains(template.timeoutSeconds) else {
+                throw SettingsValidationError.invalidCommandTimeout(template.timeoutSeconds)
+            }
+
+            var environmentNames = Set<String>()
+            for variable in template.environment {
+                guard CommandTemplateVariableResolver.validateEnvironmentName(variable.name) else {
+                    throw SettingsValidationError.invalidEnvironmentName(variable.name)
+                }
+                guard environmentNames.insert(variable.name).inserted else {
+                    throw SettingsValidationError.duplicateEnvironmentName(variable.name)
+                }
+                if variable.isSensitive, variable.secretReference == nil {
+                    throw SettingsValidationError.missingSecretReference(variable.name)
+                }
+            }
+        }
     }
 
     private func isValidFileName(_ name: String) -> Bool {
@@ -874,6 +1106,13 @@ enum SettingsValidationError: Error, LocalizedError {
     case emptyDeveloperID
     case emptyDeveloperTitle
     case emptyBundleIdentifier
+    case emptyCommandTemplateID
+    case emptyCommandTemplateTitle
+    case emptyCommand
+    case invalidCommandTimeout(Int)
+    case invalidEnvironmentName(String)
+    case duplicateEnvironmentName(String)
+    case missingSecretReference(String)
     case duplicateID(String)
 
     var errorDescription: String? {
@@ -892,9 +1131,545 @@ enum SettingsValidationError: Error, LocalizedError {
             return "开发者入口名称不能为空"
         case .emptyBundleIdentifier:
             return "Bundle Identifier 不能为空"
+        case .emptyCommandTemplateID:
+            return "命令模板 ID 不能为空"
+        case .emptyCommandTemplateTitle:
+            return "命令模板名称不能为空"
+        case .emptyCommand:
+            return "命令内容不能为空"
+        case .invalidCommandTimeout(let timeout):
+            return "命令超时必须在 5-600 秒之间：\(timeout)"
+        case .invalidEnvironmentName(let name):
+            return "环境变量名称无效：\(name)"
+        case .duplicateEnvironmentName(let name):
+            return "环境变量名称重复：\(name)"
+        case .missingSecretReference(let name):
+            return "敏感环境变量缺少 Keychain 引用：\(name)"
         case .duplicateID(let id):
             return "ID 重复：\(id)"
         }
+    }
+}
+
+final class CommandRunViewModel: ObservableObject {
+    enum RunStatus: Equatable {
+        case preparing
+        case running
+        case succeeded(Int32)
+        case failed(Int32)
+        case timedOut
+        case stopped
+        case error(String)
+
+        var title: String {
+            switch self {
+            case .preparing:
+                return "准备中"
+            case .running:
+                return "运行中"
+            case .succeeded:
+                return "已完成"
+            case .failed:
+                return "失败"
+            case .timedOut:
+                return "已超时"
+            case .stopped:
+                return "已停止"
+            case .error:
+                return "错误"
+            }
+        }
+
+        var color: Color {
+            switch self {
+            case .preparing, .running:
+                return SettingsTheme.accent
+            case .succeeded:
+                return .green
+            case .failed, .timedOut, .error:
+                return .red
+            case .stopped:
+                return .orange
+            }
+        }
+    }
+
+    @Published var title = "命令运行"
+    @Published var command = ""
+    @Published var workingDirectory = ""
+    @Published var output = ""
+    @Published var status: RunStatus = .preparing
+    @Published var exitCode: Int32?
+    @Published var durationText = "—"
+
+    private let request: PendingCommandRunRequest
+    private let paths: RightToolStoragePaths
+    private let onFinish: () -> Void
+    private let secretStore = KeychainCommandSecretStore()
+    private var process: Process?
+    private var startedAt: Date?
+    private var timeoutWorkItem: DispatchWorkItem?
+    private var didRequestStop = false
+    private var didTimeout = false
+    private var outputSummary = ""
+    private var bookmarkAccess: AuthorizedBookmarkAccess?
+    private var commandScopedAccessURLs: [URL] = []
+
+    init(
+        request: PendingCommandRunRequest,
+        paths: RightToolStoragePaths,
+        onFinish: @escaping () -> Void
+    ) {
+        self.request = request
+        self.paths = paths
+        self.onFinish = onFinish
+    }
+
+    func start() {
+        guard process == nil else {
+            return
+        }
+
+        do {
+            let configProvider = FileBackedRightToolConfigProvider(paths: paths)
+            let config = try configProvider.loadConfig()
+            let bookmarks = try configProvider.loadBookmarkCatalog()
+            guard
+                let action = config.actions.first(where: { $0.id == request.actionID }),
+                let templateID = action.payload.commandTemplateID,
+                let template = config.commandTemplates.first(where: { $0.id == templateID })
+            else {
+                throw CommandTemplateError.missingCommandTemplate(request.actionID)
+            }
+
+            let bookmarkAccess = try AuthorizedBookmarkAccess(
+                catalog: bookmarks,
+                ids: config.monitoredDirectoryIDs + config.commonDirectoryIDs
+            )
+            self.bookmarkAccess = bookmarkAccess
+            let validator = AuthorizedPathValidator(authorizedDirectories: bookmarkAccess.urls)
+            let directory = CommandTemplateVariableResolver.workingDirectory(for: template, context: request.context)
+            guard validator.isAuthorized(directory) else {
+                throw CommandTemplateError.unauthorizedWorkingDirectory(directory.path)
+            }
+            try ensureReadableWorkingDirectory(directory, bookmarks: bookmarks)
+
+            let resolvedCommand = try CommandTemplateVariableResolver.interpolatedCommand(template: template, context: request.context)
+            let environment = try commandEnvironment(for: template)
+
+            title = template.title
+            command = resolvedCommand
+            workingDirectory = directory.path
+            appendOutput("$ cd \(directory.path)\n$ \(resolvedCommand)\n\n")
+
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: "/bin/zsh")
+            process.arguments = ["-lc", resolvedCommand]
+            process.currentDirectoryURL = directory
+            process.environment = environment
+
+            let stdout = Pipe()
+            let stderr = Pipe()
+            process.standardOutput = stdout
+            process.standardError = stderr
+            stdout.fileHandleForReading.readabilityHandler = { [weak self] handle in
+                self?.readAvailableOutput(from: handle)
+            }
+            stderr.fileHandleForReading.readabilityHandler = { [weak self] handle in
+                self?.readAvailableOutput(from: handle)
+            }
+
+            process.terminationHandler = { [weak self] process in
+                stdout.fileHandleForReading.readabilityHandler = nil
+                stderr.fileHandleForReading.readabilityHandler = nil
+                DispatchQueue.main.async {
+                    self?.finish(exitCode: process.terminationStatus)
+                }
+            }
+
+            self.process = process
+            startedAt = Date()
+            status = .running
+            try process.run()
+            scheduleTimeout(seconds: template.timeoutSeconds)
+        } catch {
+            status = .error(error.localizedDescription)
+            appendOutput("运行失败：\(error.localizedDescription)\n")
+            logFailure(message: error.localizedDescription)
+            releaseCommandScopedBookmarks()
+            bookmarkAccess = nil
+            onFinish()
+        }
+    }
+
+    func stop() {
+        didRequestStop = true
+        appendOutput("\n用户请求停止命令...\n")
+        terminateThenKillIfNeeded()
+    }
+
+    private func commandEnvironment(for template: CommandTemplate) throws -> [String: String] {
+        var environment = ProcessInfo.processInfo.environment
+        let defaultPath = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+        if let path = environment["PATH"], !path.isEmpty {
+            environment["PATH"] = "\(path):\(defaultPath)"
+        } else {
+            environment["PATH"] = defaultPath
+        }
+
+        for variable in template.environment {
+            guard CommandTemplateVariableResolver.validateEnvironmentName(variable.name) else {
+                throw CommandTemplateError.invalidEnvironmentName(variable.name)
+            }
+
+            if variable.isSensitive {
+                guard
+                    let reference = variable.secretReference,
+                    let value = try secretStore.load(reference: reference)
+                else {
+                    throw CommandTemplateError.missingSecret(variable.name)
+                }
+                environment[variable.name] = value
+            } else {
+                environment[variable.name] = variable.value ?? ""
+            }
+        }
+        return environment
+    }
+
+    private func ensureReadableWorkingDirectory(_ directory: URL, bookmarks: DirectoryBookmarkCatalog) throws {
+        if isReadableDirectory(directory) {
+            return
+        }
+
+        guard let authorizedURL = requestWorkingDirectoryAuthorization(for: directory) else {
+            throw CommandTemplateError.inaccessibleWorkingDirectory(directory.path)
+        }
+
+        let didAccess = authorizedURL.startAccessingSecurityScopedResource()
+        if didAccess {
+            commandScopedAccessURLs.append(authorizedURL)
+        }
+
+        if let data = try? authorizedURL.bookmarkData(
+            options: [.withSecurityScope],
+            includingResourceValuesForKeys: nil,
+            relativeTo: nil
+        ) {
+            persistWorkingDirectoryAuthorization(
+                directory: directory,
+                authorizedURL: authorizedURL,
+                bookmarkDataBase64: data.base64EncodedString(),
+                bookmarks: bookmarks
+            )
+        }
+
+        guard isReadableDirectory(directory) else {
+            throw CommandTemplateError.inaccessibleWorkingDirectory(directory.path)
+        }
+    }
+
+    private func isReadableDirectory(_ directory: URL) -> Bool {
+        var isDirectory: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: directory.path, isDirectory: &isDirectory), isDirectory.boolValue else {
+            return false
+        }
+
+        do {
+            _ = try FileManager.default.contentsOfDirectory(atPath: directory.path)
+            return true
+        } catch {
+            return false
+        }
+    }
+
+    private func requestWorkingDirectoryAuthorization(for directory: URL) -> URL? {
+        let panel = NSOpenPanel()
+        panel.title = "授权命令工作目录"
+        panel.message = "RightTool 需要访问该目录后才能在里面运行命令：\(directory.path)"
+        panel.prompt = "授权并运行"
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.canCreateDirectories = false
+        panel.allowsMultipleSelection = false
+        panel.directoryURL = directory.deletingLastPathComponent()
+
+        guard panel.runModal() == .OK, let url = panel.url?.standardizedFileURL else {
+            return nil
+        }
+
+        let selectedPath = normalizedPath(url)
+        let directoryPath = normalizedPath(directory)
+        guard directoryPath == selectedPath || directoryPath.hasPrefix(selectedPath + "/") else {
+            return nil
+        }
+        return url
+    }
+
+    private func persistWorkingDirectoryAuthorization(
+        directory: URL,
+        authorizedURL: URL,
+        bookmarkDataBase64: String,
+        bookmarks: DirectoryBookmarkCatalog
+    ) {
+        let directoryPath = normalizedPath(directory)
+        let authorizedPath = normalizedPath(authorizedURL)
+        guard directoryPath == authorizedPath || directoryPath.hasPrefix(authorizedPath + "/") else {
+            return
+        }
+
+        do {
+            var catalog = (try? JSONFileStore<DirectoryBookmarkCatalog>(url: paths.bookmarksURL).loadRequired()) ?? bookmarks
+            guard let index = catalog.bookmarks.firstIndex(where: {
+                normalizedPath(URL(fileURLWithPath: $0.path)) == authorizedPath
+            }) else {
+                return
+            }
+            catalog.bookmarks[index].bookmarkDataBase64 = bookmarkDataBase64
+            try JSONFileStore<DirectoryBookmarkCatalog>(url: paths.bookmarksURL).save(catalog)
+        } catch {
+            appendOutput("目录授权已生效，但保存授权失败：\(error.localizedDescription)\n")
+        }
+    }
+
+    private func normalizedPath(_ url: URL) -> String {
+        url.standardizedFileURL.path
+    }
+
+    private func releaseCommandScopedBookmarks() {
+        for url in commandScopedAccessURLs {
+            url.stopAccessingSecurityScopedResource()
+        }
+        commandScopedAccessURLs.removeAll()
+    }
+
+    private func readAvailableOutput(from handle: FileHandle) {
+        let data = handle.availableData
+        guard !data.isEmpty, let text = String(data: data, encoding: .utf8) else {
+            return
+        }
+        DispatchQueue.main.async { [weak self] in
+            self?.appendOutput(text)
+        }
+    }
+
+    private func appendOutput(_ text: String) {
+        output += text
+        outputSummary += text
+        if outputSummary.count > 4000 {
+            outputSummary = String(outputSummary.suffix(4000))
+        }
+    }
+
+    private func scheduleTimeout(seconds: Int) {
+        let workItem = DispatchWorkItem { [weak self] in
+            DispatchQueue.main.async {
+                guard let self, self.process?.isRunning == true else {
+                    return
+                }
+                self.didTimeout = true
+                self.appendOutput("\n命令超过 \(seconds) 秒，正在停止...\n")
+                self.terminateThenKillIfNeeded()
+            }
+        }
+        timeoutWorkItem = workItem
+        DispatchQueue.global().asyncAfter(deadline: .now() + .seconds(seconds), execute: workItem)
+    }
+
+    private func terminateThenKillIfNeeded() {
+        guard let process, process.isRunning else {
+            return
+        }
+        process.terminate()
+        DispatchQueue.global().asyncAfter(deadline: .now() + 2) { [weak process] in
+            guard let process, process.isRunning else {
+                return
+            }
+            kill(process.processIdentifier, SIGKILL)
+        }
+    }
+
+    private func finish(exitCode: Int32) {
+        timeoutWorkItem?.cancel()
+        self.exitCode = exitCode
+        durationText = formattedDuration()
+
+        if didTimeout {
+            status = .timedOut
+        } else if didRequestStop {
+            status = .stopped
+        } else if exitCode == 0 {
+            status = .succeeded(exitCode)
+        } else {
+            status = .failed(exitCode)
+        }
+
+        appendOutput("\n退出码：\(exitCode) · 耗时：\(durationText)\n")
+        logCompletion(exitCode: exitCode)
+        releaseCommandScopedBookmarks()
+        bookmarkAccess = nil
+        onFinish()
+    }
+
+    private func formattedDuration() -> String {
+        guard let startedAt else {
+            return "—"
+        }
+        let interval = Date().timeIntervalSince(startedAt)
+        return String(format: "%.1fs", interval)
+    }
+
+    private func durationMilliseconds() -> Int? {
+        guard let startedAt else {
+            return nil
+        }
+        return Int(Date().timeIntervalSince(startedAt) * 1000)
+    }
+
+    private func logCompletion(exitCode: Int32) {
+        let recordStatus: OperationRecordStatus
+        switch status {
+        case .succeeded:
+            recordStatus = .success
+        case .stopped:
+            recordStatus = .cancelled
+        default:
+            recordStatus = .failure
+        }
+        try? JSONLineOperationLog(url: paths.operationLogURL).append(
+            OperationRecord(
+                actionID: request.actionID,
+                kind: .runCommand,
+                status: recordStatus,
+                sourcePaths: request.context.selectedItems.map(\.path),
+                destinationPaths: [workingDirectory],
+                message: outputSummary.trimmingCharacters(in: .whitespacesAndNewlines),
+                commandExitCode: Int(exitCode),
+                durationMilliseconds: durationMilliseconds()
+            )
+        )
+    }
+
+    private func logFailure(message: String) {
+        try? JSONLineOperationLog(url: paths.operationLogURL).append(
+            OperationRecord(
+                actionID: request.actionID,
+                kind: .runCommand,
+                status: .failure,
+                sourcePaths: request.context.selectedItems.map(\.path),
+                destinationPaths: [request.context.targetDirectory.path],
+                message: message
+            )
+        )
+    }
+}
+
+final class CommandRunWindowCoordinator {
+    static let shared = CommandRunWindowCoordinator()
+    private var windows: [UUID: NSWindow] = [:]
+
+    func open(
+        request: PendingCommandRunRequest,
+        paths: RightToolStoragePaths,
+        onFinish: @escaping () -> Void
+    ) {
+        let viewModel = CommandRunViewModel(request: request, paths: paths, onFinish: onFinish)
+        let view = CommandRunWindow(viewModel: viewModel)
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 860, height: 560),
+            styleMask: [.titled, .closable, .miniaturizable, .resizable],
+            backing: .buffered,
+            defer: false
+        )
+        window.title = "RightTool 命令运行"
+        window.isReleasedWhenClosed = false
+        window.backgroundColor = SettingsTheme.windowBackgroundColor
+        window.contentViewController = NSHostingController(rootView: view)
+        window.center()
+        window.makeKeyAndOrderFront(nil)
+        NSApplication.shared.activate(ignoringOtherApps: true)
+        windows[request.id] = window
+
+        NotificationCenter.default.addObserver(
+            forName: NSWindow.willCloseNotification,
+            object: window,
+            queue: .main
+        ) { [weak self] _ in
+            self?.windows[request.id] = nil
+        }
+
+        viewModel.start()
+    }
+}
+
+struct CommandRunWindow: View {
+    @ObservedObject var viewModel: CommandRunViewModel
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack(alignment: .center, spacing: 14) {
+                Image(systemName: "terminal")
+                    .font(.system(size: 22, weight: .semibold))
+                    .foregroundStyle(SettingsTheme.accent)
+                    .frame(width: 32)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(viewModel.title)
+                        .font(.headline)
+                        .foregroundStyle(SettingsTheme.ink)
+                    Text(viewModel.workingDirectory.isEmpty ? "准备工作目录..." : viewModel.workingDirectory)
+                        .font(.caption)
+                        .foregroundStyle(SettingsTheme.muted)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                        .textSelection(.enabled)
+                }
+
+                Spacer(minLength: 12)
+
+                Text(viewModel.status.title)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(viewModel.status.color)
+                    .padding(.horizontal, 10)
+                    .frame(height: 26)
+                    .background(viewModel.status.color.opacity(0.1), in: Capsule())
+
+                Text(viewModel.durationText)
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(SettingsTheme.muted)
+                    .frame(width: 64, alignment: .trailing)
+
+                Button {
+                    viewModel.stop()
+                } label: {
+                    Label("停止", systemImage: "stop.fill")
+                }
+                .buttonStyle(.bordered)
+                .disabled(!isRunning)
+            }
+            .padding(18)
+            .background(SettingsTheme.windowBackground)
+
+            Divider()
+
+            ScrollView {
+                Text(viewModel.output.isEmpty ? "等待命令输出..." : viewModel.output)
+                    .font(.system(size: 12, design: .monospaced))
+                    .foregroundStyle(SettingsTheme.commandOutputText)
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .topLeading)
+                    .padding(16)
+            }
+            .background(SettingsTheme.commandOutputBackground)
+        }
+        .frame(minWidth: 720, minHeight: 460)
+    }
+
+    private var isRunning: Bool {
+        if case .running = viewModel.status {
+            return true
+        }
+        return false
     }
 }
 
@@ -952,6 +1727,8 @@ struct SettingsRootView: View {
                     TemplateListView(viewModel: viewModel)
                 case .developer:
                     DeveloperEntrypointListView(viewModel: viewModel)
+                case .commands:
+                    CommandTemplateListView(viewModel: viewModel)
                 case .history:
                     OperationHistoryView(viewModel: viewModel)
                 }
@@ -1032,22 +1809,106 @@ private struct SettingsWindowChromeConfigurator: NSViewRepresentable {
         window.styleMask.insert(.fullSizeContentView)
         window.isMovableByWindowBackground = true
         window.isOpaque = true
-        window.backgroundColor = NSColor(calibratedRed: 0.96, green: 0.97, blue: 1.0, alpha: 1.0)
+        window.backgroundColor = SettingsTheme.windowBackgroundColor
     }
 }
 
 private enum SettingsTheme {
-    static let accent = Color(red: 0.24, green: 0.32, blue: 0.98)
-    static let accentSoft = Color(red: 0.93, green: 0.92, blue: 1.0)
-    static let ink = Color(red: 0.07, green: 0.09, blue: 0.16)
-    static let muted = Color(red: 0.36, green: 0.40, blue: 0.52)
-    static let hairline = Color.black.opacity(0.08)
+    static let accent = adaptiveColor(
+        light: NSColor(calibratedRed: 0.24, green: 0.32, blue: 0.98, alpha: 1.0),
+        dark: NSColor(calibratedRed: 0.54, green: 0.62, blue: 1.0, alpha: 1.0)
+    )
+    static let accentSoft = adaptiveColor(
+        light: NSColor(calibratedRed: 0.93, green: 0.92, blue: 1.0, alpha: 1.0),
+        dark: NSColor(calibratedRed: 0.17, green: 0.19, blue: 0.34, alpha: 1.0)
+    )
+    static let ink = Color(nsColor: .labelColor)
+    static let muted = Color(nsColor: .secondaryLabelColor)
+    static let hairline = adaptiveColor(
+        light: NSColor(calibratedWhite: 0.0, alpha: 0.08),
+        dark: NSColor(calibratedWhite: 1.0, alpha: 0.13)
+    )
+    static let windowBackgroundColor = adaptiveNSColor(
+        light: NSColor(calibratedRed: 0.96, green: 0.97, blue: 1.0, alpha: 1.0),
+        dark: NSColor(calibratedRed: 0.055, green: 0.065, blue: 0.09, alpha: 1.0)
+    )
+    static let sidebarBackground = adaptiveColor(
+        light: NSColor(calibratedWhite: 1.0, alpha: 0.58),
+        dark: NSColor(calibratedRed: 0.075, green: 0.085, blue: 0.12, alpha: 0.92)
+    )
+    static let headerBackground = adaptiveColor(
+        light: NSColor(calibratedWhite: 1.0, alpha: 0.72),
+        dark: NSColor(calibratedRed: 0.085, green: 0.095, blue: 0.13, alpha: 0.96)
+    )
+    static let pageOverlay = adaptiveColor(
+        light: NSColor(calibratedWhite: 1.0, alpha: 0.34),
+        dark: NSColor(calibratedWhite: 1.0, alpha: 0.035)
+    )
+    static let surface = adaptiveColor(
+        light: NSColor(calibratedWhite: 1.0, alpha: 0.90),
+        dark: NSColor(calibratedRed: 0.115, green: 0.13, blue: 0.17, alpha: 0.96)
+    )
+    static let surfaceSoft = adaptiveColor(
+        light: NSColor(calibratedWhite: 1.0, alpha: 0.62),
+        dark: NSColor(calibratedWhite: 1.0, alpha: 0.055)
+    )
+    static let surfaceElevated = adaptiveColor(
+        light: NSColor(calibratedWhite: 1.0, alpha: 1.0),
+        dark: NSColor(calibratedRed: 0.14, green: 0.155, blue: 0.20, alpha: 1.0)
+    )
+    static let controlBackground = adaptiveColor(
+        light: NSColor(calibratedWhite: 1.0, alpha: 0.62),
+        dark: NSColor(calibratedWhite: 1.0, alpha: 0.07)
+    )
+    static let controlBackgroundHover = adaptiveColor(
+        light: NSColor(calibratedWhite: 1.0, alpha: 0.72),
+        dark: NSColor(calibratedWhite: 1.0, alpha: 0.11)
+    )
+    static let subtleFill = adaptiveColor(
+        light: NSColor(calibratedWhite: 0.0, alpha: 0.035),
+        dark: NSColor(calibratedWhite: 1.0, alpha: 0.065)
+    )
+    static let menuShadow = adaptiveColor(
+        light: NSColor(calibratedWhite: 0.0, alpha: 0.16),
+        dark: NSColor(calibratedWhite: 0.0, alpha: 0.45)
+    )
+    static let commandOutputText = adaptiveColor(
+        light: NSColor(calibratedRed: 0.12, green: 0.15, blue: 0.18, alpha: 1.0),
+        dark: NSColor(calibratedRed: 0.84, green: 0.88, blue: 0.93, alpha: 1.0)
+    )
+    static let commandOutputBackground = adaptiveColor(
+        light: NSColor(calibratedRed: 0.965, green: 0.972, blue: 0.985, alpha: 1.0),
+        dark: NSColor(calibratedRed: 0.065, green: 0.075, blue: 0.10, alpha: 1.0)
+    )
 
     static var windowBackground: LinearGradient {
         LinearGradient(
             colors: [
-                Color(red: 0.96, green: 0.97, blue: 1.0),
-                Color.white
+                adaptiveColor(
+                    light: NSColor(calibratedRed: 0.96, green: 0.97, blue: 1.0, alpha: 1.0),
+                    dark: NSColor(calibratedRed: 0.055, green: 0.065, blue: 0.09, alpha: 1.0)
+                ),
+                adaptiveColor(
+                    light: NSColor(calibratedWhite: 1.0, alpha: 1.0),
+                    dark: NSColor(calibratedRed: 0.09, green: 0.105, blue: 0.14, alpha: 1.0)
+                )
+            ],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
+
+    static var menuBackground: LinearGradient {
+        LinearGradient(
+            colors: [
+                adaptiveColor(
+                    light: NSColor(calibratedWhite: 1.0, alpha: 0.96),
+                    dark: NSColor(calibratedRed: 0.13, green: 0.145, blue: 0.18, alpha: 0.98)
+                ),
+                adaptiveColor(
+                    light: NSColor(calibratedRed: 0.95, green: 0.96, blue: 0.98, alpha: 1.0),
+                    dark: NSColor(calibratedRed: 0.09, green: 0.105, blue: 0.14, alpha: 1.0)
+                )
             ],
             startPoint: .topLeading,
             endPoint: .bottomTrailing
@@ -1063,6 +1924,17 @@ private enum SettingsTheme {
             startPoint: .topLeading,
             endPoint: .bottomTrailing
         )
+    }
+
+    private static func adaptiveColor(light: NSColor, dark: NSColor) -> Color {
+        Color(nsColor: adaptiveNSColor(light: light, dark: dark))
+    }
+
+    private static func adaptiveNSColor(light: NSColor, dark: NSColor) -> NSColor {
+        NSColor(name: nil) { appearance in
+            let match = appearance.bestMatch(from: [.darkAqua, .aqua])
+            return match == .darkAqua ? dark : light
+        }
     }
 }
 
@@ -1136,14 +2008,7 @@ struct SettingsSidebar: View {
     let badges: [SettingsViewModel.Section: String]
     let onSelect: (SettingsViewModel.Section) -> Void
 
-    private let sections: [SettingsViewModel.Section] = [
-        .onboarding,
-        .directories,
-        .developer,
-        .history,
-        .templates,
-        .actions
-    ]
+    private let sections = SettingsViewModel.SidebarGroup.allCases.flatMap { $0.sections }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 26) {
@@ -1180,7 +2045,7 @@ struct SettingsSidebar: View {
         .padding(.horizontal, 24)
         .padding(.top, SettingsChromeMetrics.sidebarTopPadding)
         .padding(.bottom, SettingsChromeMetrics.sidebarBottomPadding)
-        .background(.white.opacity(0.58))
+        .background(SettingsTheme.sidebarBackground)
         .overlay(alignment: .trailing) {
             Rectangle()
                 .fill(SettingsTheme.hairline)
@@ -1210,7 +2075,7 @@ struct SidebarHintCard: View {
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.white.opacity(0.62), in: RoundedRectangle(cornerRadius: 8))
+        .background(SettingsTheme.surfaceSoft, in: RoundedRectangle(cornerRadius: 8))
         .overlay(RoundedRectangle(cornerRadius: 8).stroke(SettingsTheme.hairline))
     }
 }
@@ -1243,7 +2108,7 @@ struct SidebarNavigationRow: View {
                     .foregroundStyle(isSelected ? SettingsTheme.accent : SettingsTheme.muted)
                     .padding(.horizontal, 7)
                     .padding(.vertical, 3)
-                    .background(.white.opacity(0.72), in: Capsule())
+                    .background(SettingsTheme.controlBackgroundHover, in: Capsule())
             }
         }
         .padding(.horizontal, 12)
@@ -1292,7 +2157,7 @@ struct SettingsDetailShell<Content: View>: View {
             .padding(.horizontal, 28)
             .padding(.top, section == .directories ? 20 : (section == .onboarding ? 22 : 28))
             .padding(.bottom, section == .onboarding ? 8 : 16)
-            .background(.white.opacity(0.72))
+            .background(SettingsTheme.headerBackground)
 
             if section != .onboarding && section != .directories {
                 Rectangle()
@@ -1353,6 +2218,21 @@ struct SettingsDetailShell<Content: View>: View {
                 }
                 DeveloperHeaderAddButton {
                     viewModel.requestAddDeveloperEntrypoint()
+                }
+            } else if section == .commands {
+                if viewModel.hasUnsavedChanges {
+                    StatusBadge(
+                        message: viewModel.statusMessage,
+                        tone: viewModel.statusTone,
+                        isDirty: viewModel.hasUnsavedChanges
+                    )
+                    .frame(maxWidth: 92)
+
+                    SaveConfigButton(viewModel: viewModel)
+                        .fixedSize(horizontal: true, vertical: false)
+                }
+                CommandHeaderAddButton {
+                    viewModel.requestAddCommandTemplate()
                 }
             } else if section == .templates {
                 if viewModel.hasUnsavedChanges {
@@ -1434,6 +2314,12 @@ struct ActionHeaderAddMenu: View {
             } label: {
                 Label("添加新建模板", systemImage: "doc.badge.plus")
             }
+
+            Button {
+                viewModel.requestAddCommandTemplate()
+            } label: {
+                Label("添加命令模板", systemImage: "terminal")
+            }
         } label: {
             HStack(spacing: 10) {
                 Image(systemName: "plus")
@@ -1511,6 +2397,24 @@ struct TemplateHeaderAddButton: View {
     }
 }
 
+struct CommandHeaderAddButton: View {
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Label("添加命令", systemImage: "terminal")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(.white)
+                .lineLimit(1)
+                .frame(width: 112, height: 38)
+                .background(SettingsTheme.accent, in: RoundedRectangle(cornerRadius: 8))
+        }
+        .buttonStyle(.plain)
+        .fixedSize(horizontal: true, vertical: false)
+        .accessibilityLabel("添加命令模板")
+    }
+}
+
 struct StatusBadge: View {
     let message: String
     let tone: SettingsViewModel.StatusTone
@@ -1572,7 +2476,7 @@ struct DesignPageScroll<Content: View>: View {
             .padding(.vertical, 24)
             .frame(maxWidth: .infinity, alignment: .topLeading)
         }
-        .background(.white.opacity(0.34))
+        .background(SettingsTheme.pageOverlay)
     }
 }
 
@@ -1590,7 +2494,7 @@ struct OverviewPageScroll<Content: View>: View {
             .frame(maxWidth: .infinity, alignment: .topLeading)
         }
         .scrollIndicators(.hidden)
-        .background(.white.opacity(0.34))
+        .background(SettingsTheme.pageOverlay)
     }
 }
 
@@ -1607,7 +2511,7 @@ struct DirectoryPageScroll<Content: View>: View {
             .padding(.bottom, 24)
             .frame(maxWidth: .infinity, alignment: .topLeading)
         }
-        .background(.white.opacity(0.34))
+        .background(SettingsTheme.pageOverlay)
     }
 }
 
@@ -1619,7 +2523,7 @@ struct DesignPanel<Content: View>: View {
         content
             .padding(padding)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(.white.opacity(0.9), in: RoundedRectangle(cornerRadius: 8))
+            .background(SettingsTheme.surface, in: RoundedRectangle(cornerRadius: 8))
             .overlay(RoundedRectangle(cornerRadius: 8).stroke(SettingsTheme.hairline))
     }
 }
@@ -1658,6 +2562,7 @@ struct SearchField: View {
                 .foregroundStyle(SettingsTheme.muted)
             TextField(placeholder, text: $text)
                 .textFieldStyle(.plain)
+                .foregroundStyle(SettingsTheme.ink)
             if !text.isEmpty {
                 Button {
                     text = ""
@@ -1670,7 +2575,7 @@ struct SearchField: View {
         }
         .padding(.horizontal, 12)
         .frame(minWidth: 220, maxWidth: 360, minHeight: 36)
-        .background(.white, in: RoundedRectangle(cornerRadius: 8))
+        .background(SettingsTheme.surfaceElevated, in: RoundedRectangle(cornerRadius: 8))
         .overlay(RoundedRectangle(cornerRadius: 8).stroke(SettingsTheme.hairline))
     }
 }
@@ -1810,9 +2715,9 @@ struct RowIconControlLabel: View {
 
     private var background: Color {
         if isDisabled {
-            return Color.black.opacity(0.02)
+            return SettingsTheme.subtleFill.opacity(0.65)
         }
-        return isHovered ? tone.hoverBackground : Color.white.opacity(0.62)
+        return isHovered ? tone.hoverBackground : SettingsTheme.controlBackground
     }
 
     private var stroke: Color {
@@ -1996,7 +2901,7 @@ struct OverviewFeatureRow: View {
             }
             .padding(.horizontal, 16)
             .frame(maxWidth: .infinity, minHeight: 68, alignment: .leading)
-            .background(.white.opacity(0.86), in: RoundedRectangle(cornerRadius: 8))
+            .background(SettingsTheme.surface, in: RoundedRectangle(cornerRadius: 8))
             .overlay(RoundedRectangle(cornerRadius: 8).stroke(SettingsTheme.hairline))
         }
         .buttonStyle(.plain)
@@ -2105,16 +3010,9 @@ struct OverviewContextMenu: View {
         }
         .padding(.vertical, 8)
         .frame(width: 228)
-        .background(
-            LinearGradient(
-                colors: [Color.white.opacity(0.96), Color(red: 0.95, green: 0.96, blue: 0.98)],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            ),
-            in: RoundedRectangle(cornerRadius: 9)
-        )
-        .overlay(RoundedRectangle(cornerRadius: 9).stroke(Color.black.opacity(0.08)))
-        .shadow(color: Color.black.opacity(0.16), radius: 18, x: 0, y: 12)
+        .background(SettingsTheme.menuBackground, in: RoundedRectangle(cornerRadius: 9))
+        .overlay(RoundedRectangle(cornerRadius: 9).stroke(SettingsTheme.hairline))
+        .shadow(color: SettingsTheme.menuShadow, radius: 18, x: 0, y: 12)
     }
 }
 
@@ -2357,7 +3255,7 @@ struct DirectoryTableHeader: View {
         .foregroundStyle(SettingsTheme.ink)
         .padding(.horizontal, 18)
         .frame(height: 38)
-        .background(.white.opacity(0.4))
+        .background(SettingsTheme.pageOverlay)
     }
 }
 
@@ -2687,7 +3585,7 @@ struct ActionListView: View {
                 .frame(width: metrics.contentWidth + 56, alignment: .topLeading)
                 .frame(maxWidth: .infinity, alignment: .topLeading)
             }
-            .background(.white.opacity(0.34))
+            .background(SettingsTheme.pageOverlay)
         }
     }
 
@@ -2909,7 +3807,7 @@ struct ActionTableHeader: View {
         .foregroundStyle(SettingsTheme.muted)
         .padding(.horizontal, 18)
         .frame(height: 42)
-        .background(Color.black.opacity(0.015))
+        .background(SettingsTheme.subtleFill)
     }
 }
 
@@ -3008,7 +3906,7 @@ struct FlowPillGroup: View {
                     .foregroundStyle(SettingsTheme.muted)
                     .padding(.horizontal, 7)
                     .frame(height: 22)
-                    .background(Color.black.opacity(0.045), in: RoundedRectangle(cornerRadius: 5))
+                    .background(SettingsTheme.subtleFill, in: RoundedRectangle(cornerRadius: 5))
             }
 
             if remainingCount > 0 {
@@ -3045,7 +3943,7 @@ struct ActionVisibilityMenu: View {
             .frame(height: 28)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
-                isHovered ? SettingsTheme.accent.opacity(0.07) : Color.white.opacity(0.52),
+                isHovered ? SettingsTheme.accent.opacity(0.07) : SettingsTheme.controlBackground,
                 in: RoundedRectangle(cornerRadius: 7)
             )
             .overlay(
@@ -3163,7 +4061,7 @@ struct ActionVisibilityOptionRow: View {
         if isSelected {
             return SettingsTheme.accent.opacity(0.09)
         }
-        return isHovered ? SettingsTheme.accent.opacity(0.05) : Color.white.opacity(0.64)
+        return isHovered ? SettingsTheme.accent.opacity(0.05) : SettingsTheme.controlBackground
     }
 
     private var rowStroke: Color {
@@ -3206,7 +4104,7 @@ struct ActionPlacementMenu: View {
             .frame(height: 28)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
-                isHovered ? placementTint.opacity(0.08) : Color.white.opacity(0.52),
+                isHovered ? placementTint.opacity(0.08) : SettingsTheme.controlBackground,
                 in: RoundedRectangle(cornerRadius: 7)
             )
             .overlay(
@@ -3325,7 +4223,7 @@ struct ActionPlacementOptionRow: View {
         if isSelected {
             return SettingsTheme.accent.opacity(0.09)
         }
-        return isHovered ? SettingsTheme.accent.opacity(0.05) : Color.white.opacity(0.64)
+        return isHovered ? SettingsTheme.accent.opacity(0.05) : SettingsTheme.controlBackground
     }
 
     private var rowStroke: Color {
@@ -3390,7 +4288,7 @@ struct ActionManagementRuleGrid: View {
                     .foregroundStyle(SettingsTheme.ink)
                     .padding(.horizontal, 12)
                     .frame(height: 34)
-                    .background(Color.black.opacity(0.035), in: RoundedRectangle(cornerRadius: 7))
+                    .background(SettingsTheme.subtleFill, in: RoundedRectangle(cornerRadius: 7))
 
                     ActionInfoChip(title: "模板顺序会同步到新建文件菜单", systemImage: "arrow.up.arrow.down")
                 }
@@ -3412,7 +4310,7 @@ struct ActionManagementRuleGrid: View {
                     .foregroundStyle(SettingsTheme.ink)
                     .padding(.horizontal, 12)
                     .frame(height: 34)
-                    .background(Color.black.opacity(0.035), in: RoundedRectangle(cornerRadius: 7))
+                    .background(SettingsTheme.subtleFill, in: RoundedRectangle(cornerRadius: 7))
 
                     ActionInfoChip(title: "点击表格中的适用范围标签可调整显示位置", systemImage: "eye")
                 }
@@ -3470,7 +4368,7 @@ struct ActionRuleMenuButton<MenuContent: View>: View {
                 }
                 .padding(.horizontal, 10)
                 .frame(height: 30)
-                .background(.white, in: RoundedRectangle(cornerRadius: 7))
+                .background(SettingsTheme.surfaceElevated, in: RoundedRectangle(cornerRadius: 7))
                 .overlay(RoundedRectangle(cornerRadius: 7).stroke(SettingsTheme.hairline))
             }
             .menuStyle(.button)
@@ -3521,7 +4419,7 @@ struct ActionInfoChip: View {
             .foregroundStyle(SettingsTheme.muted)
             .frame(maxWidth: .infinity)
             .frame(height: 30)
-            .background(Color.black.opacity(0.035), in: RoundedRectangle(cornerRadius: 7))
+            .background(SettingsTheme.subtleFill, in: RoundedRectangle(cornerRadius: 7))
             .overlay(RoundedRectangle(cornerRadius: 7).stroke(SettingsTheme.hairline))
     }
 }
@@ -3609,7 +4507,7 @@ struct ActionPreviewContextPicker: View {
                         .frame(maxWidth: .infinity)
                         .frame(height: 30)
                         .background(
-                            selectedContext == context ? .white : Color.clear,
+                            selectedContext == context ? SettingsTheme.surfaceElevated : Color.clear,
                             in: RoundedRectangle(cornerRadius: 6)
                         )
                         .overlay(
@@ -3621,7 +4519,7 @@ struct ActionPreviewContextPicker: View {
             }
         }
         .padding(4)
-        .background(Color.black.opacity(0.035), in: RoundedRectangle(cornerRadius: 8))
+        .background(SettingsTheme.subtleFill, in: RoundedRectangle(cornerRadius: 8))
         .overlay(RoundedRectangle(cornerRadius: 8).stroke(SettingsTheme.hairline))
     }
 }
@@ -3667,16 +4565,9 @@ struct FinderContextMenuMock: View {
         }
         .padding(.vertical, 8)
         .frame(width: 228)
-        .background(
-            LinearGradient(
-                colors: [Color.white.opacity(0.96), Color(red: 0.95, green: 0.96, blue: 0.98)],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            ),
-            in: RoundedRectangle(cornerRadius: 9)
-        )
-        .overlay(RoundedRectangle(cornerRadius: 9).stroke(Color.black.opacity(0.08)))
-        .shadow(color: Color.black.opacity(0.16), radius: 18, x: 0, y: 12)
+        .background(SettingsTheme.menuBackground, in: RoundedRectangle(cornerRadius: 9))
+        .overlay(RoundedRectangle(cornerRadius: 9).stroke(SettingsTheme.hairline))
+        .shadow(color: SettingsTheme.menuShadow, radius: 18, x: 0, y: 12)
     }
 
     private var menuPresentation: MenuPresentation {
@@ -3871,7 +4762,7 @@ struct TemplateTableHeader: View {
         .foregroundStyle(SettingsTheme.muted)
         .padding(.horizontal, 18)
         .frame(height: 38)
-        .background(.white.opacity(0.44))
+        .background(SettingsTheme.pageOverlay)
     }
 }
 
@@ -4059,6 +4950,277 @@ private func templateTint(for template: FileTemplate) -> Color {
     }
 }
 
+struct CommandTemplateListView: View {
+    @ObservedObject var viewModel: SettingsViewModel
+    @State private var editingDraft: CommandTemplateDraft?
+
+    var body: some View {
+        let templates = viewModel.config.commandTemplates
+
+        DesignPageScroll {
+            DesignPanel(padding: 0) {
+                LazyVStack(spacing: 0) {
+                    CommandTemplateTableHeader()
+                    if templates.isEmpty {
+                        EmptyStateRow(title: "暂无命令模板", systemImage: "terminal")
+                    } else {
+                        ForEach(Array(templates.enumerated()), id: \.element.id) { index, template in
+                            CommandTemplateTableRow(
+                                template: template,
+                                viewModel: viewModel,
+                                canMoveUp: index > 0,
+                                canMoveDown: index < templates.count - 1,
+                                onEdit: {
+                                    editingDraft = CommandTemplateDraft(template: template)
+                                },
+                                onMoveUp: {
+                                    viewModel.moveCommandTemplate(template, offset: -1)
+                                },
+                                onMoveDown: {
+                                    viewModel.moveCommandTemplate(template, offset: 1)
+                                }
+                            )
+                            if index < templates.count - 1 {
+                                Divider()
+                            }
+                        }
+                    }
+                }
+            }
+
+            CommandMenuPreviewPanel(items: commandPreviewItems)
+
+            CommandHintBanner()
+        }
+        .sheet(item: $editingDraft) { draft in
+            CommandTemplateEditorSheet(draft: draft) { savedDraft in
+                viewModel.upsertCommandTemplate(savedDraft)
+                editingDraft = nil
+            } onCancel: {
+                editingDraft = nil
+            }
+        }
+        .onChange(of: viewModel.commandTemplateAddRequest) { _, _ in
+            editingDraft = CommandTemplateDraft()
+        }
+    }
+
+    private var commandPreviewItems: [FinderMenuItem] {
+        let enabledActions = viewModel.config.actions
+            .filter { $0.kind == .runCommand && $0.isEnabled }
+            .sorted { $0.order < $1.order }
+
+        return enabledActions.compactMap { action -> FinderMenuItem? in
+            guard
+                let templateID = action.payload.commandTemplateID,
+                viewModel.config.commandTemplates.contains(where: { $0.id == templateID })
+            else {
+                return nil
+            }
+
+            return FinderMenuItem(
+                title: action.title,
+                icon: .systemSymbol("terminal"),
+                tint: SettingsTheme.accent,
+                id: action.id
+            )
+        }
+    }
+}
+
+struct CommandTemplateTableHeader: View {
+    var body: some View {
+        HStack(spacing: 14) {
+            Text("排序").frame(width: 58, alignment: .center)
+            Text("名称").frame(width: 170, alignment: .leading)
+            Text("命令").frame(maxWidth: .infinity, alignment: .leading)
+            Text("超时").frame(width: 70, alignment: .leading)
+            Text("环境").frame(width: 72, alignment: .leading)
+            Text("启用").frame(width: 64, alignment: .center)
+            Text("操作").frame(width: 116, alignment: .center)
+        }
+        .font(.system(size: 13, weight: .semibold))
+        .foregroundStyle(SettingsTheme.muted)
+        .padding(.horizontal, 14)
+        .frame(height: 38)
+        .background(SettingsTheme.pageOverlay)
+    }
+}
+
+struct CommandTemplateTableRow: View {
+    let template: CommandTemplate
+    @ObservedObject var viewModel: SettingsViewModel
+    let canMoveUp: Bool
+    let canMoveDown: Bool
+    let onEdit: () -> Void
+    let onMoveUp: () -> Void
+    let onMoveDown: () -> Void
+
+    private var matchingAction: RightToolAction? {
+        viewModel.config.actions.first {
+            $0.kind == .runCommand && $0.payload.commandTemplateID == template.id
+        }
+    }
+
+    var body: some View {
+        HStack(spacing: 14) {
+            SortStepControls(
+                canMoveUp: canMoveUp,
+                canMoveDown: canMoveDown,
+                onMoveUp: onMoveUp,
+                onMoveDown: onMoveDown
+            )
+            .frame(width: 58, alignment: .center)
+
+            Button(action: onEdit) {
+                HStack(spacing: 10) {
+                    MenuIconView(
+                        icon: .systemSymbol("terminal"),
+                        tint: SettingsTheme.accent,
+                        size: 22,
+                        font: .system(size: 17, weight: .semibold)
+                    )
+                    .frame(width: 28, height: 28)
+                    .background(SettingsTheme.accent.opacity(0.1), in: RoundedRectangle(cornerRadius: 7))
+
+                    Text(template.title)
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(SettingsTheme.ink)
+                        .lineLimit(1)
+                }
+            }
+            .buttonStyle(.plain)
+            .frame(width: 170, alignment: .leading)
+
+            Text(template.command)
+                .font(.system(size: 12, design: .monospaced))
+                .foregroundStyle(SettingsTheme.muted)
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            Text("\(template.timeoutSeconds)s")
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(SettingsTheme.muted)
+                .frame(width: 70, alignment: .leading)
+
+            Text(environmentSummary)
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(template.environment.contains(where: \.isSensitive) ? .orange : SettingsTheme.muted)
+                .frame(width: 72, alignment: .leading)
+
+            Toggle("", isOn: Binding(
+                get: { matchingAction?.isEnabled ?? false },
+                set: { isEnabled in
+                    guard let actionID = matchingAction?.id else { return }
+                    viewModel.setActionEnabled(isEnabled, actionID: actionID)
+                }
+            ))
+            .toggleStyle(.switch)
+            .labelsHidden()
+            .disabled(matchingAction == nil)
+            .frame(width: 64)
+
+            HStack(spacing: 8) {
+                RowIconButton(
+                    systemImage: "play.fill",
+                    accessibilityLabel: "运行 \(template.title)",
+                    helpText: "打开实时输出窗口"
+                ) {
+                    viewModel.runCommandTemplateFromSettings(template)
+                }
+
+                RowIconButton(
+                    systemImage: "pencil",
+                    accessibilityLabel: "编辑 \(template.title)",
+                    helpText: "编辑命令"
+                ) {
+                    onEdit()
+                }
+
+                RowIconButton(
+                    systemImage: "trash",
+                    accessibilityLabel: "删除 \(template.title)",
+                    helpText: "删除命令",
+                    tone: .destructive
+                ) {
+                    viewModel.deleteCommandTemplate(template)
+                }
+            }
+            .frame(width: 116)
+        }
+        .padding(.horizontal, 14)
+        .frame(height: 54)
+        .opacity((matchingAction?.isEnabled ?? true) ? 1 : 0.55)
+    }
+
+    private var environmentSummary: String {
+        guard !template.environment.isEmpty else {
+            return "—"
+        }
+        let sensitiveCount = template.environment.filter(\.isSensitive).count
+        return sensitiveCount > 0 ? "\(template.environment.count) 个 / \(sensitiveCount) 密" : "\(template.environment.count) 个"
+    }
+}
+
+struct CommandMenuPreviewPanel: View {
+    let items: [FinderMenuItem]
+
+    var body: some View {
+        PreviewSection(
+            rootItems: FinderPreviewRootMenu.standardContainerMenu(
+                highlighting: FinderMenuItem(
+                    title: "命令模板",
+                    systemImage: "terminal",
+                    tint: SettingsTheme.accent,
+                    isHighlighted: true,
+                    hasSubmenu: true
+                )
+            ),
+            submenuTitle: "命令模板",
+            submenuItems: items.isEmpty ? [FinderMenuItem(title: "暂无启用命令")] : items
+        ) {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("实时命令窗口")
+                    .font(.headline)
+                    .foregroundStyle(SettingsTheme.ink)
+                Text("从 Finder 右键触发后，RightTool 会自动打开实时输出窗口。")
+                    .font(.callout)
+                    .foregroundStyle(SettingsTheme.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+}
+
+struct CommandHintBanner: View {
+    var body: some View {
+        HStack(alignment: .center, spacing: 12) {
+            Image(systemName: "lock.shield")
+                .font(.system(size: 18, weight: .regular))
+                .foregroundStyle(.orange)
+                .frame(width: 24)
+
+            Text("安全边界：")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(.orange)
+
+            Text("命令只在已授权目录内运行；敏感环境变量存入 Keychain，不写入配置 JSON。")
+                .font(.system(size: 13))
+                .foregroundStyle(SettingsTheme.muted)
+                .lineLimit(1)
+                .minimumScaleFactor(0.82)
+
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 16)
+        .frame(maxWidth: .infinity, minHeight: 48)
+        .background(.orange.opacity(0.055), in: RoundedRectangle(cornerRadius: 8))
+        .overlay(RoundedRectangle(cornerRadius: 8).stroke(.orange.opacity(0.18)))
+    }
+}
+
 struct DeveloperEntrypointListView: View {
     @ObservedObject var viewModel: SettingsViewModel
     @State private var editingDraft: DeveloperEntrypointDraft?
@@ -4198,7 +5360,7 @@ struct DeveloperFilterTabs: View {
                         .frame(minWidth: filter == .all ? 42 : 48)
                         .frame(height: 32)
                         .background(
-                            selectedFilter == filter ? SettingsTheme.accent : Color.white.opacity(0.72),
+                            selectedFilter == filter ? SettingsTheme.accent : SettingsTheme.controlBackgroundHover,
                             in: RoundedRectangle(cornerRadius: 7)
                         )
                         .overlay(
@@ -4231,7 +5393,7 @@ struct DeveloperTableHeader: View {
         .foregroundStyle(SettingsTheme.muted)
         .padding(.horizontal, 12)
         .frame(height: 38)
-        .background(Color.black.opacity(0.012))
+        .background(SettingsTheme.subtleFill)
     }
 }
 
@@ -4550,7 +5712,7 @@ struct ClipboardHistoryHeader: View {
         .foregroundStyle(SettingsTheme.muted)
         .padding(.horizontal, 18)
         .frame(height: 44)
-        .background(Color.black.opacity(0.015))
+        .background(SettingsTheme.subtleFill)
     }
 }
 
@@ -4906,16 +6068,9 @@ struct FinderMenuBox: View {
         }
         .padding(.vertical, 8)
         .frame(width: 228)
-        .background(
-            LinearGradient(
-                colors: [Color.white.opacity(0.96), Color(red: 0.95, green: 0.96, blue: 0.98)],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            ),
-            in: RoundedRectangle(cornerRadius: 9)
-        )
-        .overlay(RoundedRectangle(cornerRadius: 9).stroke(Color.black.opacity(0.08)))
-        .shadow(color: Color.black.opacity(0.16), radius: 18, x: 0, y: 12)
+        .background(SettingsTheme.menuBackground, in: RoundedRectangle(cornerRadius: 9))
+        .overlay(RoundedRectangle(cornerRadius: 9).stroke(SettingsTheme.hairline))
+        .shadow(color: SettingsTheme.menuShadow, radius: 18, x: 0, y: 12)
     }
 }
 
@@ -4988,7 +6143,7 @@ struct EditorSheetHeader: View {
         }
         .padding(.horizontal, 22)
         .padding(.vertical, 18)
-        .background(.white.opacity(0.82))
+        .background(SettingsTheme.headerBackground)
     }
 }
 
@@ -5016,11 +6171,12 @@ struct EditorTextField: View {
                 TextField(placeholder, text: $text)
                     .textFieldStyle(.plain)
                     .font(.system(size: 13))
+                    .foregroundStyle(SettingsTheme.ink)
                     .lineLimit(1)
             }
             .padding(.horizontal, 11)
             .frame(height: 36)
-            .background(.white, in: RoundedRectangle(cornerRadius: 8))
+            .background(SettingsTheme.surfaceElevated, in: RoundedRectangle(cornerRadius: 8))
             .overlay(RoundedRectangle(cornerRadius: 8).stroke(SettingsTheme.hairline))
 
             if let helper {
@@ -5051,10 +6207,11 @@ struct EditorTextArea: View {
 
             TextEditor(text: $text)
                 .font(.body.monospaced())
+                .foregroundStyle(SettingsTheme.ink)
                 .scrollContentBackground(.hidden)
                 .padding(8)
                 .frame(minHeight: 176)
-                .background(.white, in: RoundedRectangle(cornerRadius: 8))
+                .background(SettingsTheme.surfaceElevated, in: RoundedRectangle(cornerRadius: 8))
                 .overlay(RoundedRectangle(cornerRadius: 8).stroke(SettingsTheme.hairline))
         }
     }
@@ -5096,7 +6253,7 @@ struct EditorSheetFooter: View {
         }
         .padding(.horizontal, 22)
         .padding(.vertical, 14)
-        .background(.white.opacity(0.86))
+        .background(SettingsTheme.headerBackground)
     }
 }
 
@@ -5219,6 +6376,242 @@ struct TemplateEditorSheet: View {
         }
         if draft.defaultFileName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             return "请填写默认文件名"
+        }
+        return nil
+    }
+}
+
+struct CommandTemplateDraft: Identifiable {
+    let id = UUID()
+    var originalID: String?
+    var templateID: String
+    var title: String
+    var command: String
+    var workingDirectoryMode: CommandWorkingDirectoryMode
+    var timeoutSecondsText: String
+    var environmentText: String
+    private var existingEnvironment: [CommandEnvironmentVariable]
+
+    init() {
+        let suffix = UUID().uuidString.prefix(8).lowercased()
+        originalID = nil
+        templateID = "command-custom-\(suffix)"
+        title = "自定义命令"
+        command = "pwd"
+        workingDirectoryMode = .currentDirectory
+        timeoutSecondsText = "\(RightToolConstants.defaultCommandTimeoutSeconds)"
+        environmentText = ""
+        existingEnvironment = []
+    }
+
+    init(template: CommandTemplate) {
+        originalID = template.id
+        templateID = template.id
+        title = template.title
+        command = template.command
+        workingDirectoryMode = template.workingDirectoryMode
+        timeoutSecondsText = "\(template.timeoutSeconds)"
+        existingEnvironment = template.environment
+        environmentText = template.environment
+            .map { variable in
+                if variable.isSensitive {
+                    return "\(variable.name)!="
+                }
+                return "\(variable.name)=\(variable.value ?? "")"
+            }
+            .joined(separator: "\n")
+    }
+
+    func makeTemplate(secretStore: CommandSecretStoring) throws -> CommandTemplate {
+        let trimmedID = templateID.trimmingCharacters(in: .whitespacesAndNewlines)
+        let timeout = Int(timeoutSecondsText.trimmingCharacters(in: .whitespacesAndNewlines)) ?? RightToolConstants.defaultCommandTimeoutSeconds
+        let environment = try makeEnvironment(templateID: trimmedID, secretStore: secretStore)
+
+        return CommandTemplate(
+            id: trimmedID,
+            title: title.trimmingCharacters(in: .whitespacesAndNewlines),
+            command: command.trimmingCharacters(in: .whitespacesAndNewlines),
+            workingDirectoryMode: workingDirectoryMode,
+            timeoutSeconds: timeout,
+            environment: environment
+        )
+    }
+
+    private func makeEnvironment(templateID: String, secretStore: CommandSecretStoring) throws -> [CommandEnvironmentVariable] {
+        var variables: [CommandEnvironmentVariable] = []
+        for rawLine in environmentText.split(separator: "\n", omittingEmptySubsequences: false) {
+            let line = rawLine.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !line.isEmpty else {
+                continue
+            }
+
+            let parts = line.split(separator: "=", maxSplits: 1, omittingEmptySubsequences: false)
+            let rawName = String(parts.first ?? "")
+            let value = parts.count > 1 ? String(parts[1]) : ""
+            let isSensitive = rawName.hasSuffix("!")
+            let name = String((isSensitive ? rawName.dropLast() : Substring(rawName))).trimmingCharacters(in: .whitespacesAndNewlines)
+
+            guard CommandTemplateVariableResolver.validateEnvironmentName(name) else {
+                throw CommandTemplateError.invalidEnvironmentName(name)
+            }
+
+            if isSensitive {
+                let existing = existingEnvironment.first { $0.name == name && $0.isSensitive }
+                let reference = existing?.secretReference ?? "command-env-\(templateID)-\(name)-\(UUID().uuidString)"
+                if !value.isEmpty {
+                    try secretStore.save(secret: value, reference: reference)
+                } else if existing?.secretReference == nil {
+                    throw CommandTemplateError.missingSecret(name)
+                }
+                variables.append(
+                    CommandEnvironmentVariable(
+                        id: existing?.id ?? "env-\(name.lowercased())-\(UUID().uuidString.prefix(6))",
+                        name: name,
+                        value: nil,
+                        isSensitive: true,
+                        secretReference: reference
+                    )
+                )
+            } else {
+                let existing = existingEnvironment.first { $0.name == name && !$0.isSensitive }
+                variables.append(
+                    CommandEnvironmentVariable(
+                        id: existing?.id ?? "env-\(name.lowercased())-\(UUID().uuidString.prefix(6))",
+                        name: name,
+                        value: value,
+                        isSensitive: false
+                    )
+                )
+            }
+        }
+        return variables
+    }
+}
+
+struct CommandTemplateEditorSheet: View {
+    @State private var draft: CommandTemplateDraft
+    let onSave: (CommandTemplateDraft) -> Void
+    let onCancel: () -> Void
+
+    init(
+        draft: CommandTemplateDraft,
+        onSave: @escaping (CommandTemplateDraft) -> Void,
+        onCancel: @escaping () -> Void
+    ) {
+        _draft = State(initialValue: draft)
+        self.onSave = onSave
+        self.onCancel = onCancel
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            EditorSheetHeader(
+                title: draft.originalID == nil ? "新增命令模板" : "编辑命令模板",
+                subtitle: "保存常用开发命令，Finder 右键触发后会打开实时输出窗口。",
+                systemImage: "terminal"
+            )
+
+            Divider()
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    HStack(alignment: .top, spacing: 14) {
+                        EditorTextField(
+                            title: "模板 ID",
+                            placeholder: "command-git-status",
+                            helper: "用于关联菜单动作，建议保持英文短横线命名。",
+                            systemImage: "number",
+                            text: $draft.templateID
+                        )
+
+                        EditorTextField(
+                            title: "显示名称",
+                            placeholder: "Git Status",
+                            helper: "显示在设置页、右键菜单和实时输出窗口。",
+                            systemImage: "textformat",
+                            text: $draft.title
+                        )
+                    }
+
+                    EditorTextArea(
+                        title: "命令",
+                        helper: "支持 {{currentDirectory}} / {{selectedPath}} / {{selectedPaths}}。",
+                        text: $draft.command
+                    )
+
+                    HStack(alignment: .top, spacing: 14) {
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text("工作目录")
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundStyle(SettingsTheme.ink)
+
+                            Picker("工作目录", selection: $draft.workingDirectoryMode) {
+                                ForEach(CommandWorkingDirectoryMode.allCasesForSettings, id: \.self) { mode in
+                                    Text(mode.displayName).tag(mode)
+                                }
+                            }
+                            .pickerStyle(.radioGroup)
+                            .labelsHidden()
+
+                            Text("命令只会在已授权目录内运行。")
+                                .font(.system(size: 11))
+                                .foregroundStyle(SettingsTheme.muted)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+
+                        EditorTextField(
+                            title: "超时秒数",
+                            placeholder: "60",
+                            helper: "允许 5-600 秒，超时会先终止再强制停止。",
+                            systemImage: "timer",
+                            text: $draft.timeoutSecondsText
+                        )
+                    }
+
+                    EditorTextArea(
+                        title: "环境变量",
+                        helper: "一行一个 KEY=value；敏感值写 KEY!=value，保存后进入 Keychain。",
+                        text: $draft.environmentText
+                    )
+                }
+                .padding(22)
+            }
+            .frame(maxHeight: 620)
+
+            Divider()
+
+            EditorSheetFooter(
+                validationMessage: validationMessage,
+                canSave: canSave,
+                onCancel: onCancel
+            ) {
+                onSave(draft)
+            }
+        }
+        .background(SettingsTheme.windowBackground)
+        .frame(width: 640)
+        .frame(minHeight: 680)
+    }
+
+    private var canSave: Bool {
+        validationMessage == nil
+    }
+
+    private var validationMessage: String? {
+        if draft.templateID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return "请填写模板 ID"
+        }
+        if draft.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return "请填写显示名称"
+        }
+        if draft.command.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return "请填写命令"
+        }
+        guard let timeout = Int(draft.timeoutSecondsText.trimmingCharacters(in: .whitespacesAndNewlines)) else {
+            return "超时必须是数字"
+        }
+        if !(RightToolConstants.minimumCommandTimeoutSeconds...RightToolConstants.maximumCommandTimeoutSeconds).contains(timeout) {
+            return "超时必须在 5-600 秒之间"
         }
         return nil
     }
@@ -5380,6 +6773,8 @@ private extension RightToolAction {
             return SettingsTheme.accent
         case .developerEntrypoints:
             return SettingsTheme.accent
+        case .commandTemplates:
+            return SettingsTheme.accent
         case .fileOperations:
             return .cyan
         case .none:
@@ -5392,7 +6787,7 @@ private extension RightToolAction {
             return "新建"
         }
 
-        if group == .developerEntrypoints || kind == .openInApp || kind == .runCommand {
+        if group == .developerEntrypoints || group == .commandTemplates || kind == .openInApp || kind == .runCommand {
             return "工具"
         }
 
@@ -5463,6 +6858,21 @@ private extension ActionKind {
 
 }
 
+private extension CommandWorkingDirectoryMode {
+    static var allCasesForSettings: [CommandWorkingDirectoryMode] {
+        [.currentDirectory, .selectedItemDirectory]
+    }
+
+    var displayName: String {
+        switch self {
+        case .currentDirectory:
+            return "当前 Finder 目录"
+        case .selectedItemDirectory:
+            return "选中项所在目录"
+        }
+    }
+}
+
 private extension ActionPlacement {
     var displayName: String {
         switch self {
@@ -5496,6 +6906,8 @@ private extension MenuGroup {
             return "新建文件"
         case .developerEntrypoints:
             return "开发者工具"
+        case .commandTemplates:
+            return "命令模板"
         case .fileOperations:
             return "文件操作"
         }
@@ -5509,6 +6921,8 @@ private extension MenuGroup {
             return .systemSymbol("doc.badge.plus")
         case .developerEntrypoints:
             return .systemSymbol("chevron.left.forwardslash.chevron.right")
+        case .commandTemplates:
+            return .systemSymbol("terminal")
         case .fileOperations:
             return .systemSymbol("scissors")
         }
@@ -5518,7 +6932,7 @@ private extension MenuGroup {
         switch self {
         case .commonDirectories, .moveToCommonDirectory, .copyToCommonDirectory:
             return .blue
-        case .createFile, .developerEntrypoints:
+        case .createFile, .developerEntrypoints, .commandTemplates:
             return SettingsTheme.accent
         case .fileOperations:
             return .cyan
@@ -5603,6 +7017,8 @@ private extension OperationKind {
             return "新建文件"
         case .openInApp:
             return "开发者入口"
+        case .runCommand:
+            return "运行命令"
         case .unsupported:
             return "未支持"
         }

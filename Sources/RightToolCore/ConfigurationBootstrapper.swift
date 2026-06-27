@@ -131,6 +131,7 @@ public struct ConfigurationBootstrapper {
         appendMissing(directoryIDs, to: &repaired.monitoredDirectoryIDs)
         appendMissing(directoryIDs, to: &repaired.commonDirectoryIDs)
         appendMissingDirectoryActions(for: directoryIDs, bookmarks: bookmarks, to: &repaired.actions)
+        appendMissingCommandActions(for: repaired.commandTemplates, to: &repaired.actions)
 
         return repaired
     }
@@ -195,6 +196,36 @@ public struct ConfigurationBootstrapper {
                 payload: ActionPayload(directoryID: bookmark.id)
             )
         ]
+    }
+
+    private func appendMissingCommandActions(
+        for templates: [CommandTemplate],
+        to actions: inout [RightToolAction]
+    ) {
+        var existingActionIDs = Set(actions.map(\.id))
+        var order = (actions.map(\.order).max() ?? 0) + 10
+
+        for template in templates {
+            let actionID = "run-\(template.id)"
+            guard existingActionIDs.insert(actionID).inserted else {
+                continue
+            }
+            actions.append(commandAction(for: template, id: actionID, order: order))
+            order += 10
+        }
+    }
+
+    private func commandAction(for template: CommandTemplate, id: String, order: Int) -> RightToolAction {
+        RightToolAction(
+            id: id,
+            title: template.title,
+            kind: .runCommand,
+            visibility: [.selection, .container],
+            placement: .submenu,
+            group: .commandTemplates,
+            order: order,
+            payload: ActionPayload(commandTemplateID: template.id)
+        )
     }
 
     /// Rewrites bookmarks that still point inside the host app sandbox container
@@ -338,6 +369,11 @@ public struct ConfigurationBootstrapper {
                     payload: ActionPayload(developerEntrypointID: entrypoint.id)
                 )
             )
+            order += 10
+        }
+
+        for template in RightToolConfig.defaultCommandTemplates() {
+            actions.append(commandAction(for: template, id: "run-\(template.id)", order: order))
             order += 10
         }
 

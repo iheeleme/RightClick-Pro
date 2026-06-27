@@ -233,7 +233,9 @@ public final class ActionRunner {
             return .createFile
         case .openInApp:
             return .openInApp
-        case .runCommand, .undoOperation:
+        case .runCommand:
+            return .runCommand
+        case .undoOperation:
             return .unsupported
         }
     }

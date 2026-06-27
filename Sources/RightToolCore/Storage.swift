@@ -6,6 +6,7 @@ public struct RightToolStoragePaths: Equatable {
     public var bookmarksURL: URL
     public var cutClipboardURL: URL
     public var operationLogURL: URL
+    public var pendingCommandRunURL: URL
 
     public init(baseURL: URL) {
         self.baseURL = baseURL
@@ -13,6 +14,7 @@ public struct RightToolStoragePaths: Equatable {
         self.bookmarksURL = baseURL.appendingPathComponent("bookmarks.json")
         self.cutClipboardURL = baseURL.appendingPathComponent("cut-clipboard.json")
         self.operationLogURL = baseURL.appendingPathComponent("operation-log.jsonl")
+        self.pendingCommandRunURL = baseURL.appendingPathComponent("pending-command-run.json")
     }
 
     public static func appGroup(identifier: String = RightToolConstants.defaultAppGroupIdentifier) throws -> RightToolStoragePaths {

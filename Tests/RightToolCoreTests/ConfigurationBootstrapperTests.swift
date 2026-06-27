@@ -17,6 +17,7 @@ final class ConfigurationBootstrapperTests: XCTestCase {
         XCTAssertFalse(result.config.actions.isEmpty)
         XCTAssertTrue(result.config.actions.contains { $0.kind == .createFile })
         XCTAssertTrue(result.config.actions.contains { $0.kind == .openInApp })
+        XCTAssertTrue(result.config.actions.contains { $0.kind == .runCommand })
 
         if !result.bookmarks.bookmarks.isEmpty {
             XCTAssertTrue(result.config.actions.contains { $0.kind == .openDirectory })
@@ -154,5 +155,23 @@ final class ConfigurationBootstrapperTests: XCTestCase {
         XCTAssertTrue(savedConfig.actions.contains { $0.id == "open-directory-code" })
         XCTAssertTrue(savedConfig.actions.contains { $0.id == "move-to-code" })
         XCTAssertTrue(savedConfig.actions.contains { $0.id == "copy-to-code" })
+    }
+
+    func testBootstrapRepairsMissingCommandActionsForExistingTemplates() throws {
+        let baseDirectory = try temporaryDirectory()
+        let paths = RightToolStoragePaths(baseURL: baseDirectory.appendingPathComponent("config"))
+        var config = RightToolConfig(actions: [], commandTemplates: [
+            CommandTemplate(id: "command-custom", title: "Custom Command", command: "pwd")
+        ])
+        config.fileTemplates = []
+        config.developerEntrypoints = []
+        try JSONFileStore<RightToolConfig>(url: paths.configURL).save(config)
+
+        _ = try ConfigurationBootstrapper().bootstrap(paths: paths)
+        let savedConfig = try JSONFileStore<RightToolConfig>(url: paths.configURL).loadRequired()
+
+        XCTAssertTrue(savedConfig.actions.contains { action in
+            action.kind == .runCommand && action.payload.commandTemplateID == "command-custom"
+        })
     }
 }

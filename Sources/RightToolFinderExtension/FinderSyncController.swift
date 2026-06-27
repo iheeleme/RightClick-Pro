@@ -7,6 +7,7 @@ import UniformTypeIdentifiers
 @objc(FinderSyncController)
 final class FinderSyncController: FIFinderSync {
     private let menuBuilder = MenuBuilder()
+    private let paths: RightToolStoragePaths
     private let configProvider: RightToolConfigProviding
     private let xpcClient = RightToolActionRunnerXPCClient()
     private var pendingMenuActions: [Int: PendingMenuAction] = [:]
@@ -14,6 +15,7 @@ final class FinderSyncController: FIFinderSync {
 
     override init() {
         let paths = RightToolStoragePaths.defaultForCurrentProcess()
+        self.paths = paths
         self.configProvider = FileBackedRightToolConfigProvider(paths: paths)
         super.init()
         bootstrapConfiguration(paths: paths)
@@ -114,12 +116,57 @@ final class FinderSyncController: FIFinderSync {
     }
 
     private func sendToActionRunner(_ request: ActionRequest) {
+        if routeCommandTemplateToMainApp(request) {
+            return
+        }
+
         xpcClient.perform(request) { result in
             switch result {
             case .success(let actionResult):
                 NSLog("RightTool ActionRunner result for \(request.actionID): \(actionResult.status.rawValue) \(actionResult.message)")
             case .failure(let error):
                 NSLog("RightTool ActionRunner failed for \(request.actionID): \(error.localizedDescription)")
+            }
+        }
+    }
+
+    private func routeCommandTemplateToMainApp(_ request: ActionRequest) -> Bool {
+        guard
+            let config = try? configProvider.loadConfig(),
+            let action = config.actions.first(where: { $0.id == request.actionID }),
+            action.kind == .runCommand
+        else {
+            return false
+        }
+
+        do {
+            let pendingRequest = PendingCommandRunRequest(
+                actionID: request.actionID,
+                context: request.context
+            )
+            try JSONFileStore<PendingCommandRunRequest>(url: paths.pendingCommandRunURL).save(pendingRequest)
+            DistributedNotificationCenter.default().post(
+                name: Notification.Name(RightToolConstants.pendingCommandRunNotificationName),
+                object: nil
+            )
+            launchMainAppForCommandWindow()
+            NSLog("RightTool queued command template for main app: \(request.actionID)")
+        } catch {
+            NSLog("RightTool failed to queue command template \(request.actionID): \(error.localizedDescription)")
+        }
+        return true
+    }
+
+    private func launchMainAppForCommandWindow() {
+        guard let appURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: RightToolConstants.mainAppBundleIdentifier) else {
+            NSLog("RightTool main app bundle not found: \(RightToolConstants.mainAppBundleIdentifier)")
+            return
+        }
+        let configuration = NSWorkspace.OpenConfiguration()
+        configuration.activates = true
+        NSWorkspace.shared.openApplication(at: appURL, configuration: configuration) { _, error in
+            if let error {
+                NSLog("RightTool failed to open main app: \(error.localizedDescription)")
             }
         }
     }
@@ -132,6 +179,8 @@ final class FinderSyncController: FIFinderSync {
             return .systemSymbol("doc.badge.plus")
         case .developerEntrypoints:
             return .systemSymbol("chevron.left.forwardslash.chevron.right")
+        case .commandTemplates:
+            return .systemSymbol("terminal")
         case .fileOperations:
             return .systemSymbol("scissors")
         }
@@ -192,6 +241,8 @@ final class FinderSyncController: FIFinderSync {
             return "新建文件"
         case .developerEntrypoints:
             return "开发者工具"
+        case .commandTemplates:
+            return "命令模板"
         case .fileOperations:
             return "文件操作"
         }

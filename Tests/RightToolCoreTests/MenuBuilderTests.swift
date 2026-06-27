@@ -143,4 +143,25 @@ final class MenuBuilderTests: XCTestCase {
         XCTAssertEqual(menu.rootItems.map(\.id), ["new-markdown"])
         XCTAssertEqual(menu.groupedSubmenuItems[.createFile]?.map(\.id), ["new-json"])
     }
+
+    func testMenuAssignsCommandTemplateIconAndGroup() {
+        let template = CommandTemplate(id: "command-git-status", title: "Git Status", command: "git status --short")
+        let action = RightToolAction(
+            id: "run-git-status",
+            title: "Git Status",
+            kind: .runCommand,
+            visibility: [.container],
+            placement: .submenu,
+            group: .commandTemplates,
+            order: 1,
+            payload: ActionPayload(commandTemplateID: template.id)
+        )
+        let config = RightToolConfig(actions: [action], commandTemplates: [template])
+        let context = FinderContext(invocation: .container, targetDirectory: URL(fileURLWithPath: "/tmp"))
+
+        let menu = MenuBuilder().buildMenu(config: config, context: context)
+
+        XCTAssertEqual(menu.groupedSubmenuItems[.commandTemplates]?.first?.icon, .systemSymbol("terminal"))
+        XCTAssertEqual(menu.groupedSubmenuItems[.commandTemplates]?.map(\.id), ["run-git-status"])
+    }
 }

@@ -8,6 +8,7 @@ public enum OperationKind: String, Codable, Equatable {
     case paste
     case createFile
     case openInApp
+    case runCommand
     case unsupported
 }
 
@@ -26,6 +27,8 @@ public struct OperationRecord: Codable, Equatable, Identifiable {
     public var sourcePaths: [String]
     public var destinationPaths: [String]
     public var message: String?
+    public var commandExitCode: Int?
+    public var durationMilliseconds: Int?
 
     public init(
         id: UUID = UUID(),
@@ -35,7 +38,9 @@ public struct OperationRecord: Codable, Equatable, Identifiable {
         status: OperationRecordStatus,
         sourcePaths: [String] = [],
         destinationPaths: [String] = [],
-        message: String? = nil
+        message: String? = nil,
+        commandExitCode: Int? = nil,
+        durationMilliseconds: Int? = nil
     ) {
         self.id = id
         self.createdAt = createdAt
@@ -45,6 +50,8 @@ public struct OperationRecord: Codable, Equatable, Identifiable {
         self.sourcePaths = sourcePaths
         self.destinationPaths = destinationPaths
         self.message = message
+        self.commandExitCode = commandExitCode
+        self.durationMilliseconds = durationMilliseconds
     }
 }
 

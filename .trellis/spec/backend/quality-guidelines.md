@@ -55,6 +55,82 @@ RightTool quality checks center on SwiftPM compilation/tests, Finder extension p
 - Does settings UI mutate through `SettingsViewModel` commands?
 - Does packaging still produce a discoverable Finder Sync `.appex` and both ActionRunner XPC placements?
 
+### Scenario: Finder Command Template Authorization
+
+#### 1. Scope / Trigger
+
+- Trigger: changes to command template execution from Finder menus, pending command run storage, directory authorization, sandbox entitlements, or security-scoped bookmark handling.
+- This is a cross-process authorization contract because Finder extension, App Group JSON, and the menu-bar app all touch the same command run request.
+
+#### 2. Signatures
+
+- Finder extension queue:
+  ```swift
+  PendingCommandRunRequest(actionID: request.actionID, context: request.context)
+  ```
+- Pending request JSON:
+  ```json
+  {
+    "id": "...",
+    "actionID": "run-command",
+    "context": { "targetDirectory": "/Users/me/Code", "selectedItems": [] },
+    "createdAt": 1782518400
+  }
+  ```
+- Main app authorization gate:
+  ```swift
+  try ensureReadableWorkingDirectory(directory, bookmarks: bookmarks)
+  ```
+
+#### 3. Contracts
+
+- Finder extension may queue only the command intent: action ID plus `FinderContext`.
+- Finder extension must not create `.withSecurityScope` bookmark data for command execution and pass it through `PendingCommandRunRequest`.
+- Main app must use `DirectoryBookmarkCatalog.bookmarkDataBase64` that it previously saved, or ask the user through `NSOpenPanel` and then save the resulting app-scoped bookmark.
+- `securityScopedBookmarks` on `PendingCommandRunRequest` is legacy decode compatibility only; production command execution must not depend on it.
+- Selecting an authorized parent directory is valid when it contains the requested working directory, and the bookmark should be persisted to the matching configured directory.
+
+#### 4. Validation & Error Matrix
+
+- Working directory outside monitored/common directories -> `CommandTemplateError.unauthorizedWorkingDirectory`.
+- Working directory inside configured directories but unreadable -> main app prompts with `NSOpenPanel`.
+- User cancels the authorization panel -> `CommandTemplateError.inaccessibleWorkingDirectory`.
+- User selects a directory that does not contain the working directory -> reject and return `inaccessibleWorkingDirectory`.
+- Bookmark data save fails after access succeeds -> command may continue, but output should include a save failure message.
+
+#### 5. Good/Base/Bad Cases
+
+- Good: Finder queues a `runCommand` request for `~/Code/Project`; the main app resolves saved `~/Code` bookmark, starts scoped access, and runs the command without extra TCC prompts.
+- Good: saved bookmark is missing; the main app prompts once, user selects `~/Code`, bookmark data is saved to the existing `code` bookmark, and later runs reuse it.
+- Base: old pending JSON contains `securityScopedBookmarks`; decoding still succeeds, but command execution ignores that field.
+- Bad: Finder extension creates scoped bookmark data for selected paths and the main app resolves it, which can trigger repeated macOS "access data from other apps" prompts.
+
+#### 6. Tests Required
+
+- Codable regression: `PendingCommandRunRequest` decodes legacy payloads without `securityScopedBookmarks`.
+- Codable compatibility: old payloads containing `securityScopedBookmarks` still round-trip while the runtime ignores the field.
+- Manual smoke: run a command template from Finder in a protected configured directory and verify only the main app directory authorization panel appears when saved bookmark data is missing.
+- Packaging smoke: run `scripts/package-macos.sh debug` and verify the installed Finder extension is the newly registered `.appex`.
+
+#### 7. Wrong vs Correct
+
+Wrong:
+```swift
+PendingCommandRunRequest(
+    actionID: request.actionID,
+    context: request.context,
+    securityScopedBookmarks: securityScopedBookmarks(for: request.context)
+)
+```
+
+Correct:
+```swift
+PendingCommandRunRequest(
+    actionID: request.actionID,
+    context: request.context
+)
+```
+
 ### Scenario: macOS GitHub Actions Packaging
 
 #### 1. Scope / Trigger

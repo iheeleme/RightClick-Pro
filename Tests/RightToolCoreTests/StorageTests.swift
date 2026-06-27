@@ -26,4 +26,22 @@ final class StorageTests: XCTestCase {
         let records = try log.loadRecent()
         XCTAssertEqual(records.map(\.actionID), ["b", "c"])
     }
+
+    func testConfigDecodesOldJSONWithDefaultCommandTemplates() throws {
+        let json = """
+        {
+          "schemaVersion": 1,
+          "maxRootMenuActions": 5,
+          "monitoredDirectoryIDs": [],
+          "commonDirectoryIDs": [],
+          "actions": [],
+          "fileTemplates": [],
+          "developerEntrypoints": []
+        }
+        """
+
+        let config = try JSONDecoder().decode(RightToolConfig.self, from: Data(json.utf8))
+
+        XCTAssertEqual(config.commandTemplates.map(\.id), RightToolConfig.defaultCommandTemplates().map(\.id))
+    }
 }

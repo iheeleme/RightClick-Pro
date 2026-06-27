@@ -36,6 +36,7 @@ public enum MenuGroup: String, Codable, CaseIterable, Hashable {
     case copyToCommonDirectory
     case createFile
     case developerEntrypoints
+    case commandTemplates
     case fileOperations
 }
 
@@ -55,6 +56,58 @@ public struct ActionPayload: Codable, Equatable {
         self.templateID = templateID
         self.developerEntrypointID = developerEntrypointID
         self.commandTemplateID = commandTemplateID
+    }
+}
+
+public enum CommandWorkingDirectoryMode: String, Codable, CaseIterable, Equatable {
+    case currentDirectory
+    case selectedItemDirectory
+}
+
+public struct CommandEnvironmentVariable: Codable, Equatable, Identifiable {
+    public var id: String
+    public var name: String
+    public var value: String?
+    public var isSensitive: Bool
+    public var secretReference: String?
+
+    public init(
+        id: String,
+        name: String,
+        value: String? = nil,
+        isSensitive: Bool = false,
+        secretReference: String? = nil
+    ) {
+        self.id = id
+        self.name = name
+        self.value = value
+        self.isSensitive = isSensitive
+        self.secretReference = secretReference
+    }
+}
+
+public struct CommandTemplate: Codable, Equatable, Identifiable {
+    public var id: String
+    public var title: String
+    public var command: String
+    public var workingDirectoryMode: CommandWorkingDirectoryMode
+    public var timeoutSeconds: Int
+    public var environment: [CommandEnvironmentVariable]
+
+    public init(
+        id: String,
+        title: String,
+        command: String,
+        workingDirectoryMode: CommandWorkingDirectoryMode = .currentDirectory,
+        timeoutSeconds: Int = RightToolConstants.defaultCommandTimeoutSeconds,
+        environment: [CommandEnvironmentVariable] = []
+    ) {
+        self.id = id
+        self.title = title
+        self.command = command
+        self.workingDirectoryMode = workingDirectoryMode
+        self.timeoutSeconds = timeoutSeconds
+        self.environment = environment
     }
 }
 
@@ -139,6 +192,7 @@ public struct RightToolConfig: Codable, Equatable {
     public var actions: [RightToolAction]
     public var fileTemplates: [FileTemplate]
     public var developerEntrypoints: [DeveloperEntrypoint]
+    public var commandTemplates: [CommandTemplate]
 
     public init(
         schemaVersion: Int = RightToolConstants.currentSchemaVersion,
@@ -147,7 +201,8 @@ public struct RightToolConfig: Codable, Equatable {
         commonDirectoryIDs: [String] = [],
         actions: [RightToolAction] = RightToolConfig.defaultActions(),
         fileTemplates: [FileTemplate] = RightToolConfig.defaultFileTemplates(),
-        developerEntrypoints: [DeveloperEntrypoint] = RightToolConfig.defaultDeveloperEntrypoints()
+        developerEntrypoints: [DeveloperEntrypoint] = RightToolConfig.defaultDeveloperEntrypoints(),
+        commandTemplates: [CommandTemplate] = RightToolConfig.defaultCommandTemplates()
     ) {
         self.schemaVersion = schemaVersion
         self.maxRootMenuActions = maxRootMenuActions
@@ -156,6 +211,30 @@ public struct RightToolConfig: Codable, Equatable {
         self.actions = actions
         self.fileTemplates = fileTemplates
         self.developerEntrypoints = developerEntrypoints
+        self.commandTemplates = commandTemplates
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case schemaVersion
+        case maxRootMenuActions
+        case monitoredDirectoryIDs
+        case commonDirectoryIDs
+        case actions
+        case fileTemplates
+        case developerEntrypoints
+        case commandTemplates
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.schemaVersion = try container.decodeIfPresent(Int.self, forKey: .schemaVersion) ?? RightToolConstants.currentSchemaVersion
+        self.maxRootMenuActions = try container.decodeIfPresent(Int.self, forKey: .maxRootMenuActions) ?? RightToolConstants.defaultMaxRootMenuActions
+        self.monitoredDirectoryIDs = try container.decodeIfPresent([String].self, forKey: .monitoredDirectoryIDs) ?? []
+        self.commonDirectoryIDs = try container.decodeIfPresent([String].self, forKey: .commonDirectoryIDs) ?? []
+        self.actions = try container.decodeIfPresent([RightToolAction].self, forKey: .actions) ?? RightToolConfig.defaultActions()
+        self.fileTemplates = try container.decodeIfPresent([FileTemplate].self, forKey: .fileTemplates) ?? RightToolConfig.defaultFileTemplates()
+        self.developerEntrypoints = try container.decodeIfPresent([DeveloperEntrypoint].self, forKey: .developerEntrypoints) ?? RightToolConfig.defaultDeveloperEntrypoints()
+        self.commandTemplates = try container.decodeIfPresent([CommandTemplate].self, forKey: .commandTemplates) ?? RightToolConfig.defaultCommandTemplates()
     }
 
     public static func defaultFileTemplates() -> [FileTemplate] {
@@ -173,6 +252,14 @@ public struct RightToolConfig: Codable, Equatable {
             DeveloperEntrypoint(id: "developer-terminal", title: "在 Terminal 打开", bundleIdentifier: "com.apple.Terminal"),
             DeveloperEntrypoint(id: "developer-vscode", title: "在 VS Code 打开", bundleIdentifier: "com.microsoft.VSCode"),
             DeveloperEntrypoint(id: "developer-cursor", title: "在 Cursor 打开", bundleIdentifier: "com.todesktop.230313mzl4w4u92")
+        ]
+    }
+
+    public static func defaultCommandTemplates() -> [CommandTemplate] {
+        [
+            CommandTemplate(id: "command-git-status", title: "Git Status", command: "git status --short"),
+            CommandTemplate(id: "command-list-files", title: "List Files", command: "ls -la"),
+            CommandTemplate(id: "command-print-working-directory", title: "Print Working Directory", command: "pwd")
         ]
     }
 
@@ -236,6 +323,25 @@ public struct RightToolConfig: Codable, Equatable {
                 order: 60,
                 payload: ActionPayload(developerEntrypointID: "developer-cursor")
             )
-        ]
+        ] + defaultCommandTemplates().enumerated().map { index, template in
+            RightToolAction(
+                id: "run-\(template.id)",
+                title: template.title,
+                kind: .runCommand,
+                visibility: [.selection, .container],
+                placement: .submenu,
+                group: .commandTemplates,
+                order: 70 + index * 10,
+                payload: ActionPayload(commandTemplateID: template.id)
+            )
+        }
     }
+}
+
+public extension RightToolConstants {
+    static let defaultCommandTimeoutSeconds = 60
+    static let minimumCommandTimeoutSeconds = 5
+    static let maximumCommandTimeoutSeconds = 600
+    static let pendingCommandRunNotificationName = "com.righttool.app.pending-command-run"
+    static let mainAppBundleIdentifier = "com.righttool.app"
 }
