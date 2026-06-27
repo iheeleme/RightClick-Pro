@@ -16,6 +16,7 @@ struct RightToolAppPreview: App {
             SettingsRootView(viewModel: viewModel)
                 .frame(minWidth: 1180, idealWidth: 1448, maxWidth: 1448, minHeight: 760, idealHeight: 980)
         }
+        .windowStyle(.hiddenTitleBar)
     }
 }
 
@@ -958,6 +959,8 @@ struct SettingsRootView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .background(SettingsTheme.windowBackground)
+        .background(SettingsWindowChromeConfigurator())
+        .ignoresSafeArea(.container, edges: .top)
         .transaction { transaction in
             transaction.animation = nil
         }
@@ -997,6 +1000,38 @@ struct SettingsRootView: View {
             renderedSection = section
             viewModel.selectedSection = section
         }
+    }
+}
+
+private enum SettingsChromeMetrics {
+    static let sidebarTopPadding: CGFloat = 64
+    static let sidebarBottomPadding: CGFloat = 24
+}
+
+private struct SettingsWindowChromeConfigurator: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView(frame: .zero)
+        DispatchQueue.main.async {
+            configure(window: view.window)
+        }
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        DispatchQueue.main.async {
+            configure(window: nsView.window)
+        }
+    }
+
+    private func configure(window: NSWindow?) {
+        guard let window else { return }
+
+        window.titleVisibility = .hidden
+        window.titlebarAppearsTransparent = true
+        window.styleMask.insert(.fullSizeContentView)
+        window.isMovableByWindowBackground = true
+        window.isOpaque = false
+        window.backgroundColor = .clear
     }
 }
 
@@ -1142,7 +1177,8 @@ struct SettingsSidebar: View {
             SidebarHintCard()
         }
         .padding(.horizontal, 24)
-        .padding(.vertical, 24)
+        .padding(.top, SettingsChromeMetrics.sidebarTopPadding)
+        .padding(.bottom, SettingsChromeMetrics.sidebarBottomPadding)
         .background(.white.opacity(0.58))
         .overlay(alignment: .trailing) {
             Rectangle()
