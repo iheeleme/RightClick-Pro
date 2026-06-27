@@ -527,11 +527,11 @@ LazyVStack(spacing: 0) {
 
 ### Common Mistake: Unbounded Settings Layouts Inside ScrollView
 
-**Symptom**: A settings page looks correct in code but renders with columns squeezed, titles missing, or a right-side preview panel pushed outside the visible window.
+**Symptom**: A settings page looks correct in code but renders with columns squeezed, titles missing, a right-side preview panel pushed outside the visible window, or large empty gutters after resizing the settings window wider.
 
-**Cause**: A vertical `ScrollView` can give child content a loose width proposal. Combining that with `HStack`, `.frame(maxWidth: .infinity)`, and fixed-width trailing columns lets the primary table consume too much width or collapse its flexible title column.
+**Cause**: A vertical `ScrollView` can give child content a loose width proposal. Combining that with `HStack`, `.frame(maxWidth: .infinity)`, fixed-width trailing columns, or stale finite page caps such as `1040` / `1080` lets the primary table consume too much width, collapse its flexible title column, or stop expanding while the real window keeps growing.
 
-**Fix**: Use `GeometryReader` at the page boundary to calculate a deterministic content width, then assign explicit widths to the main table and optional preview panel. Give the title/name column higher `layoutPriority`, and keep fixed trailing columns compact.
+**Fix**: Page-level scroll containers should fill the detail pane with `.frame(maxWidth: .infinity, alignment: .topLeading)`. When a page has table-plus-preview columns, use `GeometryReader` at the page boundary to calculate a deterministic content width from the current window width, then assign explicit widths to the main table and optional preview panel. Give the title/name column higher `layoutPriority`, and keep fixed trailing columns compact.
 
 Wrong:
 ```swift
@@ -548,7 +548,7 @@ ScrollView {
 Correct:
 ```swift
 GeometryReader { proxy in
-    let contentWidth = min(max(proxy.size.width - 56, 760), 1220)
+    let contentWidth = max(proxy.size.width - 56, 760)
     let previewWidth: CGFloat = contentWidth >= 1050 ? 286 : 0
     let tableWidth = contentWidth - previewWidth - (previewWidth > 0 ? 18 : 0)
 

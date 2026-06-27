@@ -1570,7 +1570,6 @@ struct DesignPageScroll<Content: View>: View {
             }
             .padding(.horizontal, 28)
             .padding(.vertical, 24)
-            .frame(maxWidth: 1040, alignment: .leading)
             .frame(maxWidth: .infinity, alignment: .topLeading)
         }
         .background(.white.opacity(0.34))
@@ -1588,7 +1587,6 @@ struct OverviewPageScroll<Content: View>: View {
             .padding(.horizontal, 28)
             .padding(.top, 8)
             .padding(.bottom, 16)
-            .frame(maxWidth: 1040, alignment: .leading)
             .frame(maxWidth: .infinity, alignment: .topLeading)
         }
         .scrollIndicators(.hidden)
@@ -1607,7 +1605,6 @@ struct DirectoryPageScroll<Content: View>: View {
             .padding(.horizontal, 28)
             .padding(.top, 4)
             .padding(.bottom, 24)
-            .frame(maxWidth: 1040, alignment: .leading)
             .frame(maxWidth: .infinity, alignment: .topLeading)
         }
         .background(.white.opacity(0.34))
@@ -2698,7 +2695,7 @@ struct ActionListView: View {
     }
 
     private func layoutMetrics(for availableWidth: CGFloat) -> (contentWidth: CGFloat, tableWidth: CGFloat, previewWidth: CGFloat) {
-        let contentWidth = min(max(availableWidth - 56, 760), 1080)
+        let contentWidth = max(availableWidth - 56, 760)
         let previewWidth: CGFloat = contentWidth >= 980 ? 322 : 0
         let spacing: CGFloat = previewWidth > 0 ? 22 : 0
         let tableWidth = max(690, contentWidth - previewWidth - spacing)
