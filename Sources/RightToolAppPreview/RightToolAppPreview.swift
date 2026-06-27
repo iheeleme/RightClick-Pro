@@ -3941,22 +3941,14 @@ struct TemplateTableRow: View {
                     onEdit()
                 }
 
-                Menu {
-                    Button(action: onEdit) {
-                        Label("编辑", systemImage: "pencil")
-                    }
-                    Button(role: .destructive) {
-                        viewModel.deleteTemplate(template)
-                    } label: {
-                        Label("删除", systemImage: "trash")
-                    }
-                } label: {
-                    RowIconControlLabel(systemImage: "ellipsis")
+                RowIconButton(
+                    systemImage: "trash",
+                    accessibilityLabel: "删除 \(templateDisplayTitle)",
+                    helpText: "删除模板",
+                    tone: .destructive
+                ) {
+                    viewModel.deleteTemplate(template)
                 }
-                .buttonStyle(.plain)
-                .menuStyle(.borderlessButton)
-                .help("更多操作")
-                .accessibilityLabel("更多模板操作")
             }
             .frame(width: 72)
         }
@@ -4347,22 +4339,14 @@ struct DeveloperTableRow: View {
                     onEdit()
                 }
 
-                Menu {
-                    Button(action: onEdit) {
-                        Label("编辑", systemImage: "pencil")
-                    }
-                    Button(role: .destructive) {
-                        viewModel.deleteDeveloperEntrypoint(entrypoint)
-                    } label: {
-                        Label("删除", systemImage: "trash")
-                    }
-                } label: {
-                    RowIconControlLabel(systemImage: "ellipsis")
+                RowIconButton(
+                    systemImage: "trash",
+                    accessibilityLabel: "删除 \(entrypoint.title)",
+                    helpText: "删除入口",
+                    tone: .destructive
+                ) {
+                    viewModel.deleteDeveloperEntrypoint(entrypoint)
                 }
-                .buttonStyle(.plain)
-                .menuStyle(.borderlessButton)
-                .help("更多操作")
-                .accessibilityLabel("更多开发者入口操作")
             }
             .frame(width: 76)
         }

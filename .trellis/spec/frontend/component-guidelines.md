@@ -259,6 +259,7 @@ SortStepControls(
 - Icon-only buttons must use `RowIconControlLabel` or `RowIconButton` so hover, disabled, border, and help states stay consistent.
 - If a control opens a menu, the label should still use `RowIconControlLabel`, and menu items should use `Label` with semantic SF Symbols.
 - Destructive or hiding actions must use a destructive tone and a semantic icon such as `trash` or `eye.slash`; do not use `trash` for non-delete behavior.
+- Do not hide a two-action row behind an overflow menu when one action is already visible. Prefer explicit `RowIconButton` controls such as edit + delete; reserve overflow menus for three or more secondary actions.
 
 #### 4. Validation & Error Matrix
 
@@ -267,6 +268,7 @@ SortStepControls(
 - Disabled icon control still renders with active hover/accent state -> misleading affordance.
 - Menu label uses a plain `Image` while row buttons use `RowIconControlLabel` -> inconsistent interaction feedback.
 - A button icon implies delete but only disables/hides an item -> semantic mismatch.
+- Overflow menu repeats an already-visible edit action and only adds delete -> redundant interaction; expose delete directly with destructive tone.
 
 #### 5. Good/Base/Bad Cases
 
