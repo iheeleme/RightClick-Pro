@@ -2103,11 +2103,18 @@ struct OverviewContextMenu: View {
             Divider().padding(.horizontal, 12)
             OverviewContextMenuRow(item: FinderMenuItem(title: "服务", hasSubmenu: true))
         }
-        .padding(.vertical, 6)
-        .frame(width: 238)
-        .background(.white.opacity(0.96), in: RoundedRectangle(cornerRadius: 8))
-        .overlay(RoundedRectangle(cornerRadius: 8).stroke(SettingsTheme.hairline))
-        .shadow(color: Color.black.opacity(0.08), radius: 10, x: 0, y: 7)
+        .padding(.vertical, 8)
+        .frame(width: 228)
+        .background(
+            LinearGradient(
+                colors: [Color.white.opacity(0.96), Color(red: 0.95, green: 0.96, blue: 0.98)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            ),
+            in: RoundedRectangle(cornerRadius: 9)
+        )
+        .overlay(RoundedRectangle(cornerRadius: 9).stroke(Color.black.opacity(0.08)))
+        .shadow(color: Color.black.opacity(0.16), radius: 18, x: 0, y: 12)
     }
 }
 
@@ -4847,13 +4854,10 @@ struct FinderMenuPreview: View {
                 }
             }
 
-            HStack(alignment: .center, spacing: 12) {
+            HStack(alignment: .top, spacing: 10) {
                 FinderMenuBox(items: rootItems)
 
                 if !submenuItems.isEmpty {
-                    Image(systemName: "arrow.right")
-                        .font(.headline)
-                        .foregroundStyle(SettingsTheme.accent)
                     FinderMenuBox(title: submenuTitle, items: submenuItems)
                 }
             }
@@ -4868,27 +4872,22 @@ struct FinderMenuBox: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            if let title {
-                Text(title)
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(SettingsTheme.muted)
-                    .padding(.horizontal, 12)
-                    .frame(maxWidth: .infinity, minHeight: 28, alignment: .leading)
-                Divider()
-            }
-
             ForEach(items) { item in
                 FinderMenuRow(item: item)
-                if item.id != items.last?.id {
-                    Divider()
-                        .padding(.leading, item.icon == nil ? 0 : 32)
-                }
             }
         }
-        .frame(width: 166)
-        .background(.white, in: RoundedRectangle(cornerRadius: 8))
-        .overlay(RoundedRectangle(cornerRadius: 8).stroke(SettingsTheme.hairline))
-        .shadow(color: Color.black.opacity(0.04), radius: 3, x: 0, y: 1)
+        .padding(.vertical, 8)
+        .frame(width: 228)
+        .background(
+            LinearGradient(
+                colors: [Color.white.opacity(0.96), Color(red: 0.95, green: 0.96, blue: 0.98)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            ),
+            in: RoundedRectangle(cornerRadius: 9)
+        )
+        .overlay(RoundedRectangle(cornerRadius: 9).stroke(Color.black.opacity(0.08)))
+        .shadow(color: Color.black.opacity(0.16), radius: 18, x: 0, y: 12)
     }
 }
 
@@ -4902,13 +4901,13 @@ struct FinderMenuRow: View {
                     icon: icon,
                     tint: item.tint,
                     isHighlighted: item.isHighlighted,
-                    size: 16,
-                    font: .caption.weight(.semibold)
+                    size: 17,
+                    font: .system(size: 13, weight: .semibold)
                 )
             }
 
             Text(item.title)
-                .font(.caption)
+                .font(.system(size: 13))
                 .foregroundStyle(item.isHighlighted ? .white : SettingsTheme.ink)
                 .lineLimit(1)
                 .truncationMode(.tail)
@@ -4917,12 +4916,12 @@ struct FinderMenuRow: View {
 
             if item.hasSubmenu {
                 Image(systemName: "chevron.right")
-                    .font(.caption2.weight(.semibold))
+                    .font(.system(size: 10, weight: .bold))
                     .foregroundStyle(item.isHighlighted ? .white : SettingsTheme.muted)
             }
         }
-        .padding(.horizontal, 12)
-        .frame(height: 30)
+        .padding(.horizontal, 14)
+        .frame(height: 26)
         .background(
             item.isHighlighted ? SettingsTheme.accent : Color.clear,
             in: RoundedRectangle(cornerRadius: 6)

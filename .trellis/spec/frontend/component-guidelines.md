@@ -173,7 +173,7 @@ Button("保存配置") {
 - Finder menu previews for the action-management surface should render `MenuBuilder` output instead of flat action rows, so root items and functional group submenus match the real Finder extension.
 - Preview layouts that show a long Finder menu next to a short submenu must top-align the menu boxes and avoid fixed oversized minimum heights that make a single item appear to have large blank space below it.
 - Preview layouts must not insert an extra divider between root actions and functional group submenu rows when the real Finder extension renders those rows compactly.
-- Secondary settings pages that show a right-click preview should reuse `PreviewSection` / `FinderMenuPreview` / `FinderMenuBox`, keeping the overview and action-management previews as the visual standard. Avoid page-specific preview mockups with custom arrows, overlapping menus, decorative sample folders, or fixed oversized heights.
+- Secondary settings pages that show a right-click preview should reuse `PreviewSection` / `FinderMenuPreview` / `FinderMenuBox`, and those shared components must visually match the overview/action-management macOS menu mock surface: about 228pt wide, 26pt rows, soft system-like gradient, 9pt radius, black 0.08 stroke, and the same deep preview shadow. Do not add submenu title bars or per-row dividers. Avoid page-specific preview mockups with custom arrows, overlapping menus, decorative sample folders, or fixed oversized heights.
 
 #### 4. Validation & Error Matrix
 
