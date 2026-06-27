@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 6
-- **Last Active**: 2026-06-27
+- **Total Sessions**: 7
+- **Last Active**: 2026-06-28
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~207 | Active |
+| `journal-1.md` | ~241 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 7 | 2026-06-28 | Dynamic developer entrypoint target | `658a7f8`, `5e73b6b` | `main` |
 | 6 | 2026-06-27 | Developer entrypoint app picker | `79e94a4` | `main` |
 | 5 | 2026-06-27 | Command template runner and authorization fixes | `4fc45ae` | `main` |
 | 4 | 2026-06-27 | Complete settings page interaction | `8896c71`, `adda35c` | `main` |

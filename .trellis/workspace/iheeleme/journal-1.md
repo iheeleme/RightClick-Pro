@@ -205,3 +205,37 @@ Implemented app-based selection for developer shortcut entries: add/edit flows n
 ### Next Steps
 
 - None - task complete
+
+
+## Session 7: Dynamic developer entrypoint target
+
+**Date**: 2026-06-28
+**Task**: Dynamic developer entrypoint target
+**Branch**: `main`
+
+### Summary
+
+Implemented dynamic developer shortcut targets, app-picker based entrypoints, dark-mode fixes, command authorization fixes, and CLI-backed workspace opening for Codex and similar developer apps. Packaged and installed RightTool locally; SwiftPM checks remain blocked by the known PackageDescription manifest linker issue while package-macos debug succeeds.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `658a7f8` | (see git log) |
+| `5e73b6b` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
