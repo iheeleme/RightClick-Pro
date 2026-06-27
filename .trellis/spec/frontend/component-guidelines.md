@@ -363,6 +363,8 @@ EditorSheetFooter(
 - The selected `.app` must be parsed with `Bundle(url:)`, and the draft must derive `bundleIdentifier` from the bundle rather than user text.
 - Display name should default from `CFBundleDisplayName`, then `CFBundleName`, then the app filename.
 - The editor sheet may let users edit display name, entry ID, and target mode, but Bundle Identifier must be read-only app metadata.
+- New drafts created from the app picker should default `targetMode` to `.dynamic`; editing an existing entry should preserve the saved target mode until the user changes it.
+- Developer entry tables should show the target mode label (for example `"动态"`), not a guessed application path, so users can see Finder invocation behavior at a glance.
 - Editing an existing entry should show current app information and a "更换应用" action.
 - Duplicate app bundle identifiers should be blocked, excluding the entry currently being edited.
 
@@ -377,6 +379,7 @@ EditorSheetFooter(
 #### 5. Good/Base/Bad Cases
 
 - Good: user clicks "添加快捷入口", selects `/Applications/Cursor.app`, confirms display name and target mode, then saves.
+- Good: a newly selected app defaults to `"动态"`, meaning selected-item right clicks open the selected item and blank-area right clicks open the current Finder directory.
 - Good: user edits an existing VS Code entry and uses "更换应用" to switch to Cursor while preserving the entry's stable ID unless they edit it.
 - Base: existing configs with bundle identifiers still load because the persisted schema is unchanged.
 - Bad: a sheet asks the user to type `com.microsoft.VSCode` manually during normal add/edit flow.

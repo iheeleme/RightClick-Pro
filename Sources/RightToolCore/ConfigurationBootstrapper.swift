@@ -132,6 +132,7 @@ public struct ConfigurationBootstrapper {
         appendMissing(directoryIDs, to: &repaired.commonDirectoryIDs)
         appendMissingDirectoryActions(for: directoryIDs, bookmarks: bookmarks, to: &repaired.actions)
         appendMissingCommandActions(for: repaired.commandTemplates, to: &repaired.actions)
+        repairDefaultDeveloperEntrypointTargets(in: &repaired.developerEntrypoints)
 
         return repaired
     }
@@ -226,6 +227,25 @@ public struct ConfigurationBootstrapper {
             order: order,
             payload: ActionPayload(commandTemplateID: template.id)
         )
+    }
+
+    private func repairDefaultDeveloperEntrypointTargets(in entrypoints: inout [DeveloperEntrypoint]) {
+        let defaultsByID = Dictionary(
+            uniqueKeysWithValues: RightToolConfig.defaultDeveloperEntrypoints().map { ($0.id, $0) }
+        )
+
+        for index in entrypoints.indices {
+            guard
+                let defaultEntrypoint = defaultsByID[entrypoints[index].id],
+                entrypoints[index].title == defaultEntrypoint.title,
+                entrypoints[index].bundleIdentifier == defaultEntrypoint.bundleIdentifier,
+                entrypoints[index].targetMode == .currentDirectory
+            else {
+                continue
+            }
+
+            entrypoints[index].targetMode = .dynamic
+        }
     }
 
     /// Rewrites bookmarks that still point inside the host app sandbox container

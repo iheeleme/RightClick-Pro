@@ -156,4 +156,116 @@ final class ActionRunnerTests: XCTestCase {
         XCTAssertEqual(opener.openedURLs, [resolvedDirectory])
         XCTAssertEqual(result.affectedURLs, [resolvedDirectory])
     }
+
+    func testDynamicDeveloperEntrypointOpensSelectedItemForSelectionContext() throws {
+        let directory = try temporaryDirectory()
+        let selectedProject = directory.appendingPathComponent("SelectedProject")
+        try FileManager.default.createDirectory(at: selectedProject, withIntermediateDirectories: true)
+
+        let opener = try runDeveloperEntrypoint(
+            targetMode: .dynamic,
+            context: FinderContext(
+                invocation: .selection,
+                targetDirectory: directory,
+                selectedItems: [selectedProject]
+            ),
+            authorizedDirectory: directory
+        )
+
+        XCTAssertEqual(opener.openedApps.map(\.1), [selectedProject])
+    }
+
+    func testDynamicDeveloperEntrypointOpensTargetDirectoryForContainerContext() throws {
+        let directory = try temporaryDirectory()
+        let selectedProject = directory.appendingPathComponent("SelectedProject")
+        try FileManager.default.createDirectory(at: selectedProject, withIntermediateDirectories: true)
+
+        let opener = try runDeveloperEntrypoint(
+            targetMode: .dynamic,
+            context: FinderContext(
+                invocation: .container,
+                targetDirectory: directory,
+                selectedItems: [selectedProject]
+            ),
+            authorizedDirectory: directory
+        )
+
+        XCTAssertEqual(opener.openedApps.map(\.1), [directory])
+    }
+
+    func testDynamicDeveloperEntrypointFallsBackToTargetDirectoryWithoutSelection() throws {
+        let directory = try temporaryDirectory()
+
+        let opener = try runDeveloperEntrypoint(
+            targetMode: .dynamic,
+            context: FinderContext(invocation: .selection, targetDirectory: directory),
+            authorizedDirectory: directory
+        )
+
+        XCTAssertEqual(opener.openedApps.map(\.1), [directory])
+    }
+
+    func testDynamicDeveloperEntrypointUsesSelectionForToolbarWhenAvailable() throws {
+        let directory = try temporaryDirectory()
+        let selectedProject = directory.appendingPathComponent("SelectedProject")
+        try FileManager.default.createDirectory(at: selectedProject, withIntermediateDirectories: true)
+
+        let opener = try runDeveloperEntrypoint(
+            targetMode: .dynamic,
+            context: FinderContext(
+                invocation: .toolbar,
+                targetDirectory: directory,
+                selectedItems: [selectedProject]
+            ),
+            authorizedDirectory: directory
+        )
+
+        XCTAssertEqual(opener.openedApps.map(\.1), [selectedProject])
+    }
+
+    private func runDeveloperEntrypoint(
+        targetMode: DeveloperTargetMode,
+        context: FinderContext,
+        authorizedDirectory: URL
+    ) throws -> RecordingURLOpener {
+        let bookmark = DirectoryBookmark(id: "workspace", displayName: "Workspace", path: authorizedDirectory.path)
+        let entrypoint = DeveloperEntrypoint(
+            id: "developer-test",
+            title: "Open in Test App",
+            bundleIdentifier: "com.example.TestApp",
+            targetMode: targetMode
+        )
+        let action = RightToolAction(
+            id: "open-test-app",
+            title: "Open in Test App",
+            kind: .openInApp,
+            visibility: [.selection, .container, .toolbar],
+            placement: .submenu,
+            group: .developerEntrypoints,
+            order: 1,
+            payload: ActionPayload(developerEntrypointID: entrypoint.id)
+        )
+        let config = RightToolConfig(
+            monitoredDirectoryIDs: ["workspace"],
+            commonDirectoryIDs: ["workspace"],
+            actions: [action],
+            developerEntrypoints: [entrypoint]
+        )
+        let opener = RecordingURLOpener()
+        let runner = ActionRunner(
+            configProvider: StaticRightToolConfigProvider(
+                config: config,
+                bookmarkCatalog: DirectoryBookmarkCatalog(bookmarks: [bookmark])
+            ),
+            operationLog: InMemoryOperationLog(),
+            cutClipboard: InMemoryCutClipboardStore(),
+            urlOpener: opener,
+            developerAppOpener: opener
+        )
+
+        let result = runner.run(ActionRequest(actionID: action.id, context: context))
+
+        XCTAssertEqual(result.status, .success)
+        return opener
+    }
 }

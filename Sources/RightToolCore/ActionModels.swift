@@ -160,6 +160,7 @@ public struct FileTemplate: Codable, Equatable, Identifiable {
 }
 
 public enum DeveloperTargetMode: String, Codable, Equatable {
+    case dynamic
     case currentDirectory
     case selectedItem
     case selectedItemDirectory
@@ -175,7 +176,7 @@ public struct DeveloperEntrypoint: Codable, Equatable, Identifiable {
         id: String,
         title: String,
         bundleIdentifier: String,
-        targetMode: DeveloperTargetMode = .currentDirectory
+        targetMode: DeveloperTargetMode = .dynamic
     ) {
         self.id = id
         self.title = title

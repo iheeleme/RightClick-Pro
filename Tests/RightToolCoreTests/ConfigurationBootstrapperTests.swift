@@ -174,4 +174,23 @@ final class ConfigurationBootstrapperTests: XCTestCase {
             action.kind == .runCommand && action.payload.commandTemplateID == "command-custom"
         })
     }
+
+    func testBootstrapRepairsBuiltInDeveloperEntrypointsToDynamicTarget() throws {
+        let baseDirectory = try temporaryDirectory()
+        let paths = RightToolStoragePaths(baseURL: baseDirectory.appendingPathComponent("config"))
+        var config = RightToolConfig()
+        config.developerEntrypoints = RightToolConfig.defaultDeveloperEntrypoints().map { entrypoint in
+            DeveloperEntrypoint(
+                id: entrypoint.id,
+                title: entrypoint.title,
+                bundleIdentifier: entrypoint.bundleIdentifier,
+                targetMode: .currentDirectory
+            )
+        }
+        try JSONFileStore<RightToolConfig>(url: paths.configURL).save(config)
+
+        let result = try ConfigurationBootstrapper().bootstrap(paths: paths)
+
+        XCTAssertTrue(result.config.developerEntrypoints.allSatisfy { $0.targetMode == .dynamic })
+    }
 }

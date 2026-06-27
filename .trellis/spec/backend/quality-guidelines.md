@@ -131,6 +131,100 @@ PendingCommandRunRequest(
 )
 ```
 
+### Scenario: Developer Entrypoint Dynamic Target
+
+#### 1. Scope / Trigger
+
+- Trigger: changes to `DeveloperTargetMode`, `FinderContext`, `.openInApp` handling, `ConfigurationBootstrapper`, developer entrypoint settings, or Finder menu invocation mapping.
+- This is a cross-layer contract because Finder Sync captures invocation shape, XPC transports `FinderContext`, Core resolves the target URL, and the settings app persists the chosen mode.
+
+#### 2. Signatures
+
+- Persisted target mode:
+  ```swift
+  public enum DeveloperTargetMode: String, Codable, Equatable {
+      case dynamic
+      case currentDirectory
+      case selectedItem
+      case selectedItemDirectory
+  }
+  ```
+- Finder request context:
+  ```swift
+  FinderContext(
+      invocation: .selection | .container | .toolbar,
+      targetDirectory: URL,
+      selectedItems: [URL]
+  )
+  ```
+- Runtime resolver:
+  ```swift
+  developerTargetURL(for entrypoint: DeveloperEntrypoint, context: FinderContext) -> URL
+  ```
+
+#### 3. Contracts
+
+- `.dynamic` is the default `DeveloperEntrypoint.targetMode` for new and built-in developer entries.
+- `.dynamic` target resolution:
+  - `.selection` with a selected item -> first selected item.
+  - `.container` -> `context.targetDirectory`, even if Finder reports stale selected items.
+  - `.toolbar` with a selected item -> first selected item; otherwise `context.targetDirectory`.
+- The Finder extension must keep passing the raw `FinderContext` through XPC; it must not resolve developer target URLs itself.
+- `ActionRunner` owns target resolution so validation and operation logging use the same final URL.
+- `ConfigurationBootstrapper` may repair built-in Terminal / VS Code / Cursor entries from old `.currentDirectory` defaults to `.dynamic` only when ID, title, and bundle identifier still match the built-in entry.
+
+#### 4. Validation & Error Matrix
+
+- Dynamic mode with no selected items -> fall back to `targetDirectory`.
+- Dynamic container invocation with non-empty `selectedItems` -> use `targetDirectory`.
+- Resolved target outside authorized monitored/common directories -> existing `AuthorizedPathValidator` failure.
+- Existing user-customized developer entrypoint -> do not force target mode migration unless it still matches a built-in entry exactly.
+- Unknown future enum raw value in stored JSON -> config decode fails until a migration is added; add Codable compatibility tests if introducing such migration.
+
+#### 5. Good/Base/Bad Cases
+
+- Good: selecting `~/Code/App` and choosing "在 Cursor 打开" opens Cursor with `~/Code/App`.
+- Good: right-clicking blank space in `~/Code` and choosing the same entry opens Cursor with `~/Code`.
+- Good: Finder toolbar action opens the selected item when Finder has an active selection, otherwise the current directory.
+- Base: existing custom entry with `.selectedItemDirectory` keeps that explicit behavior.
+- Bad: Finder Sync rewrites `.container` requests into selected-item paths before sending XPC.
+- Bad: changing `.currentDirectory` semantics to mean dynamic, breaking explicit old configurations.
+
+#### 6. Tests Required
+
+- Unit-test `ActionRunner` dynamic target resolution for selection, container, no-selection fallback, and toolbar fallback.
+- Unit-test bootstrap repair for built-in developer entries previously saved with `.currentDirectory`.
+- Run:
+  ```bash
+  git diff --check
+  swift test --filter ActionRunnerTests
+  swift test --filter ConfigurationBootstrapperTests
+  scripts/package-macos.sh debug
+  scripts/ci-swift-check.sh debug
+  ```
+- If SwiftPM manifest loading is broken locally, run an equivalent direct `swiftc`/built-module smoke for dynamic resolution and record the SwiftPM failure separately.
+
+#### 7. Wrong vs Correct
+
+Wrong:
+```swift
+case .currentDirectory:
+    return context.selectedItems.first ?? context.targetDirectory
+```
+
+Correct:
+```swift
+case .dynamic:
+    switch context.invocation {
+    case .selection, .toolbar:
+        return context.selectedItems.first ?? context.targetDirectory
+    case .container:
+        return context.targetDirectory
+    }
+case .currentDirectory:
+    return context.targetDirectory
+```
+
 ### Scenario: macOS GitHub Actions Packaging
 
 #### 1. Scope / Trigger

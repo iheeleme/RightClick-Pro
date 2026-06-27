@@ -5497,7 +5497,7 @@ struct DeveloperTableHeader: View {
         HStack(spacing: 10) {
             Text("排序").frame(width: 56, alignment: .center)
             Text("名称").frame(width: 136, alignment: .leading)
-            Text("目标路径 / 地址").frame(maxWidth: .infinity, alignment: .leading)
+            Text("目标方式").frame(maxWidth: .infinity, alignment: .leading)
             Text("快捷键").frame(width: 64, alignment: .leading)
             Text("启用").frame(width: 60, alignment: .center)
             Text("操作").frame(width: 76, alignment: .center)
@@ -5548,7 +5548,7 @@ struct DeveloperTableRow: View {
             .buttonStyle(.plain)
             .frame(width: 136, alignment: .leading)
 
-            Text(developerEntryTargetPath(for: entrypoint))
+            Text(entrypoint.targetMode.displayName)
                 .font(.system(size: 12))
                 .foregroundStyle(SettingsTheme.muted)
                 .lineLimit(1)
@@ -5688,19 +5688,6 @@ private func developerEntryTint(for entrypoint: DeveloperEntrypoint) -> Color {
     if value.contains("postman") { return .orange }
     if value.contains("folder") || value.contains("目录") { return .blue }
     return SettingsTheme.accent
-}
-
-private func developerEntryTargetPath(for entrypoint: DeveloperEntrypoint) -> String {
-    let value = "\(entrypoint.title) \(entrypoint.bundleIdentifier)".lowercased()
-    if value.contains("visual studio") || value.contains("vscode") { return "/Applications/Visual Studio Code.app" }
-    if value.contains("webstorm") { return "/Applications/WebStorm.app" }
-    if value.contains("cursor") { return "/Applications/Cursor.app" }
-    if value.contains("iterm") { return "/Applications/iTerm.app" }
-    if value.contains("terminal") { return "/Applications/Utilities/Terminal.app" }
-    if value.contains("github") { return "https://github.com" }
-    if value.contains("docker") { return "/Applications/Docker.app" }
-    if value.contains("postman") { return "/Applications/Postman.app" }
-    return entrypoint.bundleIdentifier
 }
 
 private func developerEntryHotkey(for entrypoint: DeveloperEntrypoint) -> String {
@@ -6752,7 +6739,7 @@ struct DeveloperEntrypointDraft: Identifiable {
         title = ""
         bundleIdentifier = ""
         applicationPath = nil
-        targetMode = .currentDirectory
+        targetMode = .dynamic
     }
 
     init(application: DeveloperApplicationSelection, entrypointID: String) {
@@ -6761,7 +6748,7 @@ struct DeveloperEntrypointDraft: Identifiable {
         title = application.displayName
         bundleIdentifier = application.bundleIdentifier
         applicationPath = application.url.path
-        targetMode = .currentDirectory
+        targetMode = .dynamic
     }
 
     init(entrypoint: DeveloperEntrypoint) {
@@ -6859,7 +6846,7 @@ struct DeveloperEntrypointEditorSheet: View {
                     .pickerStyle(.radioGroup)
                     .labelsHidden()
 
-                    Text("决定动作触发时把当前目录、选中文件或仓库路径传给目标应用。")
+                    Text(draft.targetMode.helperText)
                         .font(.system(size: 11))
                         .foregroundStyle(SettingsTheme.muted)
                 }
@@ -7223,17 +7210,32 @@ private extension ActionVisibility {
 
 private extension DeveloperTargetMode {
     static var allCasesForSettings: [DeveloperTargetMode] {
-        [.currentDirectory, .selectedItem, .selectedItemDirectory]
+        [.dynamic, .currentDirectory, .selectedItem, .selectedItemDirectory]
     }
 
     var displayName: String {
         switch self {
+        case .dynamic:
+            return "动态"
         case .currentDirectory:
             return "当前目录"
         case .selectedItem:
             return "选中项目"
         case .selectedItemDirectory:
             return "选中项目所在目录"
+        }
+    }
+
+    var helperText: String {
+        switch self {
+        case .dynamic:
+            return "选中项目右键时传入选中项；空白处右键时传入当前 Finder 目录。"
+        case .currentDirectory:
+            return "始终把当前 Finder 目录传给目标应用。"
+        case .selectedItem:
+            return "优先把第一个选中项目传给目标应用，没有选中项时回退当前目录。"
+        case .selectedItemDirectory:
+            return "优先把第一个选中项目所在目录传给目标应用，没有选中项时回退当前目录。"
         }
     }
 }

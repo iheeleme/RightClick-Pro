@@ -195,6 +195,13 @@ public final class ActionRunner {
 
     private func developerTargetURL(for entrypoint: DeveloperEntrypoint, context: FinderContext) -> URL {
         switch entrypoint.targetMode {
+        case .dynamic:
+            switch context.invocation {
+            case .selection, .toolbar:
+                return context.selectedItems.first ?? context.targetDirectory
+            case .container:
+                return context.targetDirectory
+            }
         case .currentDirectory:
             return context.targetDirectory
         case .selectedItem:
