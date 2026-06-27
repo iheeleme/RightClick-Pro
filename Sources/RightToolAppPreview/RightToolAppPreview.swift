@@ -2465,14 +2465,14 @@ enum ActionPreviewContext: String, CaseIterable, Identifiable {
 
     var id: String { rawValue }
 
-    func matches(_ visibility: Set<ActionVisibility>) -> Bool {
+    var finderInvocation: FinderInvocation {
         switch self {
         case .fileFolder:
-            return visibility.contains(.selection)
+            return .selection
         case .desktop:
-            return visibility.contains(.container)
+            return .container
         case .disk:
-            return visibility.contains(.toolbar)
+            return .toolbar
         }
     }
 }
@@ -3264,13 +3264,6 @@ struct ActionMenuPreviewCard: View {
     let config: RightToolConfig
     let bookmarks: DirectoryBookmarkCatalog
 
-    private var visibleActions: [RightToolAction] {
-        actions
-            .filter { $0.isEnabled && selectedContext.matches($0.visibility) }
-            .prefix(8)
-            .map { $0 }
-    }
-
     var body: some View {
         DesignPanel(padding: 20) {
             VStack(alignment: .leading, spacing: 16) {
@@ -3291,7 +3284,12 @@ struct ActionMenuPreviewCard: View {
 
                 ActionPreviewContextPicker(selectedContext: $selectedContext)
 
-                FinderContextMenuMock(actions: visibleActions, config: config, bookmarks: bookmarks)
+                FinderContextMenuMock(
+                    selectedContext: selectedContext,
+                    actions: actions,
+                    config: config,
+                    bookmarks: bookmarks
+                )
                     .frame(maxWidth: .infinity, alignment: .center)
                     .padding(.top, 6)
 
@@ -3337,11 +3335,15 @@ struct ActionPreviewContextPicker: View {
 }
 
 struct FinderContextMenuMock: View {
+    let selectedContext: ActionPreviewContext
     let actions: [RightToolAction]
     let config: RightToolConfig
     let bookmarks: DirectoryBookmarkCatalog
 
     var body: some View {
+        let presentation = menuPresentation
+        let groups = visibleGroups(in: presentation)
+
         VStack(spacing: 0) {
             FinderContextMenuStaticRow(title: "打开")
             FinderContextMenuStaticRow(title: "打开方式", hasSubmenu: true)
@@ -3356,11 +3358,19 @@ struct FinderContextMenuMock: View {
             FinderContextMenuStaticRow(title: "快速查看")
             menuDivider
 
-            if actions.isEmpty {
+            if presentation.rootItems.isEmpty && groups.isEmpty {
                 FinderContextMenuStaticRow(title: "暂无启用菜单项")
             } else {
-                ForEach(actions) { action in
-                    FinderContextActionRow(action: action, config: config, bookmarks: bookmarks)
+                ForEach(presentation.rootItems) { item in
+                    FinderContextMenuItemRow(item: item)
+                }
+
+                if !presentation.rootItems.isEmpty && !groups.isEmpty {
+                    menuDivider
+                }
+
+                ForEach(groups, id: \.self) { group in
+                    FinderContextMenuGroupRow(group: group)
                 }
             }
 
@@ -3379,6 +3389,25 @@ struct FinderContextMenuMock: View {
         )
         .overlay(RoundedRectangle(cornerRadius: 9).stroke(Color.black.opacity(0.08)))
         .shadow(color: Color.black.opacity(0.16), radius: 18, x: 0, y: 12)
+    }
+
+    private var menuPresentation: MenuPresentation {
+        var previewConfig = config
+        previewConfig.actions = actions
+        return MenuBuilder().buildMenu(
+            config: previewConfig,
+            context: FinderContext(
+                invocation: selectedContext.finderInvocation,
+                targetDirectory: URL(fileURLWithPath: "/tmp")
+            ),
+            bookmarks: bookmarks
+        )
+    }
+
+    private func visibleGroups(in presentation: MenuPresentation) -> [MenuGroup] {
+        MenuGroup.allCases.filter { group in
+            !(presentation.groupedSubmenuItems[group]?.isEmpty ?? true)
+        }
     }
 
     private var menuDivider: some View {
@@ -3410,29 +3439,49 @@ struct FinderContextMenuStaticRow: View {
     }
 }
 
-struct FinderContextActionRow: View {
-    let action: RightToolAction
-    let config: RightToolConfig
-    let bookmarks: DirectoryBookmarkCatalog
+struct FinderContextMenuItemRow: View {
+    let item: MenuItemPresentation
 
     var body: some View {
         HStack(spacing: 9) {
-            MenuIconView(
-                icon: MenuIconResolver.icon(for: action, config: config, bookmarks: bookmarks),
-                tint: action.managementTint,
-                size: 16,
-                font: .system(size: 13, weight: .semibold)
-            )
-            Text(action.title)
+            if let icon = item.icon {
+                MenuIconView(
+                    icon: icon,
+                    tint: SettingsTheme.accent,
+                    size: 16,
+                    font: .system(size: 13, weight: .semibold)
+                )
+            }
+            Text(item.title)
                 .font(.system(size: 13))
                 .foregroundStyle(SettingsTheme.ink)
                 .lineLimit(1)
             Spacer(minLength: 8)
-            if action.group != nil {
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 10, weight: .bold))
-                    .foregroundStyle(SettingsTheme.muted)
-            }
+        }
+        .padding(.horizontal, 14)
+        .frame(height: 26)
+    }
+}
+
+struct FinderContextMenuGroupRow: View {
+    let group: MenuGroup
+
+    var body: some View {
+        HStack(spacing: 9) {
+            MenuIconView(
+                icon: group.previewIcon,
+                tint: group.previewTint,
+                size: 16,
+                font: .system(size: 13, weight: .semibold)
+            )
+            Text(group.displayName)
+                .font(.system(size: 13))
+                .foregroundStyle(SettingsTheme.ink)
+                .lineLimit(1)
+            Spacer(minLength: 8)
+            Image(systemName: "chevron.right")
+                .font(.system(size: 10, weight: .bold))
+                .foregroundStyle(SettingsTheme.muted)
         }
         .padding(.horizontal, 14)
         .frame(height: 26)
@@ -3659,7 +3708,7 @@ struct TemplateMenuPreviewPanel: View {
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundStyle(SettingsTheme.ink)
 
-                HStack(alignment: .center, spacing: 24) {
+                HStack(alignment: .top, spacing: 24) {
                     VStack(spacing: 10) {
                         Image(systemName: "folder.fill")
                             .font(.system(size: 46))
@@ -3671,19 +3720,20 @@ struct TemplateMenuPreviewPanel: View {
                     }
                     .frame(width: 92)
 
-                    HStack(alignment: .center, spacing: 14) {
+                    HStack(alignment: .top, spacing: 14) {
                         FinderMenuBox(items: rootMenuItems)
                         Image(systemName: "arrow.right")
                             .font(.system(size: 20, weight: .semibold))
                             .foregroundStyle(SettingsTheme.accent)
+                            .padding(.top, 8)
                         FinderMenuBox(items: items.isEmpty ? [FinderMenuItem(title: "暂无启用模板")] : items)
                     }
                     .frame(maxWidth: .infinity, alignment: .center)
                 }
-                .frame(maxWidth: .infinity, minHeight: 222, alignment: .center)
+                .frame(maxWidth: .infinity, alignment: .top)
             }
             .padding(18)
-            .frame(maxWidth: .infinity, minHeight: 280, alignment: .topLeading)
+            .frame(maxWidth: .infinity, alignment: .topLeading)
         }
     }
 
@@ -5190,6 +5240,30 @@ private extension MenuGroup {
             return "开发者工具"
         case .fileOperations:
             return "文件操作"
+        }
+    }
+
+    var previewIcon: MenuIconDescriptor {
+        switch self {
+        case .commonDirectories, .moveToCommonDirectory, .copyToCommonDirectory:
+            return .folder
+        case .createFile:
+            return .systemSymbol("doc.badge.plus")
+        case .developerEntrypoints:
+            return .systemSymbol("chevron.left.forwardslash.chevron.right")
+        case .fileOperations:
+            return .systemSymbol("scissors")
+        }
+    }
+
+    var previewTint: Color {
+        switch self {
+        case .commonDirectories, .moveToCommonDirectory, .copyToCommonDirectory:
+            return .blue
+        case .createFile, .developerEntrypoints:
+            return SettingsTheme.accent
+        case .fileOperations:
+            return .cyan
         }
     }
 }

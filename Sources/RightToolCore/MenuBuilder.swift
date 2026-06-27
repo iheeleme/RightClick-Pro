@@ -108,7 +108,7 @@ public struct MenuBuilder {
                 return lhs.order < rhs.order
             }
 
-        let rootItems = visibleActions
+        let rootCandidates = visibleActions
             .filter { $0.placement == .rootMenu }
             .prefix(max(0, config.maxRootMenuActions))
             .map { makePresentation($0, config: config, bookmarks: bookmarks) }
@@ -121,7 +121,29 @@ public struct MenuBuilder {
                 grouped[group, default: []].append(makePresentation(action, config: config, bookmarks: bookmarks))
             }
 
-        return MenuPresentation(rootItems: Array(rootItems), groupedSubmenuItems: grouped)
+        let rootItems = displayRootItems(from: Array(rootCandidates), grouped: &grouped)
+
+        for group in Array(grouped.keys) {
+            grouped[group]?.sort(by: menuItemSort)
+        }
+
+        return MenuPresentation(rootItems: rootItems, groupedSubmenuItems: grouped)
+    }
+
+    private func displayRootItems(
+        from rootCandidates: [MenuItemPresentation],
+        grouped: inout [MenuGroup: [MenuItemPresentation]]
+    ) -> [MenuItemPresentation] {
+        guard
+            rootCandidates.count == 1,
+            let group = rootCandidates[0].group,
+            grouped[group]?.isEmpty == false
+        else {
+            return rootCandidates
+        }
+
+        grouped[group, default: []].append(rootCandidates[0])
+        return []
     }
 
     private func makePresentation(
@@ -137,5 +159,12 @@ public struct MenuBuilder {
             order: action.order,
             icon: MenuIconResolver.icon(for: action, config: config, bookmarks: bookmarks)
         )
+    }
+
+    private func menuItemSort(_ lhs: MenuItemPresentation, _ rhs: MenuItemPresentation) -> Bool {
+        if lhs.order == rhs.order {
+            return lhs.title.localizedStandardCompare(rhs.title) == .orderedAscending
+        }
+        return lhs.order < rhs.order
     }
 }

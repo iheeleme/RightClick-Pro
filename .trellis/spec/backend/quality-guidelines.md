@@ -301,6 +301,7 @@ for the preview ActionRunner XPC entitlement file, with path authorization enfor
 - Finder extension menus must not wrap submenu groups in a visible branded container such as `"RightTool"`; root actions and functional group submenus should be added directly to the returned `NSMenu`.
 - When both root actions and functional group submenus exist, insert one separator between those two blocks. When no actions are visible, return `nil` instead of an empty menu.
 - Visible group names must describe the function, such as `"前往常用目录"`, `"新建文件"`, `"开发者工具"`, or `"文件操作"`, and settings previews should use matching labels.
+- If the only root item belongs to a group that also has submenu items, `MenuBuilder` must fold that solitary root item into the matching functional group for presentation. This prevents a single item such as `"新建Markdown"` from rendering as an orphaned root item with awkward whitespace before the grouped menu block.
 
 #### 4. Validation & Error Matrix
 
@@ -312,20 +313,24 @@ for the preview ActionRunner XPC entitlement file, with path authorization enfor
 - Finder menu contains a visible `"RightTool"` submenu container -> presentation bug; show functional group submenus directly.
 - No visible actions for the current Finder invocation -> return `nil` so Finder does not show an empty extension menu.
 - Settings placement copy says `"RightTool 子菜单"` -> copy drift; use `"功能分组菜单"` or another non-branded functional label.
+- Exactly one visible root item and at least one submenu item in the same `MenuGroup` -> fold the root item into that group and sort group items by `order`.
 
 #### 5. Good/Base/Bad Cases
 
 - Good: Cursor action shows Cursor's installed app icon in the Finder menu.
 - Good: `Note.md` template shows the system Markdown/document type icon.
 - Good: Finder context menu shows `"新建文件"` and `"开发者工具"` group submenus directly, without an intermediate `"RightTool"` submenu.
+- Good: `"新建Markdown"` is the only root item while other create-file actions are grouped, so the presentation shows all create-file actions under `"新建文件"` instead of leaving a root-item gap.
 - Base: a custom shell command shows a terminal symbol.
 - Bad: Finder menu item hard-codes `"terminal"` for every `.openInApp` action.
 - Bad: Finder extension rebuilds icon semantics independently from `MenuIconResolver`.
 - Bad: Finder menu shows a top-level `"RightTool"` submenu that only contains functional groups.
+- Bad: a single root `"新建Markdown"` item is followed by a separator and a `"新建文件"` group, creating excessive visual whitespace below the root item.
 
 #### 6. Tests Required
 
 - Unit-test `MenuBuilder` icon descriptors for developer, template, and directory actions.
+- Unit-test the solitary-root folding rule with one root create-file action and one submenu create-file action.
 - Run:
   ```bash
   git diff --check

@@ -111,4 +111,36 @@ final class MenuBuilderTests: XCTestCase {
 
         XCTAssertEqual(menu.rootItems.first?.icon, .filePath(bookmark.path))
     }
+
+    func testSolitaryRootItemFoldsIntoMatchingSubmenuGroup() {
+        let actions = [
+            RightToolAction(
+                id: "new-markdown",
+                title: "新建 Markdown",
+                kind: .createFile,
+                visibility: [.container],
+                placement: .rootMenu,
+                group: .createFile,
+                order: 20,
+                payload: ActionPayload(templateID: "template-md")
+            ),
+            RightToolAction(
+                id: "new-json",
+                title: "新建 JSON",
+                kind: .createFile,
+                visibility: [.container],
+                placement: .submenu,
+                group: .createFile,
+                order: 30,
+                payload: ActionPayload(templateID: "template-json")
+            )
+        ]
+        let config = RightToolConfig(actions: actions)
+        let context = FinderContext(invocation: .container, targetDirectory: URL(fileURLWithPath: "/tmp"))
+
+        let menu = MenuBuilder().buildMenu(config: config, context: context)
+
+        XCTAssertTrue(menu.rootItems.isEmpty)
+        XCTAssertEqual(menu.groupedSubmenuItems[.createFile]?.map(\.id), ["new-markdown", "new-json"])
+    }
 }
