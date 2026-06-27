@@ -173,6 +173,7 @@ Button("保存配置") {
 - Finder menu previews for the action-management surface should render `MenuBuilder` output instead of flat action rows, so root items and functional group submenus match the real Finder extension.
 - Preview layouts that show a long Finder menu next to a short submenu must top-align the menu boxes and avoid fixed oversized minimum heights that make a single item appear to have large blank space below it.
 - Preview layouts must not insert an extra divider between root actions and functional group submenu rows when the real Finder extension renders those rows compactly.
+- Secondary settings pages that show a right-click preview should reuse `PreviewSection` / `FinderMenuPreview` / `FinderMenuBox`, keeping the overview and action-management previews as the visual standard. Avoid page-specific preview mockups with custom arrows, overlapping menus, decorative sample folders, or fixed oversized heights.
 
 #### 4. Validation & Error Matrix
 
@@ -187,6 +188,7 @@ Button("保存配置") {
 - Preview shows root actions and group submenu rows as one flat action list -> bug; use `MenuBuilder` presentation and compact/top-aligned preview boxes.
 - Placement switching is hidden behind an unlabeled icon-only control -> discoverability bug; use a labeled placement control in the action row.
 - Placement row text truncates common labels such as `"分组菜单"` or selected state relies only on native blue hover highlight -> display polish bug.
+- Directory/template/developer preview pages use different menu cards or manual offsets -> consistency bug; route them through the shared Finder preview components unless the surface needs `MenuBuilder`-accurate action-management rendering.
 
 #### 5. Good/Base/Bad Cases
 

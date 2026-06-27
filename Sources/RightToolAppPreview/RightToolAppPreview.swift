@@ -2281,32 +2281,20 @@ struct DirectoryMenuPreviewPanel: View {
     let items: [FinderMenuItem]
 
     var body: some View {
-        DesignPanel(padding: 0) {
-            HStack(alignment: .center, spacing: 24) {
-                VStack(alignment: .leading, spacing: 10) {
-                    Text("右键菜单预览")
-                        .font(.system(size: 17, weight: .semibold))
-                        .foregroundStyle(SettingsTheme.ink)
-                    Text("在 Finder 中右键时，启用的目录将出现在右键菜单中，方便快速访问。")
-                        .font(.system(size: 13))
-                        .foregroundStyle(SettingsTheme.muted)
-                        .lineSpacing(5)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                .frame(width: 220, alignment: .leading)
-
-                Spacer(minLength: 12)
-
-                HStack(alignment: .center, spacing: 22) {
-                    FinderMenuBox(items: rootMenuItems)
-                    FinderMenuBox(items: items)
-                }
-                .frame(maxWidth: .infinity, alignment: .center)
-
-                Spacer(minLength: 0)
+        PreviewSection(
+            rootItems: rootMenuItems,
+            submenuTitle: "常用目录",
+            submenuItems: items.isEmpty ? [FinderMenuItem(title: "暂无启用目录")] : items
+        ) {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("右键菜单预览")
+                    .font(.headline)
+                    .foregroundStyle(SettingsTheme.ink)
+                Text("在 Finder 中右键时，启用的目录会出现在「常用目录」子菜单中。")
+                    .font(.callout)
+                    .foregroundStyle(SettingsTheme.muted)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-            .padding(.horizontal, 22)
-            .frame(maxWidth: .infinity, minHeight: 160, alignment: .leading)
         }
     }
 
@@ -3985,38 +3973,20 @@ struct TemplateMenuPreviewPanel: View {
     let items: [FinderMenuItem]
 
     var body: some View {
-        DesignPanel(padding: 0) {
-            VStack(alignment: .leading, spacing: 12) {
-                Text("右键菜单预览（在 Finder 中右键查看效果）")
-                    .font(.system(size: 14, weight: .semibold))
+        PreviewSection(
+            rootItems: rootMenuItems,
+            submenuTitle: "新建文件",
+            submenuItems: items.isEmpty ? [FinderMenuItem(title: "暂无启用模板")] : items
+        ) {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("右键菜单预览")
+                    .font(.headline)
                     .foregroundStyle(SettingsTheme.ink)
-
-                HStack(alignment: .top, spacing: 24) {
-                    VStack(spacing: 10) {
-                        Image(systemName: "folder.fill")
-                            .font(.system(size: 46))
-                            .foregroundStyle(.blue.opacity(0.82))
-                            .frame(width: 72, height: 58)
-                        Text("示例文件夹")
-                            .font(.system(size: 12))
-                            .foregroundStyle(SettingsTheme.muted)
-                    }
-                    .frame(width: 92)
-
-                    HStack(alignment: .top, spacing: 14) {
-                        FinderMenuBox(items: rootMenuItems)
-                        Image(systemName: "arrow.right")
-                            .font(.system(size: 20, weight: .semibold))
-                            .foregroundStyle(SettingsTheme.accent)
-                            .padding(.top, 8)
-                        FinderMenuBox(items: items.isEmpty ? [FinderMenuItem(title: "暂无启用模板")] : items)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .center)
-                }
-                .frame(maxWidth: .infinity, alignment: .top)
+                Text("在 Finder 中右键时，启用的模板会出现在「新建文件」子菜单中。")
+                    .font(.callout)
+                    .foregroundStyle(SettingsTheme.muted)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-            .padding(18)
-            .frame(maxWidth: .infinity, alignment: .topLeading)
         }
     }
 
@@ -4098,48 +4068,42 @@ struct DeveloperEntrypointListView: View {
         let visibleEntrypointIDs = rows.map(\.id)
 
         DesignPageScroll {
-            HStack(alignment: .top, spacing: 20) {
-                VStack(alignment: .leading, spacing: 14) {
-                    DesignPanel(padding: 0) {
-                        LazyVStack(spacing: 0) {
-                            DeveloperFilterTabs(selectedFilter: $selectedFilter)
-                            Divider()
-                            DeveloperTableHeader()
+            DesignPanel(padding: 0) {
+                LazyVStack(spacing: 0) {
+                    DeveloperFilterTabs(selectedFilter: $selectedFilter)
+                    Divider()
+                    DeveloperTableHeader()
 
-                            if rows.isEmpty {
-                                EmptyStateRow(title: "暂无匹配的开发者入口", systemImage: "terminal")
-                            } else {
-                                ForEach(Array(rows.enumerated()), id: \.element.id) { index, entrypoint in
-                                    DeveloperTableRow(
-                                        entrypoint: entrypoint,
-                                        viewModel: viewModel,
-                                        canMoveUp: index > 0,
-                                        canMoveDown: index < rows.count - 1,
-                                        onMoveUp: {
-                                            viewModel.moveDeveloperEntrypoint(entrypoint, visibleEntrypointIDs: visibleEntrypointIDs, offset: -1)
-                                        },
-                                        onMoveDown: {
-                                            viewModel.moveDeveloperEntrypoint(entrypoint, visibleEntrypointIDs: visibleEntrypointIDs, offset: 1)
-                                        },
-                                        onEdit: {
-                                            editingDraft = DeveloperEntrypointDraft(entrypoint: entrypoint)
-                                        }
-                                    )
-                                    if index < rows.count - 1 {
-                                        Divider()
-                                    }
+                    if rows.isEmpty {
+                        EmptyStateRow(title: "暂无匹配的开发者入口", systemImage: "terminal")
+                    } else {
+                        ForEach(Array(rows.enumerated()), id: \.element.id) { index, entrypoint in
+                            DeveloperTableRow(
+                                entrypoint: entrypoint,
+                                viewModel: viewModel,
+                                canMoveUp: index > 0,
+                                canMoveDown: index < rows.count - 1,
+                                onMoveUp: {
+                                    viewModel.moveDeveloperEntrypoint(entrypoint, visibleEntrypointIDs: visibleEntrypointIDs, offset: -1)
+                                },
+                                onMoveDown: {
+                                    viewModel.moveDeveloperEntrypoint(entrypoint, visibleEntrypointIDs: visibleEntrypointIDs, offset: 1)
+                                },
+                                onEdit: {
+                                    editingDraft = DeveloperEntrypointDraft(entrypoint: entrypoint)
                                 }
+                            )
+                            if index < rows.count - 1 {
+                                Divider()
                             }
                         }
                     }
-
-                    DeveloperHintBanner()
                 }
-                .frame(maxWidth: .infinity, alignment: .topLeading)
-
-                DeveloperMenuPreviewCard(items: developerPreviewItems)
-                    .frame(width: 276)
             }
+
+            DeveloperMenuPreviewCard(items: developerPreviewItems)
+
+            DeveloperHintBanner()
         }
         .sheet(item: $editingDraft) { draft in
             DeveloperEntrypointEditorSheet(draft: draft) { savedDraft in
@@ -4375,37 +4339,20 @@ struct DeveloperMenuPreviewCard: View {
     let items: [FinderMenuItem]
 
     var body: some View {
-        DesignPanel(padding: 0) {
-            VStack(alignment: .leading, spacing: 14) {
-                HStack(spacing: 6) {
-                    Text("右键菜单预览")
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(SettingsTheme.ink)
-                    Image(systemName: "info.circle")
-                        .font(.caption)
-                        .foregroundStyle(SettingsTheme.muted)
-                }
-
-                Text("在 Finder 中右键时，将在「开发者工具」子菜单中显示以下内容：")
-                    .font(.system(size: 12))
+        PreviewSection(
+            rootItems: rootMenuItems,
+            submenuTitle: "开发者工具",
+            submenuItems: submenuItems
+        ) {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("右键菜单预览")
+                    .font(.headline)
+                    .foregroundStyle(SettingsTheme.ink)
+                Text("在 Finder 中右键时，启用的入口会出现在「开发者工具」子菜单中。")
+                    .font(.callout)
                     .foregroundStyle(SettingsTheme.muted)
-                    .lineSpacing(5)
                     .fixedSize(horizontal: false, vertical: true)
-
-                ZStack(alignment: .topLeading) {
-                    FinderMenuBox(items: rootMenuItems)
-                        .offset(x: 0, y: 0)
-
-                    FinderMenuBox(items: submenuItems)
-                        .offset(x: 112, y: 82)
-                }
-                .scaleEffect(0.94, anchor: .topLeading)
-                .frame(maxWidth: .infinity, minHeight: 330, alignment: .topLeading)
-
-                Spacer(minLength: 0)
             }
-            .padding(18)
-            .frame(maxWidth: .infinity, minHeight: 500, alignment: .topLeading)
         }
     }
 
