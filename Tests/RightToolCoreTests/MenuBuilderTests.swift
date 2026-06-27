@@ -112,7 +112,7 @@ final class MenuBuilderTests: XCTestCase {
         XCTAssertEqual(menu.rootItems.first?.icon, .filePath(bookmark.path))
     }
 
-    func testSolitaryRootItemFoldsIntoMatchingSubmenuGroup() {
+    func testRootItemStaysRootWhenMatchingSubmenuGroupExists() {
         let actions = [
             RightToolAction(
                 id: "new-markdown",
@@ -140,7 +140,7 @@ final class MenuBuilderTests: XCTestCase {
 
         let menu = MenuBuilder().buildMenu(config: config, context: context)
 
-        XCTAssertTrue(menu.rootItems.isEmpty)
-        XCTAssertEqual(menu.groupedSubmenuItems[.createFile]?.map(\.id), ["new-markdown", "new-json"])
+        XCTAssertEqual(menu.rootItems.map(\.id), ["new-markdown"])
+        XCTAssertEqual(menu.groupedSubmenuItems[.createFile]?.map(\.id), ["new-json"])
     }
 }

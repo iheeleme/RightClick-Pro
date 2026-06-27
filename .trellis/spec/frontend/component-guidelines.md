@@ -167,7 +167,7 @@ Button("保存配置") {
 - Settings menu rows must render `MenuIconDescriptor` through `MenuIconView`; application actions use installed app icons, templates use file type icons, directories use path/folder icons, and unsupported cases fall back to semantic SF Symbols.
 - Sorting controls must call `SettingsViewModel` commands that update `RightToolAction.order`, `fileTemplates`, `developerEntrypoints`, or bookmark order as appropriate; sorting UI must update the table and the Finder preview in the same interaction.
 - Display-condition controls must mutate `RightToolAction.visibility` through `SettingsViewModel` and must prevent leaving an action with no visible invocation.
-- Finder menu previews for the action-management surface should render `MenuBuilder` output instead of flat action rows, so root items, functional group submenus, and solitary-root folding match the real Finder extension.
+- Finder menu previews for the action-management surface should render `MenuBuilder` output instead of flat action rows, so root items and functional group submenus match the real Finder extension.
 - Preview layouts that show a long Finder menu next to a short submenu must top-align the menu boxes and avoid fixed oversized minimum heights that make a single item appear to have large blank space below it.
 
 #### 4. Validation & Error Matrix
@@ -179,12 +179,12 @@ Button("保存配置") {
 - Developer, template, or directory rows hard-code SF Symbols instead of using `MenuIconResolver` / `MenuIconView` -> icons drift from the real Finder menu and app icons disappear.
 - Table shows a drag handle or arrow controls but does not update persisted ordering -> bug; wire it to an explicit move command and normalize associated action orders.
 - Visibility pills are rendered as inert labels -> bug when the surface claims display-condition editing; expose a menu or remove the edit affordance.
-- Preview shows one action row such as `"新建Markdown"` followed by empty visual space while the real menu would group it under `"新建文件"` -> bug; use `MenuBuilder` presentation and compact/top-aligned preview boxes.
+- Preview shows root actions and group submenu rows as one flat action list -> bug; use `MenuBuilder` presentation and compact/top-aligned preview boxes.
 
 #### 5. Good/Base/Bad Cases
 
 - Good: template enable switches locate the matching `.createFile` action and call `setActionEnabled`.
-- Good: action preview shows `"新建文件"` as a submenu row when create-file actions are grouped, not every create-file action as a flat root row.
+- Good: action preview can show `"新建Markdown"` as a root item and `"新建文件"` as a submenu row at the same time, matching the user's placement choices.
 - Base: a directory table renders bookmark rows as active because directory editing is not yet exposed by the ViewModel.
 - Bad: a Finder menu preview hard-codes "VS Code" even when `config.developerEntrypoints` does not contain that entry.
 

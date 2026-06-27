@@ -108,7 +108,7 @@ public struct MenuBuilder {
                 return lhs.order < rhs.order
             }
 
-        let rootCandidates = visibleActions
+        let rootItems = visibleActions
             .filter { $0.placement == .rootMenu }
             .prefix(max(0, config.maxRootMenuActions))
             .map { makePresentation($0, config: config, bookmarks: bookmarks) }
@@ -121,29 +121,11 @@ public struct MenuBuilder {
                 grouped[group, default: []].append(makePresentation(action, config: config, bookmarks: bookmarks))
             }
 
-        let rootItems = displayRootItems(from: Array(rootCandidates), grouped: &grouped)
-
         for group in Array(grouped.keys) {
             grouped[group]?.sort(by: menuItemSort)
         }
 
-        return MenuPresentation(rootItems: rootItems, groupedSubmenuItems: grouped)
-    }
-
-    private func displayRootItems(
-        from rootCandidates: [MenuItemPresentation],
-        grouped: inout [MenuGroup: [MenuItemPresentation]]
-    ) -> [MenuItemPresentation] {
-        guard
-            rootCandidates.count == 1,
-            let group = rootCandidates[0].group,
-            grouped[group]?.isEmpty == false
-        else {
-            return rootCandidates
-        }
-
-        grouped[group, default: []].append(rootCandidates[0])
-        return []
+        return MenuPresentation(rootItems: Array(rootItems), groupedSubmenuItems: grouped)
     }
 
     private func makePresentation(
