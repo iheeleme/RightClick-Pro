@@ -299,7 +299,7 @@ for the preview ActionRunner XPC entitlement file, with path authorization enfor
 - Finder extension must render descriptors with `NSWorkspace.shared.icon(for:)`, `NSWorkspace.shared.icon(forFile:)`, or `NSImage(systemSymbolName:)`.
 - Core must not import AppKit; it only emits semantic descriptors.
 - Finder extension menus must not wrap submenu groups in a visible branded container such as `"RightTool"`; root actions and functional group submenus should be added directly to the returned `NSMenu`.
-- When both root actions and functional group submenus exist, insert one separator between those two blocks. When no actions are visible, return `nil` instead of an empty menu.
+- When both root actions and functional group submenus exist, do not insert a Finder Sync separator between those two blocks; Finder can render that separator as abnormal whitespace. Add root actions and functional group rows directly and compactly. When no actions are visible, return `nil` instead of an empty menu.
 - Visible group names must describe the function, such as `"前往常用目录"`, `"新建文件"`, `"开发者工具"`, or `"文件操作"`, and settings previews should use matching labels.
 - Any enabled action with `placement == .rootMenu` must remain in `MenuPresentation.rootItems`, even when other actions from the same `MenuGroup` are shown in functional group submenus. Presentation fixes must not silently rewrite user placement choices.
 
@@ -313,14 +313,14 @@ for the preview ActionRunner XPC entitlement file, with path authorization enfor
 - Finder menu contains a visible `"RightTool"` submenu container -> presentation bug; show functional group submenus directly.
 - No visible actions for the current Finder invocation -> return `nil` so Finder does not show an empty extension menu.
 - Settings placement copy says `"RightTool 子菜单"` -> copy drift; use `"功能分组菜单"` or another non-branded functional label.
-- A visible root item and submenu items from the same `MenuGroup` coexist -> keep the root item in `rootItems`, keep submenu items in `groupedSubmenuItems`, and render the separator/group rows compactly.
+- A visible root item and submenu items from the same `MenuGroup` coexist -> keep the root item in `rootItems`, keep submenu items in `groupedSubmenuItems`, and render the root/group rows compactly without a separator-caused gap.
 
 #### 5. Good/Base/Bad Cases
 
 - Good: Cursor action shows Cursor's installed app icon in the Finder menu.
 - Good: `Note.md` template shows the system Markdown/document type icon.
 - Good: Finder context menu shows `"新建文件"` and `"开发者工具"` group submenus directly, without an intermediate `"RightTool"` submenu.
-- Good: `"新建Markdown"` can stay as a root item while other create-file actions remain under `"新建文件"`; the root section and functional groups are separated cleanly.
+- Good: `"新建Markdown"` can stay as a root item while other create-file actions remain under `"新建文件"`; the root section and functional groups are rendered next to each other without abnormal whitespace.
 - Base: a custom shell command shows a terminal symbol.
 - Bad: Finder menu item hard-codes `"terminal"` for every `.openInApp` action.
 - Bad: Finder extension rebuilds icon semantics independently from `MenuIconResolver`.

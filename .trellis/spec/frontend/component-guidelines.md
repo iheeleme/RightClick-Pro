@@ -167,8 +167,10 @@ Button("保存配置") {
 - Settings menu rows must render `MenuIconDescriptor` through `MenuIconView`; application actions use installed app icons, templates use file type icons, directories use path/folder icons, and unsupported cases fall back to semantic SF Symbols.
 - Sorting controls must call `SettingsViewModel` commands that update `RightToolAction.order`, `fileTemplates`, `developerEntrypoints`, or bookmark order as appropriate; sorting UI must update the table and the Finder preview in the same interaction.
 - Display-condition controls must mutate `RightToolAction.visibility` through `SettingsViewModel` and must prevent leaving an action with no visible invocation.
+- Action-management rows must expose the `ActionPlacement` choice as a visible table control, such as `"一级菜单"` / `"分组菜单"`, not only behind an unlabeled icon-only menu.
 - Finder menu previews for the action-management surface should render `MenuBuilder` output instead of flat action rows, so root items and functional group submenus match the real Finder extension.
 - Preview layouts that show a long Finder menu next to a short submenu must top-align the menu boxes and avoid fixed oversized minimum heights that make a single item appear to have large blank space below it.
+- Preview layouts must not insert an extra divider between root actions and functional group submenu rows when the real Finder extension renders those rows compactly.
 
 #### 4. Validation & Error Matrix
 
@@ -180,6 +182,7 @@ Button("保存配置") {
 - Table shows a drag handle or arrow controls but does not update persisted ordering -> bug; wire it to an explicit move command and normalize associated action orders.
 - Visibility pills are rendered as inert labels -> bug when the surface claims display-condition editing; expose a menu or remove the edit affordance.
 - Preview shows root actions and group submenu rows as one flat action list -> bug; use `MenuBuilder` presentation and compact/top-aligned preview boxes.
+- Placement switching is hidden behind an unlabeled icon-only control -> discoverability bug; use a labeled placement control in the action row.
 
 #### 5. Good/Base/Bad Cases
 

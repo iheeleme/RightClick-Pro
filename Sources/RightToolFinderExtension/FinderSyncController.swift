@@ -37,10 +37,6 @@ final class FinderSyncController: FIFinderSync {
             menu.addItem(nsMenuItem(for: item, context: context))
         }
 
-        if !presentation.rootItems.isEmpty && !presentation.groupedSubmenuItems.isEmpty {
-            menu.addItem(.separator())
-        }
-
         for group in MenuGroup.allCases {
             guard let items = presentation.groupedSubmenuItems[group], !items.isEmpty else {
                 continue

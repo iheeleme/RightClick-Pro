@@ -2870,8 +2870,9 @@ struct ActionTableHeader: View {
             Text("菜单项").frame(maxWidth: .infinity, alignment: .leading)
             Text("状态").frame(width: 56, alignment: .center)
             Text("适用范围").frame(width: 130, alignment: .leading)
+            Text("菜单层级").frame(width: 90, alignment: .leading)
             Text("类型").frame(width: 58, alignment: .leading)
-            Text("操作").frame(width: 76, alignment: .center)
+            Text("操作").frame(width: 40, alignment: .center)
         }
         .font(.system(size: 12, weight: .medium))
         .foregroundStyle(SettingsTheme.muted)
@@ -2937,34 +2938,13 @@ struct ActionEditorRow: View {
             ActionVisibilityMenu(action: action, viewModel: viewModel)
                 .frame(width: 130, alignment: .leading)
 
+            ActionPlacementMenu(action: action, viewModel: viewModel)
+                .frame(width: 90, alignment: .leading)
+
             ActionTypeBadge(action: action)
                 .frame(width: 58, alignment: .leading)
 
-            HStack(spacing: 8) {
-                Menu {
-                    Button {
-                        viewModel.setActionPlacement(.submenu, actionID: action.id)
-                    } label: {
-                        Label("放入功能分组菜单", systemImage: action.placement == .submenu ? "checkmark.circle.fill" : "rectangle")
-                    }
-
-                    Button {
-                        viewModel.setActionPlacement(.rootMenu, actionID: action.id)
-                    } label: {
-                        Label("显示在 Finder 一级菜单", systemImage: action.placement == .rootMenu ? "checkmark.circle.fill" : "menubar.rectangle")
-                    }
-                } label: {
-                    RowIconControlLabel(
-                        systemImage: "rectangle.on.rectangle",
-                        isDisabled: !action.isEnabled
-                    )
-                }
-                .menuStyle(.button)
-                .buttonStyle(.plain)
-                .disabled(!action.isEnabled)
-                .help("调整菜单层级")
-                .accessibilityLabel("调整 \(action.title) 的菜单层级")
-
+            HStack(spacing: 0) {
                 RowIconButton(
                     systemImage: "eye.slash",
                     accessibilityLabel: "禁用 \(action.title)",
@@ -2975,7 +2955,7 @@ struct ActionEditorRow: View {
                     viewModel.setActionEnabled(false, actionID: action.id)
                 }
             }
-            .frame(width: 76, alignment: .center)
+            .frame(width: 40, alignment: .center)
         }
         .padding(.horizontal, 18)
         .frame(height: 56)
@@ -3041,6 +3021,79 @@ struct ActionVisibilityMenu: View {
         .menuStyle(.button)
         .buttonStyle(.plain)
         .help("调整 \(action.title) 的显示位置")
+    }
+}
+
+struct ActionPlacementMenu: View {
+    let action: RightToolAction
+    @ObservedObject var viewModel: SettingsViewModel
+    @State private var isHovered = false
+
+    var body: some View {
+        Menu {
+            Button {
+                viewModel.setActionPlacement(.rootMenu, actionID: action.id)
+            } label: {
+                Label(
+                    "显示在 Finder 一级菜单",
+                    systemImage: action.placement == .rootMenu ? "checkmark.circle.fill" : "menubar.rectangle"
+                )
+            }
+
+            Button {
+                viewModel.setActionPlacement(.submenu, actionID: action.id)
+            } label: {
+                Label(
+                    "放入功能分组菜单",
+                    systemImage: action.placement == .submenu ? "checkmark.circle.fill" : "rectangle.3.group"
+                )
+            }
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: action.placement == .rootMenu ? "menubar.rectangle" : "rectangle.3.group")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(placementTint)
+                    .frame(width: 14)
+
+                Text(action.placement.displayName)
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(placementTint)
+                    .lineLimit(1)
+
+                Spacer(minLength: 0)
+
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 9, weight: .bold))
+                    .foregroundStyle(SettingsTheme.muted)
+            }
+            .padding(.horizontal, 7)
+            .frame(height: 28)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                isHovered ? placementTint.opacity(0.08) : Color.white.opacity(0.52),
+                in: RoundedRectangle(cornerRadius: 7)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 7)
+                    .stroke(isHovered ? placementTint.opacity(0.22) : SettingsTheme.hairline)
+            )
+            .contentShape(RoundedRectangle(cornerRadius: 7))
+            .onHover { isHovered = $0 }
+            .animation(.easeOut(duration: 0.12), value: isHovered)
+        }
+        .menuStyle(.button)
+        .buttonStyle(.plain)
+        .help("设置 \(action.title) 的菜单层级")
+        .accessibilityLabel("设置 \(action.title) 的菜单层级")
+    }
+
+    private var placementTint: Color {
+        switch action.placement {
+        case .rootMenu:
+            return SettingsTheme.accent
+        case .submenu:
+            return SettingsTheme.muted
+        }
     }
 }
 
@@ -3363,10 +3416,6 @@ struct FinderContextMenuMock: View {
             } else {
                 ForEach(presentation.rootItems) { item in
                     FinderContextMenuItemRow(item: item)
-                }
-
-                if !presentation.rootItems.isEmpty && !groups.isEmpty {
-                    menuDivider
                 }
 
                 ForEach(groups, id: \.self) { group in
