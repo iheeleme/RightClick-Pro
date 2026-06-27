@@ -430,7 +430,7 @@ VStack {
 }
 ```
 
-For an immersive macOS settings window, keep the native traffic-light controls and configure the real `NSWindow` / SwiftUI `Window` for a transparent full-size titlebar. Let app content draw behind the titlebar, hide the native title text when the in-app header provides the title, and reserve enough top padding in the sidebar so the native controls do not overlap the brand block.
+For an immersive macOS settings window, keep the native traffic-light controls and configure the real `NSWindow` / SwiftUI `Window` for a full-size transparent titlebar. Let app content draw behind the titlebar, hide the native title text when the in-app header provides the title, and reserve enough top padding in the sidebar so the native controls do not overlap the brand block. The window itself must still keep an opaque fallback background; do not set the real `NSWindow` background to clear, because titlebar or rounded-corner gaps can reveal whatever is behind the app.
 
 Wrong:
 ```swift
@@ -443,6 +443,7 @@ Correct:
 window.titleVisibility = .hidden
 window.titlebarAppearsTransparent = true
 window.styleMask.insert(.fullSizeContentView)
+window.isOpaque = true
 ```
 
 ### Common Mistake: Slow Sidebar Selection
