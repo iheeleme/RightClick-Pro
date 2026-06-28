@@ -35,7 +35,7 @@ final class FinderSyncController: FIFinderSync {
         let context = finderContext(menuKind: menuKind)
         refreshConfigurationFromDiskIfNeeded()
 
-        guard hasLoadedConfiguration else {
+        guard hasLoadedConfiguration, isContextInsideMonitoredDirectories(context) else {
             return nil
         }
 
@@ -93,7 +93,7 @@ final class FinderSyncController: FIFinderSync {
         {
             let urls = bookmarks.bookmarks.map { URL(fileURLWithPath: $0.path) }
             if !urls.isEmpty {
-                FIFinderSyncController.default().directoryURLs = Set(urls)
+                FIFinderSyncController.default().directoryURLs = Set(FinderSyncScope.syncRoots(for: urls))
                 return
             }
         }
@@ -103,7 +103,7 @@ final class FinderSyncController: FIFinderSync {
             .bookmarks
             .map { URL(fileURLWithPath: $0.path) }
         if !defaultURLs.isEmpty {
-            FIFinderSyncController.default().directoryURLs = Set(defaultURLs)
+            FIFinderSyncController.default().directoryURLs = Set(FinderSyncScope.syncRoots(for: defaultURLs))
         }
     }
 
@@ -159,7 +159,14 @@ final class FinderSyncController: FIFinderSync {
             return
         }
         let urls = cachedBookmarks.urls(for: cachedConfig.monitoredDirectoryIDs)
-        FIFinderSyncController.default().directoryURLs = Set(urls)
+        FIFinderSyncController.default().directoryURLs = Set(FinderSyncScope.syncRoots(for: urls))
+    }
+
+    private func isContextInsideMonitoredDirectories(_ context: FinderContext) -> Bool {
+        FinderSyncScope.contextIsInsideMonitoredDirectories(
+            context,
+            monitoredURLs: cachedBookmarks.urls(for: cachedConfig.monitoredDirectoryIDs)
+        )
     }
 
     private func finderContext(menuKind: FIMenuKind) -> FinderContext {
