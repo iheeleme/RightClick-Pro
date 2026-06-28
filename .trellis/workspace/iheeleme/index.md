@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 7
+- **Total Sessions**: 8
 - **Last Active**: 2026-06-28
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~241 | Active |
+| `journal-1.md` | ~282 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 8 | 2026-06-28 | RightClick Pro DMG distribution engineering | `80160b7`, `25b0a65`, `3065cdf`, `8251709`, `718c7f0`, `2aef346`, `1c3a4f8`, `604c100`, `292406f` | `main` |
 | 7 | 2026-06-28 | Dynamic developer entrypoint target | `658a7f8`, `5e73b6b` | `main` |
 | 6 | 2026-06-27 | Developer entrypoint app picker | `79e94a4` | `main` |
 | 5 | 2026-06-27 | Command template runner and authorization fixes | `4fc45ae` | `main` |

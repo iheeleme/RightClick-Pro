@@ -239,3 +239,44 @@ Implemented dynamic developer shortcut targets, app-picker based entrypoints, da
 ### Next Steps
 
 - None - task complete
+
+
+## Session 8: RightClick Pro DMG distribution engineering
+
+**Date**: 2026-06-28
+**Task**: RightClick Pro DMG distribution engineering
+**Branch**: `main`
+
+### Summary
+
+Completed the RightClick Pro distribution task: opt-in internal DMG packaging, RightClickPro naming and identifiers, runtime Finder extension repair, CI packaging controls, docs/spec coverage, and final local package/DMG smoke verification.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `80160b7` | (see git log) |
+| `25b0a65` | (see git log) |
+| `3065cdf` | (see git log) |
+| `8251709` | (see git log) |
+| `718c7f0` | (see git log) |
+| `2aef346` | (see git log) |
+| `1c3a4f8` | (see git log) |
+| `604c100` | (see git log) |
+| `292406f` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
