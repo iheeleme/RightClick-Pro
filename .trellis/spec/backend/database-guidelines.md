@@ -11,7 +11,10 @@ baseURL/
 ├── config.json
 ├── bookmarks.json
 ├── cut-clipboard.json
-└── operation-log.jsonl
+├── operation-log.jsonl
+├── command-runs/
+└── icon-cache/
+    └── v1/
 ```
 
 Reference files: `Sources/RightClickProCore/Storage.swift`, `OperationLogStore.swift`, `CutClipboardStore.swift`, `docs/architecture.md`.
@@ -32,6 +35,16 @@ Reference files: `Sources/RightClickProCore/Storage.swift`, `OperationLogStore.s
 - Invalid JSONL lines are ignored by `loadRecent()` through `try?`; do not make the UI fail just because one historical line is corrupt.
 
 Reference tests: `Tests/RightClickProCoreTests/StorageTests.swift`.
+
+## Finder Icon Cache
+
+Finder menu icon cache files live under `icon-cache/v1/` as small PNG files
+generated from already-rasterized menu images.
+
+- Finder menu callbacks must not read or write this directory.
+- Disk reads and writes must happen asynchronously on a background queue.
+- Cache keys should be hashed into filenames; do not use raw app bundle IDs or file paths as filenames.
+- The disk cache is best-effort. Read/write failures should keep placeholder icons available and must not crash Finder.
 
 ## App Group and Fallback Rules
 

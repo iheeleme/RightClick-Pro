@@ -490,12 +490,16 @@ ${APP_NAME} 内测构建
 
 安装方式
 1. 将 "${APP_NAME}.app" 拖到 Applications。
-2. 从 Applications 打开 ${APP_NAME}。
+2. 打开“终端”，执行下面的命令清理隔离属性：
+   xattr -cr "/Applications/${APP_NAME}.app"
+3. 从 Applications 打开 ${APP_NAME}。
 
 安全提示
 这个构建用于自用/内测分发，未使用 Developer ID 签名，也未公证。
-如果 macOS 阻止打开，可以到 系统设置 > 隐私与安全性 中允许打开；
-也可以在 Finder 中右键 "${APP_NAME}.app"，选择“打开”，再确认打开。
+下载或拷贝后的 App 可能带有 com.apple.quarantine 隔离属性。
+如果不先执行 xattr -cr，macOS 可能阻止打开或影响 Finder Extension 加载。
+如仍被系统拦截，可以到 系统设置 > 隐私与安全性 中允许打开；
+也可以在 Finder 中右键 "/Applications/${APP_NAME}.app"，选择“打开”，再确认打开。
 
 启用 Finder Extension
 1. 打开 ${APP_NAME}，App 会自动注册并尝试启用 Finder Extension。

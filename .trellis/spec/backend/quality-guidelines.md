@@ -26,7 +26,7 @@ RightClick Pro quality checks center on SwiftPM compilation/tests, Finder extens
 - Shared behavior belongs in `RightClickProCore`.
 - File mutations must validate authorized paths before touching disk.
 - Storage writes must use `JSONFileStore` or `JSONLineOperationLog`.
-- Finder extension startup must bootstrap config before assigning `FIFinderSyncController.default().directoryURLs`.
+- Finder extension startup must install fallback/cached config before assigning `FIFinderSyncController.default().directoryURLs`; disk reads and durable bootstrap repair should run outside startup's cold path and outside the first menu callback.
 - Menu icon semantics must come from `MenuIconResolver` in Core and be rendered at the UI/process boundary.
 - Test doubles should use existing in-memory/recording types where possible.
 
@@ -225,6 +225,121 @@ Correct:
 actionRunnerClient.startCommandRun(request) { result in
     // Render CommandRunSnapshot from ActionRunner.xpc.
 }
+```
+
+### Scenario: Finder Sync Cold-Start Menu Rendering
+
+#### 1. Scope / Trigger
+
+- Trigger: changes to `FinderSyncController.menu(for:)`, Finder Sync startup/bootstrap, `MenuIconDescriptor`, `MenuIconResolver`, menu icon rendering, or cache refresh behavior.
+- This is a Finder process boundary contract because Finder may cold-start the extension after install or long idle and can skip an extension's menu contribution if the callback takes too long.
+
+#### 2. Signatures
+
+- Finder menu callback:
+  ```swift
+  override func menu(for menuKind: FIMenuKind) -> NSMenu?
+  ```
+- Core icon cold-path contract:
+  ```swift
+  MenuIconDescriptor.requiresExternalResourceLookup: Bool
+  MenuIconDescriptor.lightweightFallback: MenuIconDescriptor
+  NSWorkspace.shared.icon(forFile:)
+  ```
+- Startup fallback:
+  ```swift
+  RightClickProConfig()
+  DirectoryBookmarkCatalog()
+  ```
+
+#### 3. Contracts
+
+- Finder extension startup must install an in-memory fallback menu config before exposing the global Finder Sync scope.
+- Startup may start best-effort config/bookmark reads after a short delay, but they must run in the background; neither synchronous reads nor bootstrap writes should delay the first menu.
+- `menu(for:)` must build from cached config/bookmarks and return quickly; it must not perform storage bootstrap, shell commands, XPC calls, or file mutations.
+- Menu callbacks may synchronously render only already-cached real icons or SF Symbol placeholders; they must not call `NSWorkspace` icon APIs on cache misses.
+- App bundle and file path icons require external resource lookup. The menu callback must not synchronously call `NSWorkspace.urlForApplication(withBundleIdentifier:)` or `NSWorkspace.shared.icon(forFile:)` for cache misses, and must not start that work immediately from inside the callback.
+- Real app and file-path icons should be resolved on a low-priority background icon queue after a short no-menu idle window, rasterized into small menu-ready bitmap images, cached in memory by descriptor key, persisted as small PNGs under `icon-cache/v1`, and reused by later right-clicks.
+- Persisted icon cache reads must also be asynchronous. `menu(for:)` may consult only the in-memory icon cache and placeholder cache.
+- Do not cache raw `NSWorkspace` icon `NSImage` objects for menus; they may lazily decode or draw ICNS/PDF representations on the later menu open that first displays them.
+- New menu requests should cancel queued-but-not-running icon prewarm work so Finder is not competing with stale icon lookups.
+- App bundle icon cache misses must show the generic default app icon immediately.
+- File path icon cache misses may show an SF Symbol folder/file placeholder immediately.
+- Config/bookmark load failures should use `NSLog` diagnostics and keep the fallback menu available rather than returning `nil` solely because config did not load.
+- Config refresh should be scheduled after the menu returns, not before menu construction; background refresh/bootstrap may repair durable state and update cached config after the first menu has already been served.
+
+#### 4. Validation & Error Matrix
+
+- Missing `config.json` / `bookmarks.json` -> first menu uses fallback config; background bootstrap creates durable defaults.
+- Corrupt config/bookmark JSON -> log diagnostic, keep fallback menu; do not crash Finder.
+- First menu after extension startup -> return menu items with placeholder/default icons; schedule real app/file-path icon resolution only after the no-menu idle window.
+- Extension startup with existing persisted icon PNGs -> load them into memory asynchronously after config is available; do not synchronously scan or read the cache directory during startup or menu rendering.
+- Second menu opened during the idle window -> cancel queued icon prewarming and return quickly from cached/default/placeholders.
+- Second menu opened while an already-running icon resolution is still running -> return quickly from cached/default/placeholders; do not wait for the queue.
+- First menu that displays resolved icons -> should use pre-rasterized 16px bitmap images, not raw `NSWorkspace` images that defer rendering to Finder's menu draw.
+- App icon cache miss -> show the default app icon and enqueue LaunchServices lookup plus `NSWorkspace.shared.icon(forFile:)` only from the delayed background prewarm path.
+- Unknown app icon cache miss -> show the default app icon; the background resolver may cache the same generic icon to avoid repeated LaunchServices work.
+- File path icon cache miss -> show an SF Symbol folder/file placeholder where possible, then enqueue `NSWorkspace.shared.icon(forFile:)` from the delayed background prewarm path.
+- Empty presentation after filtering by invocation -> returning `nil` is allowed because there are genuinely no eligible actions.
+
+#### 5. Good/Base/Bad Cases
+
+- Good: first right-click after install shows built-in fallback actions with lightweight/default icons, even before background bootstrap finishes.
+- Good: first right-click after long idle uses in-memory config/fallback and never starts real app/file icon lookup during the callback.
+- Good: repeated right-clicks remain responsive while queued icon prewarming is canceled or real app/file icons are slowly resolved in the low-priority background queue; responsiveness wins over icon completeness.
+- Base: settings changes are picked up by background refresh within the existing cache refresh window.
+- Bad: startup or `menu(for:)` calls `ConfigurationBootstrapper.bootstrap`, `Data(contentsOf:)`, `NSWorkspace.urlForApplication`, `NSWorkspace.icon(forFile:)`, XPC, or shell commands synchronously on the cold path.
+- Bad: second right-click becomes the icon warm-up path and blocks while icons are being resolved.
+- Bad: a decode failure leaves `hasLoadedConfiguration == false` and causes the first menu request to return `nil`.
+
+#### 6. Tests Required
+
+- Unit-test `MenuIconDescriptor.requiresExternalResourceLookup` for app bundle and file path icons.
+- Unit-test `MenuIconDescriptor.lightweightFallback` for app bundle, directory-like path, and file path with extension.
+- Typecheck/build `FinderSyncController` after startup or rendering changes.
+- Run `scripts/package-macos.sh debug` after Finder extension changes so the packaged `.appex` and embedded XPC layout are validated.
+
+#### 7. Wrong vs Correct
+
+Wrong:
+```swift
+case .appBundleIdentifier(let bundleIdentifier):
+    let appURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleIdentifier)
+    image = appURL.map { NSWorkspace.shared.icon(forFile: $0.path) }
+```
+inside the first `menu(for:)` render for an uncached icon.
+
+Correct:
+```swift
+menuItem.image = cachedMenuImage(for: item.icon)
+scheduleIconPrewarming(for: presentation) // resolves real app/file icons asynchronously
+```
+
+Wrong:
+```swift
+loadConfigurationForStartup()
+```
+where the method synchronously reads `config.json` and `bookmarks.json` during `init()`.
+
+Correct:
+```swift
+applyFallbackConfiguration()
+installGlobalFinderSyncScope()
+loadConfigurationForStartupInBackground()
+```
+
+Wrong:
+```swift
+let result = try ConfigurationBootstrapper().bootstrap(paths: paths)
+applyCachedConfiguration(config: result.config, bookmarks: result.bookmarks)
+```
+as a required synchronous startup step before any menu can be returned.
+
+Correct:
+```swift
+applyCachedConfiguration(config: RightClickProConfig(), bookmarks: DirectoryBookmarkCatalog())
+loadConfigurationForStartupInBackground()
+repairConfigurationInBackground(paths: paths)
 ```
 
 ### Scenario: Finder Command Template Authorization
@@ -497,9 +612,9 @@ return .application(appURL: terminalURL, targetURL: selectedFileURL.deletingLast
 - The preview bundle must place `RightClickProActionRunner.xpc` in `Contents/XPCServices/` and also inside `RightClickProFinderExtension.appex/Contents/XPCServices/` so `NSXPCConnection(serviceName:)` can resolve the service from the main app and the Finder extension process.
 - The preview Finder Sync `.appex` must be a Mach-O `EXECUTE` binary linked with `_NSExtensionMain`; a Swift dylib inside an `.appex` is not a valid Finder Sync extension bundle for PlugInKit discovery.
 - The preview `.appex` Info.plist must contain `NSExtensionPointIdentifier=com.apple.FinderSync`.
-- Finder Sync extension startup must not assume the menu-bar app launched first. It must run `ConfigurationBootstrapper.bootstrap(paths:)` before loading config and assigning `FIFinderSyncController.default().directoryURLs`.
-- Finder Sync must register parent sync roots rather than exact configured directory paths where possible, then filter each `FinderContext` back to the configured monitored directories before returning menus. Exact roots such as `~/Code` can make Finder sidebar favorites render with the extension app icon.
-- Finder Sync extension cold-start must keep `menu(for:)` fast. It should set a fast monitored-directory fallback during `init`, serve menus from cached config/bookmark snapshots, cache rendered icons, and refresh/repair config in the background.
+- Finder Sync extension startup must not assume the menu-bar app launched first. It should install an in-memory fallback config, expose the global Finder Sync scope quickly, then load/repair durable config in the background.
+- Finder Sync must register `/` as the global sync root so menus remain available outside shortcut directories. Exact roots such as `~/Code` can make Finder sidebar favorites render with the extension app icon.
+- Finder Sync extension cold-start must keep `menu(for:)` fast. It should serve menus from cached config/bookmark snapshots, cache rendered icons, return default/lightweight icons on cache misses, and resolve real app/file-path icons asynchronously.
 - Default injected Desktop/Downloads/Documents/Code bookmarks must use the real user home directory, not the sandbox container home returned by `FileManager.homeDirectoryForCurrentUser` inside sandboxed app/extension processes.
 - Bootstrap must self-heal existing bookmark paths under the sandbox process home by remapping them to the real user home while preserving bookmark IDs, display names, bookmark data, and timestamps.
 - Bootstrap must also repair older existing configs that are missing an available default directory. Append the missing default bookmark, monitored/common directory IDs, and generated directory actions while preserving unrelated custom actions, templates, developer entries, and user ordering as much as possible.
@@ -517,7 +632,7 @@ return .application(appURL: terminalURL, targetURL: selectedFileURL.deletingLast
 - Zip artifacts are written to `dist/RightClick Pro-<version>-<arch>-preview.zip`.
 - `RIGHTCLICKPRO_PACKAGE_DMG=1` creates an additional compressed read-only `UDZO` artifact at `dist/RightClick Pro-<version>-<arch>-preview.dmg`.
 - DMG contents must include `RightClick Pro.app`, an `/Applications` alias, and `README.txt`.
-- `README.txt` must cover drag-to-Applications installation, the non-Developer-ID/non-notarized warning, Finder Extension enablement, and the `killall Finder` fallback.
+- `README.txt` must cover drag-to-Applications installation, `xattr -cr "/Applications/RightClick Pro.app"` quarantine cleanup, the non-Developer-ID/non-notarized warning, Finder Extension enablement, and the `killall Finder` fallback.
 - `RIGHTCLICKPRO_PACKAGE_DMG=1` is supported only on the SwiftPM preview bundle path until the Xcode archive/export path has a concrete `.app` output contract.
 - The current default artifacts are non-notarized test builds. Developer ID signing/notarization requires a separate secrets/keychain flow.
 
@@ -536,7 +651,7 @@ return .application(appURL: terminalURL, targetURL: selectedFileURL.deletingLast
 - Finder extension starts before config/bookmark files exist -> bootstrap creates defaults before assigning `directoryURLs`.
 - Finder extension starts after a long idle period -> first `menu(for:)` must not synchronously run full bootstrap or repeated JSON/icon lookup work.
 - Finder sidebar favorite for a configured directory such as `~/Code` shows the RightClick Pro app icon -> bug; do not register the exact favorite path as the Finder Sync root.
-- Finder right-click outside configured monitored directories but inside a parent sync root -> return `nil` from `menu(for:)`.
+- Finder right-click outside configured shortcut directories -> still return eligible menu items when action visibility matches the invocation.
 - Existing bookmark path starts with the sandbox process home -> remap to the same relative path under the real user home.
 - Existing bookmark path merely shares a similar prefix with the sandbox process home -> leave unchanged.
 - Existing config/bookmark files omit an available default directory such as `~/Code` -> append that directory to bookmarks, `monitoredDirectoryIDs`, `commonDirectoryIDs`, and missing generated directory actions.
@@ -556,9 +671,9 @@ return .application(appURL: terminalURL, targetURL: selectedFileURL.deletingLast
 
 - Good: tag `v1.2.3` produces `RightClick Pro-1.2.3-<arch>-preview.zip` containing `RightClickProFinderExtension.appex` as an `_NSExtensionMain` executable, or an exported Xcode archive artifact.
 - Good: `RIGHTCLICKPRO_PACKAGE_DMG=1 scripts/package-macos.sh debug` produces zip plus `RightClick Pro-<version>-<arch>-preview.dmg`, then mounts the DMG and verifies the app, Applications alias, and README.
-- Good: Finder starts the extension before the app has opened; the extension bootstraps config/bookmarks and assigns parent sync roots derived from real-home Desktop/Downloads/Documents/Code URLs to `directoryURLs`.
-- Good: `~/Code` is configured as a monitored directory; Finder Sync registers `~` as the sync root and returns menus only when the context is inside `~/Code`.
-- Good: after Finder has unloaded the extension, the next right-click cold-start sets fallback monitored directories immediately, returns menu items from cached config once loaded, and refreshes repaired config asynchronously.
+- Good: Finder starts the extension before the app has opened; the extension installs fallback config, assigns `/` as the sync root, and repairs config/bookmarks asynchronously.
+- Good: `~/Code` is configured as a shortcut directory; Finder Sync still registers `/` as the sync root and returns eligible menus globally.
+- Good: after Finder has unloaded the extension, the next right-click cold-start sets fallback config immediately, returns menu items from cached config once loaded, and refreshes repaired config asynchronously.
 - Good: an older install has Desktop/Downloads/Documents only and `~/Code` exists; bootstrap appends the `code` bookmark, monitors it, and adds `open-directory-code`, `move-to-code`, and `copy-to-code`.
 - Good: normal local packaging validates `RightClickProFinderExtension.appex` but does not register the `dist/staging` or `tmp` path into the user's PlugInKit database.
 - Good: opt-in `RIGHTCLICKPRO_REGISTER_FINDER_EXTENSION=1` local smoke packaging registers the new `RightClickProFinderExtension.appex` path, then enables `com.iheeleme.rightclickpro.FinderExtension`.

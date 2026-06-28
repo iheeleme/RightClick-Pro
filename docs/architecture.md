@@ -26,7 +26,9 @@ App Group Container
 ├── cut-clipboard.json
 ├── operation-log.jsonl
 ├── pending-command-run.json
-└── command-runs/
+├── command-runs/
+└── icon-cache/
+    └── v1/
 ```
 
 Config writes use atomic file replacement via `Data.write(..., .atomic)`. Operation logs are stored as JSONL and capped to the latest 500 records by default.
@@ -49,7 +51,7 @@ Command templates execute in `RightClickProActionRunner.xpc`. The main app still
 
 Finder Sync copies menu items through Finder before dispatching the selected command back to the extension. Do not rely on `representedObject` for action payloads there; leaf menu items use stable integer `tag` values that map back to pending actions held by `FinderSyncController`.
 
-Finder may cold-start the Finder Sync extension after a long idle period. The extension therefore sets the global Finder Sync scope immediately, loads config/bookmarks into memory, and serves `menu(for:)` from cached values instead of doing synchronous JSON/bootstrap work during the menu request. Background refresh keeps settings changes visible without blocking the first right-click menu.
+Finder may cold-start the Finder Sync extension after a long idle period. The extension therefore installs a fallback menu config before exposing the global Finder Sync scope, then loads config/bookmarks and repairs durable config in the background. `menu(for:)` serves from memory instead of doing synchronous JSON/bootstrap work during the menu request. Config refresh is scheduled after the menu has been returned, so a right-click does not become the disk-refresh trigger. Menu rendering does not synchronously resolve real app bundle or file-path icons on cache misses, and it also does not start that work from inside the callback. App icons show a generic SF Symbol placeholder immediately, file paths show lightweight folder/file placeholders where possible, and a low-priority background icon queue resolves the real icons with `NSWorkspace.shared.icon(forFile:)` only after a short no-menu idle window. Resolved icons are rasterized into small menu-ready PNG images, cached under `icon-cache/v1`, and loaded back into memory asynchronously on later extension starts, so later right-clicks do not become the first AppKit/ICNS draw point.
 
 ## Current Build Note
 

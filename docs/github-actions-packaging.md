@@ -90,7 +90,7 @@ Applications -> /Applications
 README.txt
 ```
 
-`README.txt` covers drag-to-Applications installation, the non-Developer-ID/non-notarized warning, automatic Finder Extension registration on app launch, one-time Finder reload after successful first setup, manual enablement fallback, and the Finder restart fallback when the right-click menu does not appear. The packaging script mounts the DMG after creation and validates those three entries before it succeeds.
+`README.txt` covers drag-to-Applications installation, `xattr -cr "/Applications/RightClick Pro.app"` quarantine cleanup, the non-Developer-ID/non-notarized warning, automatic Finder Extension registration on app launch, one-time Finder reload after successful first setup, manual enablement fallback, and the Finder restart fallback when the right-click menu does not appear. The packaging script mounts the DMG after creation and validates those three entries before it succeeds.
 
 ## Switching to Full Xcode Packaging
 

@@ -8,6 +8,29 @@ public enum MenuIconDescriptor: Equatable {
     case folder
 }
 
+public extension MenuIconDescriptor {
+    var requiresExternalResourceLookup: Bool {
+        switch self {
+        case .appBundleIdentifier, .filePath:
+            return true
+        case .systemSymbol, .fileExtension, .folder:
+            return false
+        }
+    }
+
+    var lightweightFallback: MenuIconDescriptor {
+        switch self {
+        case .appBundleIdentifier:
+            return .systemSymbol("app")
+        case .filePath(let path):
+            let fileExtension = URL(fileURLWithPath: path).pathExtension
+            return fileExtension.isEmpty ? .folder : .fileExtension(fileExtension)
+        case .systemSymbol, .fileExtension, .folder:
+            return self
+        }
+    }
+}
+
 public enum MenuIconResolver {
     public static func icon(
         for action: RightClickProAction,

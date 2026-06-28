@@ -2,6 +2,37 @@ import XCTest
 @testable import RightClickProCore
 
 final class MenuBuilderTests: XCTestCase {
+    func testExternalResourceIconsExposeLightweightFallbacks() {
+        XCTAssertTrue(MenuIconDescriptor.appBundleIdentifier("com.apple.Terminal").requiresExternalResourceLookup)
+        XCTAssertEqual(
+            MenuIconDescriptor.appBundleIdentifier("com.apple.Terminal").lightweightFallback,
+            .systemSymbol("app")
+        )
+
+        XCTAssertTrue(MenuIconDescriptor.filePath("/Users/test/Downloads").requiresExternalResourceLookup)
+        XCTAssertEqual(
+            MenuIconDescriptor.filePath("/Users/test/Downloads").lightweightFallback,
+            .folder
+        )
+        XCTAssertEqual(
+            MenuIconDescriptor.filePath("/Users/test/Notes/today.md").lightweightFallback,
+            .fileExtension("md")
+        )
+    }
+
+    func testIntrinsicIconsDoNotRequireExternalResourceLookup() {
+        let icons: [MenuIconDescriptor] = [
+            .systemSymbol("terminal"),
+            .fileExtension("swift"),
+            .folder
+        ]
+
+        for icon in icons {
+            XCTAssertFalse(icon.requiresExternalResourceLookup)
+            XCTAssertEqual(icon.lightweightFallback, icon)
+        }
+    }
+
     func testRootMenuItemsAreLimitedToConfiguredMaximum() {
         let actions = (0..<7).map { index in
             RightClickProAction(
