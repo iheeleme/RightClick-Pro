@@ -4,7 +4,7 @@ Settings UI quality is measured by compile safety, persistence correctness, Find
 
 ## Required Checks
 
-- Run `swift build --target RightToolAppPreview` for settings-only changes.
+- Run `swift build --target RightClickProAppPreview` for settings-only changes.
 - Run `scripts/ci-swift-check.sh debug` before committing Swift changes.
 - Run `scripts/package-macos.sh debug` after settings changes that may affect preview bundle compilation or assets.
 - Run `git diff --check`.
@@ -34,7 +34,7 @@ After meaningful settings UI changes, open the preview app and verify:
 ## Code Review Checklist
 
 - Does the UI mutate through `SettingsViewModel`?
-- Does the preview derive from real `RightToolConfig`/`DirectoryBookmarkCatalog`/`MenuBuilder` output?
+- Does the preview derive from real `RightClickProConfig`/`DirectoryBookmarkCatalog`/`MenuBuilder` output?
 - Do add/edit/delete flows preserve action back references?
 - Are empty states and failure statuses visible?
 - Do controls stay within stable row/table dimensions?

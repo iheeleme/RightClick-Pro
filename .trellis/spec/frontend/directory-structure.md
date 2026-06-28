@@ -4,20 +4,20 @@ The settings frontend currently lives in one large SwiftUI file. That is the exi
 
 ## Current File Layout
 
-- `Sources/RightToolAppPreview/RightToolAppPreview.swift`
+- `Sources/RightClickProAppPreview/RightClickProAppPreview.swift`
   - App entry and scene definitions.
   - `SettingsViewModel` and validation error type.
   - Window/sidebar/detail shell components.
   - Section views for overview, directories, actions, templates, developer entrypoints, and operation history.
   - Shared visual primitives such as `DesignPanel`, `StatusBadge`, `RowIconButton`, `FinderMenuPreview`, and editor sheet controls.
 
-Reference symbols: `RightToolAppPreview`, `SettingsViewModel`, `SettingsRootView`, `ActionListView`, `TemplateListView`, `DeveloperEntrypointListView`, `OperationHistoryView`.
+Reference symbols: `RightClickProAppPreview`, `SettingsViewModel`, `SettingsRootView`, `ActionListView`, `TemplateListView`, `DeveloperEntrypointListView`, `OperationHistoryView`.
 
 ## Organization Rules
 
 - Keep stateful persistence commands in `SettingsViewModel`.
 - Keep child views focused on layout, bindings, and local sheet/filter state.
-- Keep Core data contracts in `RightToolCore`; do not redefine action/template/bookmark structs in the app target.
+- Keep Core data contracts in `RightClickProCore`; do not redefine action/template/bookmark structs in the app target.
 - Keep AppKit-specific visual resolution in app/extension UI code, not in Core.
 - When extracting files later, split by view family:
   - `SettingsViewModel.swift`

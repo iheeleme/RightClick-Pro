@@ -55,8 +55,8 @@ jobs:
 
     env:
       BUILD_CONFIGURATION: ${{ inputs.configuration || 'release' }}
-      RIGHTTOOL_VERSION: ${{ inputs.version || '' }}
-      RIGHTTOOL_PACKAGE_DMG: ${{ inputs.package_dmg && '1' || '0' }}
+      RIGHTCLICKPRO_VERSION: ${{ inputs.version || '' }}
+      RIGHTCLICKPRO_PACKAGE_DMG: ${{ inputs.package_dmg && '1' || '0' }}
       ARTIFACT_SUFFIX: ${{ matrix.artifact_suffix }}
 
     steps:

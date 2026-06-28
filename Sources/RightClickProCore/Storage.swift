@@ -1,6 +1,6 @@
 import Foundation
 
-public struct RightToolStoragePaths: Equatable {
+public struct RightClickProStoragePaths: Equatable {
     public var baseURL: URL
     public var configURL: URL
     public var bookmarksURL: URL
@@ -17,30 +17,30 @@ public struct RightToolStoragePaths: Equatable {
         self.pendingCommandRunURL = baseURL.appendingPathComponent("pending-command-run.json")
     }
 
-    public static func appGroup(identifier: String = RightToolConstants.defaultAppGroupIdentifier) throws -> RightToolStoragePaths {
+    public static func appGroup(identifier: String = RightClickProConstants.defaultAppGroupIdentifier) throws -> RightClickProStoragePaths {
         guard let baseURL = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: identifier) else {
             throw StorageError.appGroupContainerUnavailable(identifier)
         }
-        return RightToolStoragePaths(baseURL: baseURL)
+        return RightClickProStoragePaths(baseURL: baseURL)
     }
 
     public static func applicationSupport(
         fileManager: FileManager = .default,
-        bundleIdentifier: String = RightToolConstants.mainAppBundleIdentifier
-    ) -> RightToolStoragePaths {
+        bundleIdentifier: String = RightClickProConstants.mainAppBundleIdentifier
+    ) -> RightClickProStoragePaths {
         let baseURL = fileManager.homeDirectoryForCurrentUser
             .appendingPathComponent("Library")
             .appendingPathComponent("Application Support")
             .appendingPathComponent(bundleIdentifier)
-        return RightToolStoragePaths(baseURL: baseURL)
+        return RightClickProStoragePaths(baseURL: baseURL)
     }
 
     public static func defaultForCurrentProcess(
-        appGroupIdentifier: String = RightToolConstants.defaultAppGroupIdentifier,
+        appGroupIdentifier: String = RightClickProConstants.defaultAppGroupIdentifier,
         fileManager: FileManager = .default
-    ) -> RightToolStoragePaths {
+    ) -> RightClickProStoragePaths {
         if let appGroupURL = fileManager.containerURL(forSecurityApplicationGroupIdentifier: appGroupIdentifier) {
-            return RightToolStoragePaths(baseURL: appGroupURL)
+            return RightClickProStoragePaths(baseURL: appGroupURL)
         }
 
         return applicationSupport(fileManager: fileManager)
@@ -90,22 +90,22 @@ public final class JSONFileStore<Value: Codable> {
     }
 }
 
-public protocol RightToolConfigProviding {
-    func loadConfig() throws -> RightToolConfig
+public protocol RightClickProConfigProviding {
+    func loadConfig() throws -> RightClickProConfig
     func loadBookmarkCatalog() throws -> DirectoryBookmarkCatalog
 }
 
-public struct FileBackedRightToolConfigProvider: RightToolConfigProviding {
-    private let configStore: JSONFileStore<RightToolConfig>
+public struct FileBackedRightClickProConfigProvider: RightClickProConfigProviding {
+    private let configStore: JSONFileStore<RightClickProConfig>
     private let bookmarkStore: JSONFileStore<DirectoryBookmarkCatalog>
 
-    public init(paths: RightToolStoragePaths) {
-        self.configStore = JSONFileStore<RightToolConfig>(url: paths.configURL)
+    public init(paths: RightClickProStoragePaths) {
+        self.configStore = JSONFileStore<RightClickProConfig>(url: paths.configURL)
         self.bookmarkStore = JSONFileStore<DirectoryBookmarkCatalog>(url: paths.bookmarksURL)
     }
 
-    public func loadConfig() throws -> RightToolConfig {
-        try configStore.load(default: RightToolConfig())
+    public func loadConfig() throws -> RightClickProConfig {
+        try configStore.load(default: RightClickProConfig())
     }
 
     public func loadBookmarkCatalog() throws -> DirectoryBookmarkCatalog {
@@ -113,16 +113,16 @@ public struct FileBackedRightToolConfigProvider: RightToolConfigProviding {
     }
 }
 
-public struct StaticRightToolConfigProvider: RightToolConfigProviding {
-    public var config: RightToolConfig
+public struct StaticRightClickProConfigProvider: RightClickProConfigProviding {
+    public var config: RightClickProConfig
     public var bookmarkCatalog: DirectoryBookmarkCatalog
 
-    public init(config: RightToolConfig, bookmarkCatalog: DirectoryBookmarkCatalog = DirectoryBookmarkCatalog()) {
+    public init(config: RightClickProConfig, bookmarkCatalog: DirectoryBookmarkCatalog = DirectoryBookmarkCatalog()) {
         self.config = config
         self.bookmarkCatalog = bookmarkCatalog
     }
 
-    public func loadConfig() throws -> RightToolConfig {
+    public func loadConfig() throws -> RightClickProConfig {
         config
     }
 

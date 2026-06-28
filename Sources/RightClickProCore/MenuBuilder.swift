@@ -10,8 +10,8 @@ public enum MenuIconDescriptor: Equatable {
 
 public enum MenuIconResolver {
     public static func icon(
-        for action: RightToolAction,
-        config: RightToolConfig,
+        for action: RightClickProAction,
+        config: RightClickProConfig,
         bookmarks: DirectoryBookmarkCatalog = DirectoryBookmarkCatalog()
     ) -> MenuIconDescriptor {
         switch action.kind {
@@ -94,7 +94,7 @@ public struct MenuBuilder {
     public init() {}
 
     public func buildMenu(
-        config: RightToolConfig,
+        config: RightClickProConfig,
         context: FinderContext,
         bookmarks: DirectoryBookmarkCatalog = DirectoryBookmarkCatalog()
     ) -> MenuPresentation {
@@ -129,8 +129,8 @@ public struct MenuBuilder {
     }
 
     private func makePresentation(
-        _ action: RightToolAction,
-        config: RightToolConfig,
+        _ action: RightClickProAction,
+        config: RightClickProConfig,
         bookmarks: DirectoryBookmarkCatalog
     ) -> MenuItemPresentation {
         MenuItemPresentation(

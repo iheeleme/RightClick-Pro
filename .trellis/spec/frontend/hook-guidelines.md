@@ -12,13 +12,13 @@ Use `@State` for UI-only state that does not need to persist:
 - Sheet drafts: `TemplateDraft?`, `DeveloperEntrypointDraft?`.
 - Hover/presentation flags in compact controls.
 
-Reference file: `Sources/RightToolAppPreview/RightToolAppPreview.swift`.
+Reference file: `Sources/RightClickProAppPreview/RightClickProAppPreview.swift`.
 
 ## Shared State
 
 Use `@ObservedObject var viewModel: SettingsViewModel` in child views. The app root owns the model as `@StateObject`.
 
-- `RightToolAppPreview` creates `@StateObject private var viewModel = SettingsViewModel.bootstrap()`.
+- `RightClickProAppPreview` creates `@StateObject private var viewModel = SettingsViewModel.bootstrap()`.
 - Section views observe the same model so config edits, status messages, and recent operations stay in sync.
 - Child views call `SettingsViewModel` commands instead of mutating persisted state independently.
 

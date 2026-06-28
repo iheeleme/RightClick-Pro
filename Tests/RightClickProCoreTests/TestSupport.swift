@@ -1,9 +1,9 @@
 import Foundation
-@testable import RightToolCore
+@testable import RightClickProCore
 
 func temporaryDirectory() throws -> URL {
     let url = FileManager.default.temporaryDirectory
-        .appendingPathComponent("RightToolTests")
+        .appendingPathComponent("RightClickProTests")
         .appendingPathComponent(UUID().uuidString)
     try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
     return url

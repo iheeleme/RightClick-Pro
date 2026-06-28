@@ -1,21 +1,21 @@
 # RightClick Pro Architecture
 
-RightClick Pro is split into a lightweight Finder Sync extension and a user-level XPC ActionRunner. Swift target/module names still use `RightTool*` during the current development phase.
+RightClick Pro is split into a lightweight Finder Sync extension and a user-level XPC ActionRunner. Swift package, target, module, and public project types use the `RightClickPro*` naming family.
 
 ```text
 Finder
   → FinderSyncExtension
   → NSXPCConnection
-  → RightToolActionRunner
+  → RightClickProActionRunner
   → FileOperationService / App opener / OperationLog
 ```
 
 ## Boundaries
 
-* `RightToolCore` owns shared models, menu building, storage, authorization checks, file operations, action execution, operation logging, and XPC adapter types.
-* `RightToolFinderExtension` reads shared config and renders Finder menus. It must not perform file mutations directly.
-* `RightToolActionRunnerService` exposes the XPC service boundary and delegates requests to `ActionRunner`.
-* `RightToolAppPreview` is a SwiftUI/AppKit scaffold for the menu-bar app and settings window.
+* `RightClickProCore` owns shared models, menu building, storage, authorization checks, file operations, action execution, operation logging, and XPC adapter types.
+* `RightClickProFinderExtension` reads shared config and renders Finder menus. It must not perform file mutations directly.
+* `RightClickProActionRunnerService` exposes the XPC service boundary and delegates requests to `ActionRunner`.
+* `RightClickProAppPreview` is a SwiftUI/AppKit scaffold for the menu-bar app and settings window.
 
 ## MVP Storage
 
@@ -49,9 +49,9 @@ The current development machine has Swift Command Line Tools but no full Xcode i
 
 ```text
 RightClick Pro.app
-├── Contents/PlugIns/RightToolFinderExtension.appex
-│   └── Contents/XPCServices/RightToolActionRunner.xpc
-└── Contents/XPCServices/RightToolActionRunner.xpc
+├── Contents/PlugIns/RightClickProFinderExtension.appex
+│   └── Contents/XPCServices/RightClickProActionRunner.xpc
+└── Contents/XPCServices/RightClickProActionRunner.xpc
 ```
 
 The preview `.appex` is linked as an `_NSExtensionMain` executable so PlugInKit can discover it for local Finder Sync testing. A complete Xcode project plus Developer ID signing and notarization are still required before treating the artifact as a normal public macOS download.

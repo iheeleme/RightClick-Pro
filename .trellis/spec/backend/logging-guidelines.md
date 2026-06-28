@@ -1,6 +1,6 @@
 # Logging Guidelines
 
-RightTool has two logging surfaces: durable user operation history and process diagnostics.
+RightClick Pro has two logging surfaces: durable user operation history and process diagnostics.
 
 ## Durable Operation History
 
@@ -12,7 +12,7 @@ Use `OperationRecord` plus `JSONLineOperationLog` for user-visible history.
 - Bootstrap writes an initial success record when creating `operation-log.jsonl`.
 - Keep the log capped. The default cap is 500 records.
 
-Reference files: `Sources/RightToolCore/OperationLogStore.swift`, `ActionRunner.swift`, `ConfigurationBootstrapper.swift`, `Tests/RightToolCoreTests/StorageTests.swift`.
+Reference files: `Sources/RightClickProCore/OperationLogStore.swift`, `ActionRunner.swift`, `ConfigurationBootstrapper.swift`, `Tests/RightClickProCoreTests/StorageTests.swift`.
 
 ## Process Diagnostics
 
@@ -22,7 +22,7 @@ Use `NSLog` only at AppKit/Finder process boundaries:
 - Finder menu action dispatch without a pending payload tag.
 - XPC action success or failure from the Finder extension.
 
-Reference file: `Sources/RightToolFinderExtension/FinderSyncController.swift`.
+Reference file: `Sources/RightClickProFinderExtension/FinderSyncController.swift`.
 
 ## Shell Script Output
 

@@ -1,13 +1,13 @@
 # Type Safety
 
-RightTool uses Swift types and Codable models as the safety boundary between the settings UI, Finder extension, XPC service, and storage files.
+RightClick Pro uses Swift types and Codable models as the safety boundary between the settings UI, Finder extension, XPC service, and storage files.
 
 ## Core Types
 
 Settings UI should import and reuse Core types:
 
-- `RightToolConfig`
-- `RightToolAction`
+- `RightClickProConfig`
+- `RightClickProAction`
 - `ActionKind`, `ActionVisibility`, `ActionPlacement`, `MenuGroup`
 - `FileTemplate`
 - `DeveloperEntrypoint`, `DeveloperTargetMode`
@@ -36,7 +36,7 @@ Drafts trim strings and produce Core models through `makeTemplate()` / `makeEntr
 ## Codable Boundaries
 
 - Only Core models should define stored JSON shape.
-- XPC requests and results use `ActionRequest` and `ActionResult`, encoded as JSON data in `RightToolActionRunnerXPCAdapter`.
+- XPC requests and results use `ActionRequest` and `ActionResult`, encoded as JSON data in `RightClickProActionRunnerXPCAdapter`.
 - Adding a persisted field requires considering default values and old JSON files.
 
 ## Exhaustive Switches

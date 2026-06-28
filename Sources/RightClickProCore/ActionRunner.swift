@@ -30,7 +30,7 @@ public enum ActionRunnerError: Error, Equatable, LocalizedError {
 }
 
 public final class ActionRunner {
-    private let configProvider: RightToolConfigProviding
+    private let configProvider: RightClickProConfigProviding
     private let fileService: FileOperationService
     private let operationLog: OperationLogging
     private let cutClipboard: CutClipboardStoring
@@ -39,7 +39,7 @@ public final class ActionRunner {
     private let bookmarkResolver: BookmarkResolving
 
     public init(
-        configProvider: RightToolConfigProviding,
+        configProvider: RightClickProConfigProviding,
         fileService: FileOperationService = FileOperationService(),
         operationLog: OperationLogging,
         cutClipboard: CutClipboardStoring,
@@ -100,8 +100,8 @@ public final class ActionRunner {
     }
 
     private func execute(
-        _ action: RightToolAction,
-        config: RightToolConfig,
+        _ action: RightClickProAction,
+        config: RightClickProConfig,
         bookmarkAccess: AuthorizedBookmarkAccess,
         validator: AuthorizedPathValidator,
         request: ActionRequest
@@ -160,7 +160,7 @@ public final class ActionRunner {
         }
     }
 
-    private func directoryURL(from action: RightToolAction, bookmarkAccess: AuthorizedBookmarkAccess) throws -> URL {
+    private func directoryURL(from action: RightClickProAction, bookmarkAccess: AuthorizedBookmarkAccess) throws -> URL {
         guard let directoryID = action.payload.directoryID else {
             throw ActionRunnerError.missingPayload("directoryID")
         }
@@ -173,7 +173,7 @@ public final class ActionRunner {
         }
     }
 
-    private func fileTemplate(from action: RightToolAction, config: RightToolConfig) throws -> FileTemplate {
+    private func fileTemplate(from action: RightClickProAction, config: RightClickProConfig) throws -> FileTemplate {
         guard let templateID = action.payload.templateID else {
             throw ActionRunnerError.missingPayload("templateID")
         }
@@ -183,7 +183,7 @@ public final class ActionRunner {
         return template
     }
 
-    private func developerEntrypoint(from action: RightToolAction, config: RightToolConfig) throws -> DeveloperEntrypoint {
+    private func developerEntrypoint(from action: RightClickProAction, config: RightClickProConfig) throws -> DeveloperEntrypoint {
         guard let entrypointID = action.payload.developerEntrypointID else {
             throw ActionRunnerError.missingPayload("developerEntrypointID")
         }
@@ -211,7 +211,7 @@ public final class ActionRunner {
         }
     }
 
-    private func log(action: RightToolAction, request: ActionRequest, result: ActionResult) throws {
+    private func log(action: RightClickProAction, request: ActionRequest, result: ActionResult) throws {
         try operationLog.append(
             OperationRecord(
                 actionID: action.id,

@@ -1,15 +1,15 @@
 import Foundation
 
 public struct ConfigurationBootstrapResult: Equatable {
-    public var paths: RightToolStoragePaths
-    public var config: RightToolConfig
+    public var paths: RightClickProStoragePaths
+    public var config: RightClickProConfig
     public var bookmarks: DirectoryBookmarkCatalog
     public var didCreateConfig: Bool
     public var didCreateBookmarks: Bool
 
     public init(
-        paths: RightToolStoragePaths,
-        config: RightToolConfig,
+        paths: RightClickProStoragePaths,
+        config: RightClickProConfig,
         bookmarks: DirectoryBookmarkCatalog,
         didCreateConfig: Bool,
         didCreateBookmarks: Bool
@@ -45,8 +45,8 @@ public struct ConfigurationBootstrapper {
         self.realUserHomeDirectoryOverride = realUserHomeDirectory
     }
 
-    public func bootstrap(paths: RightToolStoragePaths = .defaultForCurrentProcess()) throws -> ConfigurationBootstrapResult {
-        let configStore = JSONFileStore<RightToolConfig>(url: paths.configURL, fileManager: fileManager)
+    public func bootstrap(paths: RightClickProStoragePaths = .defaultForCurrentProcess()) throws -> ConfigurationBootstrapResult {
+        let configStore = JSONFileStore<RightClickProConfig>(url: paths.configURL, fileManager: fileManager)
         let bookmarkStore = JSONFileStore<DirectoryBookmarkCatalog>(url: paths.bookmarksURL, fileManager: fileManager)
         let logStore = JSONLineOperationLog(url: paths.operationLogURL, fileManager: fileManager)
 
@@ -120,10 +120,10 @@ public struct ConfigurationBootstrapper {
     }
 
     private func repairDefaultConfig(
-        _ config: RightToolConfig,
+        _ config: RightClickProConfig,
         bookmarks: DirectoryBookmarkCatalog,
         defaultBookmarkIDs: [String]
-    ) -> RightToolConfig {
+    ) -> RightClickProConfig {
         var repaired = config
         let bookmarkIDs = Set(bookmarks.bookmarks.map(\.id))
         let directoryIDs = defaultBookmarkIDs.filter { bookmarkIDs.contains($0) }
@@ -147,7 +147,7 @@ public struct ConfigurationBootstrapper {
     private func appendMissingDirectoryActions(
         for directoryIDs: [String],
         bookmarks: DirectoryBookmarkCatalog,
-        to actions: inout [RightToolAction]
+        to actions: inout [RightClickProAction]
     ) {
         var existingActionIDs = Set(actions.map(\.id))
         var order = (actions.map(\.order).max() ?? 0) + 10
@@ -164,9 +164,9 @@ public struct ConfigurationBootstrapper {
         }
     }
 
-    private func defaultDirectoryActions(for bookmark: DirectoryBookmark, startingAt order: Int) -> [RightToolAction] {
+    private func defaultDirectoryActions(for bookmark: DirectoryBookmark, startingAt order: Int) -> [RightClickProAction] {
         [
-            RightToolAction(
+            RightClickProAction(
                 id: "open-directory-\(bookmark.id)",
                 title: "前往\(bookmark.displayName)",
                 kind: .openDirectory,
@@ -176,7 +176,7 @@ public struct ConfigurationBootstrapper {
                 order: order,
                 payload: ActionPayload(directoryID: bookmark.id)
             ),
-            RightToolAction(
+            RightClickProAction(
                 id: "move-to-\(bookmark.id)",
                 title: "移动到\(bookmark.displayName)",
                 kind: .moveToDirectory,
@@ -186,7 +186,7 @@ public struct ConfigurationBootstrapper {
                 order: order + 10,
                 payload: ActionPayload(directoryID: bookmark.id)
             ),
-            RightToolAction(
+            RightClickProAction(
                 id: "copy-to-\(bookmark.id)",
                 title: "复制到\(bookmark.displayName)",
                 kind: .copyToDirectory,
@@ -201,7 +201,7 @@ public struct ConfigurationBootstrapper {
 
     private func appendMissingCommandActions(
         for templates: [CommandTemplate],
-        to actions: inout [RightToolAction]
+        to actions: inout [RightClickProAction]
     ) {
         var existingActionIDs = Set(actions.map(\.id))
         var order = (actions.map(\.order).max() ?? 0) + 10
@@ -216,8 +216,8 @@ public struct ConfigurationBootstrapper {
         }
     }
 
-    private func commandAction(for template: CommandTemplate, id: String, order: Int) -> RightToolAction {
-        RightToolAction(
+    private func commandAction(for template: CommandTemplate, id: String, order: Int) -> RightClickProAction {
+        RightClickProAction(
             id: id,
             title: template.title,
             kind: .runCommand,
@@ -231,7 +231,7 @@ public struct ConfigurationBootstrapper {
 
     private func repairDefaultDeveloperEntrypointTargets(in entrypoints: inout [DeveloperEntrypoint]) {
         let defaultsByID = Dictionary(
-            uniqueKeysWithValues: RightToolConfig.defaultDeveloperEntrypoints().map { ($0.id, $0) }
+            uniqueKeysWithValues: RightClickProConfig.defaultDeveloperEntrypoints().map { ($0.id, $0) }
         )
 
         for index in entrypoints.indices {
@@ -316,21 +316,21 @@ public struct ConfigurationBootstrapper {
         return String(cString: pw)
     }
 
-    public func defaultConfig(bookmarks: DirectoryBookmarkCatalog) -> RightToolConfig {
+    public func defaultConfig(bookmarks: DirectoryBookmarkCatalog) -> RightClickProConfig {
         let directoryIDs = bookmarks.bookmarks.map(\.id)
-        return RightToolConfig(
+        return RightClickProConfig(
             monitoredDirectoryIDs: directoryIDs,
             commonDirectoryIDs: directoryIDs,
             actions: defaultActions(bookmarks: bookmarks)
         )
     }
 
-    private func defaultActions(bookmarks: DirectoryBookmarkCatalog) -> [RightToolAction] {
-        var actions: [RightToolAction] = []
+    private func defaultActions(bookmarks: DirectoryBookmarkCatalog) -> [RightClickProAction] {
+        var actions: [RightClickProAction] = []
         var order = 10
 
         actions.append(
-            RightToolAction(
+            RightClickProAction(
                 id: "paste-here",
                 title: "粘贴到此处",
                 kind: .paste,
@@ -343,7 +343,7 @@ public struct ConfigurationBootstrapper {
         order += 10
 
         actions.append(
-            RightToolAction(
+            RightClickProAction(
                 id: "cut-selection",
                 title: "剪切",
                 kind: .cut,
@@ -360,9 +360,9 @@ public struct ConfigurationBootstrapper {
             order += 30
         }
 
-        for template in RightToolConfig.defaultFileTemplates() {
+        for template in RightClickProConfig.defaultFileTemplates() {
             actions.append(
-                RightToolAction(
+                RightClickProAction(
                     id: "create-\(template.id)",
                     title: "新建\(template.title)",
                     kind: .createFile,
@@ -376,9 +376,9 @@ public struct ConfigurationBootstrapper {
             order += 10
         }
 
-        for entrypoint in RightToolConfig.defaultDeveloperEntrypoints() {
+        for entrypoint in RightClickProConfig.defaultDeveloperEntrypoints() {
             actions.append(
-                RightToolAction(
+                RightClickProAction(
                     id: "open-\(entrypoint.id)",
                     title: entrypoint.title,
                     kind: .openInApp,
@@ -392,7 +392,7 @@ public struct ConfigurationBootstrapper {
             order += 10
         }
 
-        for template in RightToolConfig.defaultCommandTemplates() {
+        for template in RightClickProConfig.defaultCommandTemplates() {
             actions.append(commandAction(for: template, id: "run-\(template.id)", order: order))
             order += 10
         }

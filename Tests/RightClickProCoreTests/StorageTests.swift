@@ -1,18 +1,18 @@
 import XCTest
-@testable import RightToolCore
+@testable import RightClickProCore
 
 final class StorageTests: XCTestCase {
     func testJSONFileStoreRoundTripsConfig() throws {
         let directory = try temporaryDirectory()
         let url = directory.appendingPathComponent("config.json")
-        let store = JSONFileStore<RightToolConfig>(url: url)
-        let config = RightToolConfig(maxRootMenuActions: 3)
+        let store = JSONFileStore<RightClickProConfig>(url: url)
+        let config = RightClickProConfig(maxRootMenuActions: 3)
 
         try store.save(config)
         let loaded = try store.loadRequired()
 
         XCTAssertEqual(loaded.maxRootMenuActions, 3)
-        XCTAssertEqual(loaded.schemaVersion, RightToolConstants.currentSchemaVersion)
+        XCTAssertEqual(loaded.schemaVersion, RightClickProConstants.currentSchemaVersion)
     }
 
     func testOperationLogCapsRecords() throws {
@@ -40,8 +40,8 @@ final class StorageTests: XCTestCase {
         }
         """
 
-        let config = try JSONDecoder().decode(RightToolConfig.self, from: Data(json.utf8))
+        let config = try JSONDecoder().decode(RightClickProConfig.self, from: Data(json.utf8))
 
-        XCTAssertEqual(config.commandTemplates.map(\.id), RightToolConfig.defaultCommandTemplates().map(\.id))
+        XCTAssertEqual(config.commandTemplates.map(\.id), RightClickProConfig.defaultCommandTemplates().map(\.id))
     }
 }

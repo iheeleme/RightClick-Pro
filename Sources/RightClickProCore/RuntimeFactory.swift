@@ -1,12 +1,12 @@
 import Foundation
 
-public enum RightToolRuntimeFactory {
-    public static func defaultStoragePaths() -> RightToolStoragePaths {
-        RightToolStoragePaths.defaultForCurrentProcess()
+public enum RightClickProRuntimeFactory {
+    public static func defaultStoragePaths() -> RightClickProStoragePaths {
+        RightClickProStoragePaths.defaultForCurrentProcess()
     }
 
-    public static func makeActionRunner(paths: RightToolStoragePaths) -> ActionRunner {
-        let configProvider = FileBackedRightToolConfigProvider(paths: paths)
+    public static func makeActionRunner(paths: RightClickProStoragePaths) -> ActionRunner {
+        let configProvider = FileBackedRightClickProConfigProvider(paths: paths)
         let operationLog = JSONLineOperationLog(url: paths.operationLogURL)
         let cutClipboard = FileBackedCutClipboardStore(url: paths.cutClipboardURL)
 

@@ -6,7 +6,7 @@
 
 ## Overview
 
-RightTool quality checks center on SwiftPM compilation/tests, Finder extension packaging validation, and source-backed contracts. The project currently has no lint tool beyond Swift compiler checks and `git diff --check`.
+RightClick Pro quality checks center on SwiftPM compilation/tests, Finder extension packaging validation, and source-backed contracts. The project currently has no lint tool beyond Swift compiler checks and `git diff --check`.
 
 ---
 
@@ -23,7 +23,7 @@ RightTool quality checks center on SwiftPM compilation/tests, Finder extension p
 
 ## Required Patterns
 
-- Shared behavior belongs in `RightToolCore`.
+- Shared behavior belongs in `RightClickProCore`.
 - File mutations must validate authorized paths before touching disk.
 - Storage writes must use `JSONFileStore` or `JSONLineOperationLog`.
 - Finder extension startup must bootstrap config before assigning `FIFinderSyncController.default().directoryURLs`.
@@ -257,7 +257,7 @@ case .currentDirectory:
 - Packaging command:
   ```bash
   scripts/package-macos.sh <release|debug>
-  RIGHTTOOL_PACKAGE_DMG=1 scripts/package-macos.sh <release|debug>
+  RIGHTCLICKPRO_PACKAGE_DMG=1 scripts/package-macos.sh <release|debug>
   ```
 - Finder extension bootstrap before monitored-directory registration:
   ```swift
@@ -271,9 +271,9 @@ case .currentDirectory:
   ```
 - Optional Xcode archive inputs:
   ```text
-  RIGHTTOOL_XCODE_PROJECT=<path-to-xcodeproj>
-  RIGHTTOOL_XCODE_SCHEME=<scheme-name>
-  RIGHTTOOL_EXPORT_OPTIONS_PLIST=<optional-export-options-plist>
+  RIGHTCLICKPRO_XCODE_PROJECT=<path-to-xcodeproj>
+  RIGHTCLICKPRO_XCODE_SCHEME=<scheme-name>
+  RIGHTCLICKPRO_EXPORT_OPTIONS_PLIST=<optional-export-options-plist>
   ```
 - Preview bundle identifiers and entitlements:
   ```text
@@ -295,9 +295,9 @@ case .currentDirectory:
 
 - GitHub workflow must use explicit macOS runner labels, not `macos-latest`, to avoid packaging drift when GitHub changes aliases.
 - The default packaging path is SwiftPM preview bundling while no complete Xcode project exists.
-- The SwiftPM preview app bundle's user-facing name is `RightClick Pro.app`; Swift target/module/type names may still use `RightTool*` during the current development phase.
-- The SwiftPM preview bundle must still include `Contents/PlugIns/RightToolFinderExtension.appex`.
-- The preview bundle must place `RightToolActionRunner.xpc` in `Contents/XPCServices/` and also inside `RightToolFinderExtension.appex/Contents/XPCServices/` so `NSXPCConnection(serviceName:)` can resolve the service from the main app and the Finder extension process.
+- The SwiftPM preview app bundle's user-facing name is `RightClick Pro.app`; Swift target/module/type names must use the `RightClickPro*` naming family.
+- The SwiftPM preview bundle must still include `Contents/PlugIns/RightClickProFinderExtension.appex`.
+- The preview bundle must place `RightClickProActionRunner.xpc` in `Contents/XPCServices/` and also inside `RightClickProFinderExtension.appex/Contents/XPCServices/` so `NSXPCConnection(serviceName:)` can resolve the service from the main app and the Finder extension process.
 - The preview Finder Sync `.appex` must be a Mach-O `EXECUTE` binary linked with `_NSExtensionMain`; a Swift dylib inside an `.appex` is not a valid Finder Sync extension bundle for PlugInKit discovery.
 - The preview `.appex` Info.plist must contain `NSExtensionPointIdentifier=com.apple.FinderSync`.
 - Finder Sync extension startup must not assume the menu-bar app launched first. It must run `ConfigurationBootstrapper.bootstrap(paths:)` before loading config and assigning `FIFinderSyncController.default().directoryURLs`.
@@ -306,34 +306,34 @@ case .currentDirectory:
 - Bootstrap must also repair older existing configs that are missing an available default directory. Append the missing default bookmark, monitored/common directory IDs, and generated directory actions while preserving unrelated custom actions, templates, developer entries, and user ordering as much as possible.
 - Finder Sync menu leaf items must not rely on `representedObject` for action payloads after Finder copies menu items. Use a stable `tag` or another Finder-preserved primitive to map selected menu items back to pending actions.
 - The ActionRunner must resolve directory bookmarks and hold security-scoped access during request execution before creating the authorized-path validator.
-- The preview app, XPC service, Finder extension, and their embedded `libRightToolCore.dylib` copies must be signed before zipping. Ad-hoc signing is acceptable for local test artifacts; public distribution still requires Developer ID signing and notarization.
+- The preview app, XPC service, Finder extension, and their embedded `libRightClickProCore.dylib` copies must be signed before zipping. Ad-hoc signing is acceptable for local test artifacts; public distribution still requires Developer ID signing and notarization.
 - The packaging script must validate the preview bundle before upload so CI cannot publish an artifact that lacks a discoverable Finder Sync extension.
 - For local preview smoke tests, the packaging script should explicitly register the just-built `.appex` path with `pluginkit -a` before applying `pluginkit -e use`; enabling by identifier alone only affects already-discovered extension records and may miss reinstalls.
-- When both `RIGHTTOOL_XCODE_PROJECT` and `RIGHTTOOL_XCODE_SCHEME` are configured, packaging must use `xcodebuild archive`.
+- When both `RIGHTCLICKPRO_XCODE_PROJECT` and `RIGHTCLICKPRO_XCODE_SCHEME` are configured, packaging must use `xcodebuild archive`.
 - If only one Xcode variable is configured, packaging must fail instead of silently falling back to SwiftPM preview output.
 - Zip artifacts are written to `dist/RightClick Pro-<version>-<arch>-preview.zip`.
-- `RIGHTTOOL_PACKAGE_DMG=1` creates an additional compressed read-only `UDZO` artifact at `dist/RightClick Pro-<version>-<arch>-preview.dmg`.
+- `RIGHTCLICKPRO_PACKAGE_DMG=1` creates an additional compressed read-only `UDZO` artifact at `dist/RightClick Pro-<version>-<arch>-preview.dmg`.
 - DMG contents must include `RightClick Pro.app`, an `/Applications` alias, and `README.txt`.
 - `README.txt` must cover drag-to-Applications installation, the non-Developer-ID/non-notarized warning, Finder Extension enablement, and the `killall Finder` fallback.
-- `RIGHTTOOL_PACKAGE_DMG=1` is supported only on the SwiftPM preview bundle path until the Xcode archive/export path has a concrete `.app` output contract.
+- `RIGHTCLICKPRO_PACKAGE_DMG=1` is supported only on the SwiftPM preview bundle path until the Xcode archive/export path has a concrete `.app` output contract.
 - The current default artifacts are non-notarized test builds. Developer ID signing/notarization requires a separate secrets/keychain flow.
 
 #### 4. Validation & Error Matrix
 
 - Unsupported configuration argument -> exit 64.
-- Unsupported `RIGHTTOOL_PACKAGE_DMG` value -> exit 64.
-- Only one of `RIGHTTOOL_XCODE_PROJECT` / `RIGHTTOOL_XCODE_SCHEME` is set -> exit 64.
-- `RIGHTTOOL_PACKAGE_DMG=1` with a configured Xcode archive path -> exit 64 before archive.
-- `RIGHTTOOL_XCODE_PROJECT` path is missing -> exit 66.
+- Unsupported `RIGHTCLICKPRO_PACKAGE_DMG` value -> exit 64.
+- Only one of `RIGHTCLICKPRO_XCODE_PROJECT` / `RIGHTCLICKPRO_XCODE_SCHEME` is set -> exit 64.
+- `RIGHTCLICKPRO_PACKAGE_DMG=1` with a configured Xcode archive path -> exit 64 before archive.
+- `RIGHTCLICKPRO_XCODE_PROJECT` path is missing -> exit 66.
 - No Xcode variables are set -> build SwiftPM preview bundle.
-- `RIGHTTOOL_PACKAGE_DMG=1` and `hdiutil` is unavailable -> exit 69.
+- `RIGHTCLICKPRO_PACKAGE_DMG=1` and `hdiutil` is unavailable -> exit 69.
 - Preview Finder Sync binary is not `EXECUTE` -> exit 65.
 - Preview Finder Sync extension point is not `com.apple.FinderSync` -> exit 65.
 - Finder extension starts before config/bookmark files exist -> bootstrap creates defaults before assigning `directoryURLs`.
 - Existing bookmark path starts with the sandbox process home -> remap to the same relative path under the real user home.
 - Existing bookmark path merely shares a similar prefix with the sandbox process home -> leave unchanged.
 - Existing config/bookmark files omit an available default directory such as `~/Code` -> append that directory to bookmarks, `monitoredDirectoryIDs`, `commonDirectoryIDs`, and missing generated directory actions.
-- Preview bundle is missing app or extension-local `RightToolActionRunner.xpc` -> packaging fails before zip upload.
+- Preview bundle is missing app or extension-local `RightClickProActionRunner.xpc` -> packaging fails before zip upload.
 - Preview XPC service has app sandbox entitlement -> local smoke tests against auto-injected protected folders may fail.
 - Preview deep code-sign verification fails -> packaging fails before zip upload.
 - `pluginkit` unavailable on the runner -> skip registration/enablement without failing packaging.
@@ -343,18 +343,18 @@ case .currentDirectory:
 
 #### 5. Good/Base/Bad Cases
 
-- Good: tag `v1.2.3` produces `RightClick Pro-1.2.3-<arch>-preview.zip` containing `RightToolFinderExtension.appex` as an `_NSExtensionMain` executable, or an exported Xcode archive artifact.
-- Good: `RIGHTTOOL_PACKAGE_DMG=1 scripts/package-macos.sh debug` produces zip plus `RightClick Pro-<version>-<arch>-preview.dmg`, then mounts the DMG and verifies the app, Applications alias, and README.
+- Good: tag `v1.2.3` produces `RightClick Pro-1.2.3-<arch>-preview.zip` containing `RightClickProFinderExtension.appex` as an `_NSExtensionMain` executable, or an exported Xcode archive artifact.
+- Good: `RIGHTCLICKPRO_PACKAGE_DMG=1 scripts/package-macos.sh debug` produces zip plus `RightClick Pro-<version>-<arch>-preview.dmg`, then mounts the DMG and verifies the app, Applications alias, and README.
 - Good: Finder starts the extension before the app has opened; the extension bootstraps config/bookmarks and assigns real-home Desktop/Downloads/Documents/Code URLs to `directoryURLs`.
 - Good: an older install has Desktop/Downloads/Documents only and `~/Code` exists; bootstrap appends the `code` bookmark, monitors it, and adds `open-directory-code`, `move-to-code`, and `copy-to-code`.
-- Good: rebuilding/reinstalling a local preview registers the new `RightToolFinderExtension.appex` path, then enables `com.iheeleme.rightclickpro.FinderExtension`.
+- Good: rebuilding/reinstalling a local preview registers the new `RightClickProFinderExtension.appex` path, then enables `com.iheeleme.rightclickpro.FinderExtension`.
 - Base: manual workflow dispatch with no Xcode env vars produces a SwiftPM preview bundle with App, app-local XPC service, extension-local XPC service, Finder extension, and shared core dylib.
 - Base: manual workflow dispatch with `package_dmg=false` uploads only zip output in a clean runner workspace.
 - Bad: bootstrap writes `~/Library/Containers/com.iheeleme.rightclickpro/Data/Desktop` as a monitored directory, so the Finder menu never appears on the user's real Desktop.
 - Bad: the packaging script only runs `pluginkit -e use -i com.iheeleme.rightclickpro.FinderExtension`; after reinstall, PlugInKit may still know only an old or missing physical extension path.
 - Bad: workflow upload glob includes `.dmg` but the runner workspace contains a stale DMG from an unrelated previous build.
-- Bad: `RIGHTTOOL_XCODE_PROJECT` set without `RIGHTTOOL_XCODE_SCHEME` silently falls back to preview bundling.
-- Bad: preview bundle contains `Contents/PlugIns/RightToolFinderExtension.appex` but the appex executable is a `DYLIB`.
+- Bad: `RIGHTCLICKPRO_XCODE_PROJECT` set without `RIGHTCLICKPRO_XCODE_SCHEME` silently falls back to preview bundling.
+- Bad: preview bundle contains `Contents/PlugIns/RightClickProFinderExtension.appex` but the appex executable is a `DYLIB`.
 
 #### 6. Tests Required
 
@@ -373,12 +373,12 @@ case .currentDirectory:
 - Run preview package validation:
   ```bash
   scripts/package-macos.sh debug
-  RIGHTTOOL_PACKAGE_DMG=1 scripts/package-macos.sh debug
+  RIGHTCLICKPRO_PACKAGE_DMG=1 scripts/package-macos.sh debug
   codesign --verify --deep --strict --verbose=2 "dist/staging/RightClick Pro.app"
-  otool -hv "dist/staging/RightClick Pro.app/Contents/PlugIns/RightToolFinderExtension.appex/Contents/MacOS/RightToolFinderExtension"
-  test -x "dist/staging/RightClick Pro.app/Contents/XPCServices/RightToolActionRunner.xpc/Contents/MacOS/RightToolActionRunner"
-  test -x "dist/staging/RightClick Pro.app/Contents/PlugIns/RightToolFinderExtension.appex/Contents/XPCServices/RightToolActionRunner.xpc/Contents/MacOS/RightToolActionRunner"
-  codesign -d --entitlements :- "dist/staging/RightClick Pro.app/Contents/PlugIns/RightToolFinderExtension.appex/Contents/XPCServices/RightToolActionRunner.xpc"
+  otool -hv "dist/staging/RightClick Pro.app/Contents/PlugIns/RightClickProFinderExtension.appex/Contents/MacOS/RightClickProFinderExtension"
+  test -x "dist/staging/RightClick Pro.app/Contents/XPCServices/RightClickProActionRunner.xpc/Contents/MacOS/RightClickProActionRunner"
+  test -x "dist/staging/RightClick Pro.app/Contents/PlugIns/RightClickProFinderExtension.appex/Contents/XPCServices/RightClickProActionRunner.xpc/Contents/MacOS/RightClickProActionRunner"
+  codesign -d --entitlements :- "dist/staging/RightClick Pro.app/Contents/PlugIns/RightClickProFinderExtension.appex/Contents/XPCServices/RightClickProActionRunner.xpc"
   hdiutil imageinfo "dist/RightClick Pro-<version>-<arch>-preview.dmg"
   ```
 - Run Swift type checks or `swift test` where the local toolchain allows it.
@@ -398,34 +398,34 @@ runs-on: macos-26
 
 Wrong:
 ```bash
-RIGHTTOOL_XCODE_PROJECT=RightTool.xcodeproj scripts/package-macos.sh release
+RIGHTCLICKPRO_XCODE_PROJECT=RightClickPro.xcodeproj scripts/package-macos.sh release
 ```
 
 Correct:
 ```bash
-RIGHTTOOL_XCODE_PROJECT=RightTool.xcodeproj \
-RIGHTTOOL_XCODE_SCHEME=RightTool \
+RIGHTCLICKPRO_XCODE_PROJECT=RightClickPro.xcodeproj \
+RIGHTCLICKPRO_XCODE_SCHEME=RightClickPro \
 scripts/package-macos.sh release
 ```
 
 Wrong:
 ```bash
-RIGHTTOOL_PACKAGE_DMG=true scripts/package-macos.sh debug
+RIGHTCLICKPRO_PACKAGE_DMG=true scripts/package-macos.sh debug
 ```
 
 Correct:
 ```bash
-RIGHTTOOL_PACKAGE_DMG=1 scripts/package-macos.sh debug
+RIGHTCLICKPRO_PACKAGE_DMG=1 scripts/package-macos.sh debug
 ```
 
 Wrong:
 ```text
-RightToolFinderExtension.appex/Contents/MacOS/RightToolFinderExtension: Mach-O ... dynamically linked shared library
+RightClickProFinderExtension.appex/Contents/MacOS/RightClickProFinderExtension: Mach-O ... dynamically linked shared library
 ```
 
 Correct:
 ```text
-RightToolFinderExtension.appex/Contents/MacOS/RightToolFinderExtension: Mach-O ... executable
+RightClickProFinderExtension.appex/Contents/MacOS/RightClickProFinderExtension: Mach-O ... executable
 ```
 
 Wrong:
@@ -484,7 +484,7 @@ for the preview ActionRunner XPC entitlement file, with path authorization enfor
 
 #### 1. Scope / Trigger
 
-- Trigger: changes to `Sources/RightToolCore/MenuBuilder.swift`, `Sources/RightToolFinderExtension/FinderSyncController.swift`, `DeveloperEntrypoint`, `FileTemplate`, directory actions, or Finder menu presentation.
+- Trigger: changes to `Sources/RightClickProCore/MenuBuilder.swift`, `Sources/RightClickProFinderExtension/FinderSyncController.swift`, `DeveloperEntrypoint`, `FileTemplate`, directory actions, or Finder menu presentation.
 - This is a cross-layer contract because Core decides icon semantics while the Finder extension renders them as AppKit `NSImage` values.
 
 #### 2. Signatures
@@ -503,15 +503,15 @@ for the preview ActionRunner XPC entitlement file, with path authorization enfor
   ```swift
   public enum MenuIconResolver {
       public static func icon(
-          for action: RightToolAction,
-          config: RightToolConfig,
+          for action: RightClickProAction,
+          config: RightClickProConfig,
           bookmarks: DirectoryBookmarkCatalog = DirectoryBookmarkCatalog()
       ) -> MenuIconDescriptor
   }
   ```
 - `MenuBuilder.buildMenu` must accept bookmarks so directory actions can resolve path icons:
   ```swift
-  buildMenu(config: RightToolConfig, context: FinderContext, bookmarks: DirectoryBookmarkCatalog)
+  buildMenu(config: RightClickProConfig, context: FinderContext, bookmarks: DirectoryBookmarkCatalog)
   ```
 
 #### 3. Contracts
@@ -521,7 +521,7 @@ for the preview ActionRunner XPC entitlement file, with path authorization enfor
 - Directory actions must use `.filePath(bookmark.path)` when the bookmark exists, otherwise `.folder`.
 - Finder extension must render descriptors with `NSWorkspace.shared.icon(for:)`, `NSWorkspace.shared.icon(forFile:)`, or `NSImage(systemSymbolName:)`.
 - Core must not import AppKit; it only emits semantic descriptors.
-- Finder extension menus must not wrap submenu groups in a visible branded container such as `"RightTool"`; root actions and functional group submenus should be added directly to the returned `NSMenu`.
+- Finder extension menus must not wrap submenu groups in a visible branded container such as `"RightClick Pro"`; root actions and functional group submenus should be added directly to the returned `NSMenu`.
 - When both root actions and functional group submenus exist, do not insert a Finder Sync separator between those two blocks; Finder can render that separator as abnormal whitespace. Add root actions and functional group rows directly and compactly. When no actions are visible, return `nil` instead of an empty menu.
 - Visible group names must describe the function, such as `"前往常用目录"`, `"新建文件"`, `"开发者工具"`, or `"文件操作"`, and settings previews should use matching labels.
 - Any enabled action with `placement == .rootMenu` must remain in `MenuPresentation.rootItems`, even when other actions from the same `MenuGroup` are shown in functional group submenus. Presentation fixes must not silently rewrite user placement choices.
@@ -533,21 +533,21 @@ for the preview ActionRunner XPC entitlement file, with path authorization enfor
 - Missing bookmark -> fallback to `.folder`.
 - Unknown file extension -> render the system `.data` type icon.
 - Missing installed app for bundle identifier -> render the generic application icon.
-- Finder menu contains a visible `"RightTool"` submenu container -> presentation bug; show functional group submenus directly.
+- Finder menu contains a visible `"RightClick Pro"` submenu container -> presentation bug; show functional group submenus directly.
 - No visible actions for the current Finder invocation -> return `nil` so Finder does not show an empty extension menu.
-- Settings placement copy says `"RightTool 子菜单"` -> copy drift; use `"功能分组菜单"` or another non-branded functional label.
+- Settings placement copy says `"RightClick Pro 子菜单"` -> copy drift; use `"功能分组菜单"` or another non-branded functional label.
 - A visible root item and submenu items from the same `MenuGroup` coexist -> keep the root item in `rootItems`, keep submenu items in `groupedSubmenuItems`, and render the root/group rows compactly without a separator-caused gap.
 
 #### 5. Good/Base/Bad Cases
 
 - Good: Cursor action shows Cursor's installed app icon in the Finder menu.
 - Good: `Note.md` template shows the system Markdown/document type icon.
-- Good: Finder context menu shows `"新建文件"` and `"开发者工具"` group submenus directly, without an intermediate `"RightTool"` submenu.
+- Good: Finder context menu shows `"新建文件"` and `"开发者工具"` group submenus directly, without an intermediate `"RightClick Pro"` submenu.
 - Good: `"新建Markdown"` can stay as a root item while other create-file actions remain under `"新建文件"`; the root section and functional groups are rendered next to each other without abnormal whitespace.
 - Base: a custom shell command shows a terminal symbol.
 - Bad: Finder menu item hard-codes `"terminal"` for every `.openInApp` action.
 - Bad: Finder extension rebuilds icon semantics independently from `MenuIconResolver`.
-- Bad: Finder menu shows a top-level `"RightTool"` submenu that only contains functional groups.
+- Bad: Finder menu shows a top-level `"RightClick Pro"` submenu that only contains functional groups.
 - Bad: a display-layer workaround moves a user-selected root item into a submenu group.
 
 #### 6. Tests Required
@@ -583,9 +583,9 @@ MenuItemPresentation(
 
 Wrong:
 ```swift
-let rightToolMenu = NSMenu(title: "RightTool")
-let container = NSMenuItem(title: "RightTool", action: nil, keyEquivalent: "")
-container.submenu = rightToolMenu
+let rightClickProMenu = NSMenu(title: "RightClick Pro")
+let container = NSMenuItem(title: "RightClick Pro", action: nil, keyEquivalent: "")
+container.submenu = rightClickProMenu
 menu.addItem(container)
 ```
 

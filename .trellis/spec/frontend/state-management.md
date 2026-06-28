@@ -6,12 +6,12 @@ Settings state is centralized in `SettingsViewModel`. It bridges Core storage mo
 
 | State | Owner | Examples |
 |-------|-------|----------|
-| Durable config | `RightToolCore` JSON files via `SettingsViewModel` | `RightToolConfig`, `DirectoryBookmarkCatalog` |
+| Durable config | `RightClickProCore` JSON files via `SettingsViewModel` | `RightClickProConfig`, `DirectoryBookmarkCatalog` |
 | View model state | `SettingsViewModel` | `selectedSection`, `statusMessage`, `statusTone`, `hasUnsavedChanges`, `recentOperations` |
 | Local UI state | Individual views | filters, grouping modes, preview context, editing drafts |
 | Derived state | Computed properties/functions | enabled action count, root menu progress, sidebar badges |
 
-Reference file: `Sources/RightToolAppPreview/RightToolAppPreview.swift`.
+Reference file: `Sources/RightClickProAppPreview/RightClickProAppPreview.swift`.
 
 ## Persistence Rules
 
@@ -55,4 +55,4 @@ Use `SettingsValidationError` for user-facing save errors.
 - Do not mutate `config.actions` from child views without a ViewModel command.
 - Do not let an action lose all `ActionVisibility` cases.
 - Do not add config entries without back-reference actions.
-- Do not treat a preview-only filter/sort as persisted unless it updates `RightToolConfig`.
+- Do not treat a preview-only filter/sort as persisted unless it updates `RightClickProConfig`.

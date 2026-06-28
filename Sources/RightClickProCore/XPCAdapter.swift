@@ -1,11 +1,11 @@
 import Foundation
 
-@objc public protocol RightToolActionRunnerXPCProtocol {
+@objc public protocol RightClickProActionRunnerXPCProtocol {
     @objc(performActionWithRequestData:reply:)
     func performAction(requestData: NSData, reply: @escaping (NSData?, NSError?) -> Void)
 }
 
-public final class RightToolActionRunnerXPCAdapter: NSObject, RightToolActionRunnerXPCProtocol {
+public final class RightClickProActionRunnerXPCAdapter: NSObject, RightClickProActionRunnerXPCProtocol {
     private let runner: ActionRunner
     private let decoder = JSONDecoder()
     private let encoder = JSONEncoder()
@@ -26,7 +26,7 @@ public final class RightToolActionRunnerXPCAdapter: NSObject, RightToolActionRun
     }
 }
 
-public enum RightToolXPCClientError: Error, LocalizedError {
+public enum RightClickProXPCClientError: Error, LocalizedError {
     case unavailable
     case missingResponse
 
@@ -40,12 +40,12 @@ public enum RightToolXPCClientError: Error, LocalizedError {
     }
 }
 
-public final class RightToolActionRunnerXPCClient {
+public final class RightClickProActionRunnerXPCClient {
     private let serviceName: String
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
 
-    public init(serviceName: String = RightToolConstants.defaultXPCServiceName) {
+    public init(serviceName: String = RightClickProConstants.defaultXPCServiceName) {
         self.serviceName = serviceName
     }
 
@@ -53,15 +53,15 @@ public final class RightToolActionRunnerXPCClient {
         do {
             let requestData = try encoder.encode(request)
             let connection = NSXPCConnection(serviceName: serviceName)
-            connection.remoteObjectInterface = NSXPCInterface(with: RightToolActionRunnerXPCProtocol.self)
+            connection.remoteObjectInterface = NSXPCInterface(with: RightClickProActionRunnerXPCProtocol.self)
             connection.resume()
 
             guard let proxy = connection.remoteObjectProxyWithErrorHandler({ error in
                 connection.invalidate()
                 completion(.failure(error))
-            }) as? RightToolActionRunnerXPCProtocol else {
+            }) as? RightClickProActionRunnerXPCProtocol else {
                 connection.invalidate()
-                completion(.failure(RightToolXPCClientError.unavailable))
+                completion(.failure(RightClickProXPCClientError.unavailable))
                 return
             }
 
@@ -74,7 +74,7 @@ public final class RightToolActionRunnerXPCClient {
                 }
 
                 guard let responseData else {
-                    completion(.failure(RightToolXPCClientError.missingResponse))
+                    completion(.failure(RightClickProXPCClientError.missingResponse))
                     return
                 }
 

@@ -42,10 +42,10 @@ The preview bundle contains:
 ```text
 RightClick Pro.app
 ├── Contents/MacOS/RightClick Pro
-├── Contents/PlugIns/RightToolFinderExtension.appex
-│   └── Contents/XPCServices/RightToolActionRunner.xpc
-├── Contents/XPCServices/RightToolActionRunner.xpc
-├── Contents/Frameworks/libRightToolCore.dylib
+├── Contents/PlugIns/RightClickProFinderExtension.appex
+│   └── Contents/XPCServices/RightClickProActionRunner.xpc
+├── Contents/XPCServices/RightClickProActionRunner.xpc
+├── Contents/Frameworks/libRightClickProCore.dylib
 └── Contents/Resources/PACKAGING-NOTES.txt
 ```
 
@@ -67,7 +67,7 @@ APP_GROUP_IDENTIFIER=group.com.iheeleme.rightclickpro
 DMG packaging is opt-in for internal/self-test distribution:
 
 ```bash
-RIGHTTOOL_PACKAGE_DMG=1 scripts/package-macos.sh release
+RIGHTCLICKPRO_PACKAGE_DMG=1 scripts/package-macos.sh release
 ```
 
 The script still creates the zip and also writes:
@@ -91,8 +91,8 @@ README.txt
 After adding a real Xcode project, set these repository or workflow environment variables:
 
 ```text
-RIGHTTOOL_XCODE_PROJECT=RightTool.xcodeproj
-RIGHTTOOL_XCODE_SCHEME=RightTool
+RIGHTCLICKPRO_XCODE_PROJECT=RightClickPro.xcodeproj
+RIGHTCLICKPRO_XCODE_SCHEME=RightClickPro
 ```
 
 Then `scripts/package-macos.sh` will use:
@@ -101,7 +101,7 @@ Then `scripts/package-macos.sh` will use:
 xcodebuild archive
 ```
 
-If `RIGHTTOOL_EXPORT_OPTIONS_PLIST` points to an export options plist, the script also runs `xcodebuild -exportArchive`.
+If `RIGHTCLICKPRO_EXPORT_OPTIONS_PLIST` points to an export options plist, the script also runs `xcodebuild -exportArchive`.
 
 ## Signing and Notarization
 

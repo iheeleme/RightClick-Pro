@@ -1,6 +1,6 @@
 import Foundation
 
-public enum RightToolConstants {
+public enum RightClickProConstants {
     public static let currentSchemaVersion = 1
     public static let defaultAppGroupIdentifier = "group.com.iheeleme.rightclickpro"
     public static let defaultXPCServiceName = "com.iheeleme.rightclickpro.ActionRunner"
@@ -99,7 +99,7 @@ public struct CommandTemplate: Codable, Equatable, Identifiable {
         title: String,
         command: String,
         workingDirectoryMode: CommandWorkingDirectoryMode = .currentDirectory,
-        timeoutSeconds: Int = RightToolConstants.defaultCommandTimeoutSeconds,
+        timeoutSeconds: Int = RightClickProConstants.defaultCommandTimeoutSeconds,
         environment: [CommandEnvironmentVariable] = []
     ) {
         self.id = id
@@ -111,7 +111,7 @@ public struct CommandTemplate: Codable, Equatable, Identifiable {
     }
 }
 
-public struct RightToolAction: Codable, Equatable, Identifiable {
+public struct RightClickProAction: Codable, Equatable, Identifiable {
     public var id: String
     public var title: String
     public var kind: ActionKind
@@ -185,25 +185,25 @@ public struct DeveloperEntrypoint: Codable, Equatable, Identifiable {
     }
 }
 
-public struct RightToolConfig: Codable, Equatable {
+public struct RightClickProConfig: Codable, Equatable {
     public var schemaVersion: Int
     public var maxRootMenuActions: Int
     public var monitoredDirectoryIDs: [String]
     public var commonDirectoryIDs: [String]
-    public var actions: [RightToolAction]
+    public var actions: [RightClickProAction]
     public var fileTemplates: [FileTemplate]
     public var developerEntrypoints: [DeveloperEntrypoint]
     public var commandTemplates: [CommandTemplate]
 
     public init(
-        schemaVersion: Int = RightToolConstants.currentSchemaVersion,
-        maxRootMenuActions: Int = RightToolConstants.defaultMaxRootMenuActions,
+        schemaVersion: Int = RightClickProConstants.currentSchemaVersion,
+        maxRootMenuActions: Int = RightClickProConstants.defaultMaxRootMenuActions,
         monitoredDirectoryIDs: [String] = [],
         commonDirectoryIDs: [String] = [],
-        actions: [RightToolAction] = RightToolConfig.defaultActions(),
-        fileTemplates: [FileTemplate] = RightToolConfig.defaultFileTemplates(),
-        developerEntrypoints: [DeveloperEntrypoint] = RightToolConfig.defaultDeveloperEntrypoints(),
-        commandTemplates: [CommandTemplate] = RightToolConfig.defaultCommandTemplates()
+        actions: [RightClickProAction] = RightClickProConfig.defaultActions(),
+        fileTemplates: [FileTemplate] = RightClickProConfig.defaultFileTemplates(),
+        developerEntrypoints: [DeveloperEntrypoint] = RightClickProConfig.defaultDeveloperEntrypoints(),
+        commandTemplates: [CommandTemplate] = RightClickProConfig.defaultCommandTemplates()
     ) {
         self.schemaVersion = schemaVersion
         self.maxRootMenuActions = maxRootMenuActions
@@ -228,14 +228,14 @@ public struct RightToolConfig: Codable, Equatable {
 
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        self.schemaVersion = try container.decodeIfPresent(Int.self, forKey: .schemaVersion) ?? RightToolConstants.currentSchemaVersion
-        self.maxRootMenuActions = try container.decodeIfPresent(Int.self, forKey: .maxRootMenuActions) ?? RightToolConstants.defaultMaxRootMenuActions
+        self.schemaVersion = try container.decodeIfPresent(Int.self, forKey: .schemaVersion) ?? RightClickProConstants.currentSchemaVersion
+        self.maxRootMenuActions = try container.decodeIfPresent(Int.self, forKey: .maxRootMenuActions) ?? RightClickProConstants.defaultMaxRootMenuActions
         self.monitoredDirectoryIDs = try container.decodeIfPresent([String].self, forKey: .monitoredDirectoryIDs) ?? []
         self.commonDirectoryIDs = try container.decodeIfPresent([String].self, forKey: .commonDirectoryIDs) ?? []
-        self.actions = try container.decodeIfPresent([RightToolAction].self, forKey: .actions) ?? RightToolConfig.defaultActions()
-        self.fileTemplates = try container.decodeIfPresent([FileTemplate].self, forKey: .fileTemplates) ?? RightToolConfig.defaultFileTemplates()
-        self.developerEntrypoints = try container.decodeIfPresent([DeveloperEntrypoint].self, forKey: .developerEntrypoints) ?? RightToolConfig.defaultDeveloperEntrypoints()
-        self.commandTemplates = try container.decodeIfPresent([CommandTemplate].self, forKey: .commandTemplates) ?? RightToolConfig.defaultCommandTemplates()
+        self.actions = try container.decodeIfPresent([RightClickProAction].self, forKey: .actions) ?? RightClickProConfig.defaultActions()
+        self.fileTemplates = try container.decodeIfPresent([FileTemplate].self, forKey: .fileTemplates) ?? RightClickProConfig.defaultFileTemplates()
+        self.developerEntrypoints = try container.decodeIfPresent([DeveloperEntrypoint].self, forKey: .developerEntrypoints) ?? RightClickProConfig.defaultDeveloperEntrypoints()
+        self.commandTemplates = try container.decodeIfPresent([CommandTemplate].self, forKey: .commandTemplates) ?? RightClickProConfig.defaultCommandTemplates()
     }
 
     public static func defaultFileTemplates() -> [FileTemplate] {
@@ -264,9 +264,9 @@ public struct RightToolConfig: Codable, Equatable {
         ]
     }
 
-    public static func defaultActions() -> [RightToolAction] {
+    public static func defaultActions() -> [RightClickProAction] {
         [
-            RightToolAction(
+            RightClickProAction(
                 id: "paste-here",
                 title: "粘贴到此处",
                 kind: .paste,
@@ -275,7 +275,7 @@ public struct RightToolConfig: Codable, Equatable {
                 group: .fileOperations,
                 order: 10
             ),
-            RightToolAction(
+            RightClickProAction(
                 id: "cut-selection",
                 title: "剪切",
                 kind: .cut,
@@ -284,7 +284,7 @@ public struct RightToolConfig: Codable, Equatable {
                 group: .fileOperations,
                 order: 20
             ),
-            RightToolAction(
+            RightClickProAction(
                 id: "new-markdown",
                 title: "新建 Markdown 文件",
                 kind: .createFile,
@@ -294,7 +294,7 @@ public struct RightToolConfig: Codable, Equatable {
                 order: 30,
                 payload: ActionPayload(templateID: "template-md")
             ),
-            RightToolAction(
+            RightClickProAction(
                 id: "open-terminal",
                 title: "在 Terminal 打开",
                 kind: .openInApp,
@@ -304,7 +304,7 @@ public struct RightToolConfig: Codable, Equatable {
                 order: 40,
                 payload: ActionPayload(developerEntrypointID: "developer-terminal")
             ),
-            RightToolAction(
+            RightClickProAction(
                 id: "open-vscode",
                 title: "在 VS Code 打开",
                 kind: .openInApp,
@@ -314,7 +314,7 @@ public struct RightToolConfig: Codable, Equatable {
                 order: 50,
                 payload: ActionPayload(developerEntrypointID: "developer-vscode")
             ),
-            RightToolAction(
+            RightClickProAction(
                 id: "open-cursor",
                 title: "在 Cursor 打开",
                 kind: .openInApp,
@@ -325,7 +325,7 @@ public struct RightToolConfig: Codable, Equatable {
                 payload: ActionPayload(developerEntrypointID: "developer-cursor")
             )
         ] + defaultCommandTemplates().enumerated().map { index, template in
-            RightToolAction(
+            RightClickProAction(
                 id: "run-\(template.id)",
                 title: template.title,
                 kind: .runCommand,
@@ -339,7 +339,7 @@ public struct RightToolConfig: Codable, Equatable {
     }
 }
 
-public extension RightToolConstants {
+public extension RightClickProConstants {
     static let defaultCommandTimeoutSeconds = 60
     static let minimumCommandTimeoutSeconds = 5
     static let maximumCommandTimeoutSeconds = 600

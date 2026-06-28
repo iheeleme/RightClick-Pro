@@ -3,33 +3,33 @@
 import PackageDescription
 
 let package = Package(
-    name: "RightTool",
+    name: "RightClickPro",
     platforms: [
         .macOS(.v14)
     ],
     products: [
-        .library(name: "RightToolCore", targets: ["RightToolCore"]),
-        .executable(name: "righttool-action-runner", targets: ["RightToolActionRunnerService"]),
-        .executable(name: "righttool-app-preview", targets: ["RightToolAppPreview"])
+        .library(name: "RightClickProCore", targets: ["RightClickProCore"]),
+        .executable(name: "rightclickpro-action-runner", targets: ["RightClickProActionRunnerService"]),
+        .executable(name: "rightclickpro-app-preview", targets: ["RightClickProAppPreview"])
     ],
     dependencies: [],
     targets: [
-        .target(name: "RightToolCore"),
+        .target(name: "RightClickProCore"),
         .executableTarget(
-            name: "RightToolActionRunnerService",
-            dependencies: ["RightToolCore"]
+            name: "RightClickProActionRunnerService",
+            dependencies: ["RightClickProCore"]
         ),
         .executableTarget(
-            name: "RightToolAppPreview",
-            dependencies: ["RightToolCore"]
+            name: "RightClickProAppPreview",
+            dependencies: ["RightClickProCore"]
         ),
         .target(
-            name: "RightToolFinderExtension",
-            dependencies: ["RightToolCore"]
+            name: "RightClickProFinderExtension",
+            dependencies: ["RightClickProCore"]
         ),
         .testTarget(
-            name: "RightToolCoreTests",
-            dependencies: ["RightToolCore"]
+            name: "RightClickProCoreTests",
+            dependencies: ["RightClickProCore"]
         )
     ]
 )

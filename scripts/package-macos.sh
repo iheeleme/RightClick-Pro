@@ -12,8 +12,8 @@ ARTIFACT_SUFFIX="${ARTIFACT_SUFFIX:-$(uname -m)}"
 DIST_DIR="${DIST_DIR:-dist}"
 DERIVED_DATA_PATH="${DERIVED_DATA_PATH:-DerivedData}"
 APP_ICON_SOURCE="${APP_ICON_SOURCE:-design/icon.png}"
-APP_ICON_NAME="${APP_ICON_NAME:-RightToolIcon}"
-RIGHTTOOL_PACKAGE_DMG="${RIGHTTOOL_PACKAGE_DMG:-0}"
+APP_ICON_NAME="${APP_ICON_NAME:-RightClickProIcon}"
+RIGHTCLICKPRO_PACKAGE_DMG="${RIGHTCLICKPRO_PACKAGE_DMG:-0}"
 PACKAGED_FINDER_EXTENSION_PATH=""
 
 case "$CONFIGURATION" in
@@ -24,17 +24,17 @@ case "$CONFIGURATION" in
     ;;
 esac
 
-case "$RIGHTTOOL_PACKAGE_DMG" in
+case "$RIGHTCLICKPRO_PACKAGE_DMG" in
   0|1) ;;
   *)
-    echo "Unsupported RIGHTTOOL_PACKAGE_DMG value: $RIGHTTOOL_PACKAGE_DMG. Use 1 to build a DMG." >&2
+    echo "Unsupported RIGHTCLICKPRO_PACKAGE_DMG value: $RIGHTCLICKPRO_PACKAGE_DMG. Use 1 to build a DMG." >&2
     exit 64
     ;;
 esac
 
 version_name() {
-  if [[ -n "${RIGHTTOOL_VERSION:-}" ]]; then
-    printf "%s" "$RIGHTTOOL_VERSION"
+  if [[ -n "${RIGHTCLICKPRO_VERSION:-}" ]]; then
+    printf "%s" "$RIGHTCLICKPRO_VERSION"
     return
   fi
 
@@ -52,8 +52,8 @@ version_name() {
 }
 
 build_number() {
-  if [[ -n "${RIGHTTOOL_BUILD_NUMBER:-}" ]]; then
-    printf "%s" "$RIGHTTOOL_BUILD_NUMBER"
+  if [[ -n "${RIGHTCLICKPRO_BUILD_NUMBER:-}" ]]; then
+    printf "%s" "$RIGHTCLICKPRO_BUILD_NUMBER"
     return
   fi
 
@@ -66,17 +66,17 @@ build_number() {
 }
 
 package_xcode_archive_if_configured() {
-  if [[ -z "${RIGHTTOOL_XCODE_PROJECT:-}" && -z "${RIGHTTOOL_XCODE_SCHEME:-}" ]]; then
+  if [[ -z "${RIGHTCLICKPRO_XCODE_PROJECT:-}" && -z "${RIGHTCLICKPRO_XCODE_SCHEME:-}" ]]; then
     return 1
   fi
 
-  if [[ -z "${RIGHTTOOL_XCODE_PROJECT:-}" || -z "${RIGHTTOOL_XCODE_SCHEME:-}" ]]; then
-    echo "Both RIGHTTOOL_XCODE_PROJECT and RIGHTTOOL_XCODE_SCHEME are required for Xcode packaging." >&2
+  if [[ -z "${RIGHTCLICKPRO_XCODE_PROJECT:-}" || -z "${RIGHTCLICKPRO_XCODE_SCHEME:-}" ]]; then
+    echo "Both RIGHTCLICKPRO_XCODE_PROJECT and RIGHTCLICKPRO_XCODE_SCHEME are required for Xcode packaging." >&2
     exit 64
   fi
 
-  if [[ ! -e "$RIGHTTOOL_XCODE_PROJECT" ]]; then
-    echo "RIGHTTOOL_XCODE_PROJECT does not exist: $RIGHTTOOL_XCODE_PROJECT" >&2
+  if [[ ! -e "$RIGHTCLICKPRO_XCODE_PROJECT" ]]; then
+    echo "RIGHTCLICKPRO_XCODE_PROJECT does not exist: $RIGHTCLICKPRO_XCODE_PROJECT" >&2
     exit 66
   fi
 
@@ -84,17 +84,17 @@ package_xcode_archive_if_configured() {
   mkdir -p "$DIST_DIR"
 
   xcodebuild archive \
-    -project "$RIGHTTOOL_XCODE_PROJECT" \
-    -scheme "$RIGHTTOOL_XCODE_SCHEME" \
+    -project "$RIGHTCLICKPRO_XCODE_PROJECT" \
+    -scheme "$RIGHTCLICKPRO_XCODE_SCHEME" \
     -configuration "$(tr '[:lower:]' '[:upper:]' <<< "${CONFIGURATION:0:1}")${CONFIGURATION:1}" \
     -archivePath "$archive_path" \
     -derivedDataPath "$DERIVED_DATA_PATH" \
     CODE_SIGNING_ALLOWED="${CODE_SIGNING_ALLOWED:-NO}"
 
-  if [[ -n "${RIGHTTOOL_EXPORT_OPTIONS_PLIST:-}" && -f "$RIGHTTOOL_EXPORT_OPTIONS_PLIST" ]]; then
+  if [[ -n "${RIGHTCLICKPRO_EXPORT_OPTIONS_PLIST:-}" && -f "$RIGHTCLICKPRO_EXPORT_OPTIONS_PLIST" ]]; then
     xcodebuild -exportArchive \
       -archivePath "$archive_path" \
-      -exportOptionsPlist "$RIGHTTOOL_EXPORT_OPTIONS_PLIST" \
+      -exportOptionsPlist "$RIGHTCLICKPRO_EXPORT_OPTIONS_PLIST" \
       -exportPath "$PWD/$DIST_DIR/export"
     ditto -c -k --keepParent "$DIST_DIR/export" "$DIST_DIR/$APP_NAME-$(version_name)-$ARTIFACT_SUFFIX-export.zip"
   else
@@ -150,13 +150,13 @@ write_xpc_info_plist() {
   <key>CFBundleDevelopmentRegion</key>
   <string>en</string>
   <key>CFBundleExecutable</key>
-  <string>RightToolActionRunner</string>
+  <string>RightClickProActionRunner</string>
   <key>CFBundleIdentifier</key>
   <string>$XPC_BUNDLE_IDENTIFIER</string>
   <key>CFBundleInfoDictionaryVersion</key>
   <string>6.0</string>
   <key>CFBundleName</key>
-  <string>RightToolActionRunner</string>
+  <string>RightClickProActionRunner</string>
   <key>CFBundlePackageType</key>
   <string>XPC!</string>
   <key>CFBundleShortVersionString</key>
@@ -185,13 +185,13 @@ write_finder_extension_info_plist() {
   <key>CFBundleDisplayName</key>
   <string>$APP_NAME Finder Extension</string>
   <key>CFBundleExecutable</key>
-  <string>RightToolFinderExtension</string>
+  <string>RightClickProFinderExtension</string>
   <key>CFBundleIdentifier</key>
   <string>$FINDER_EXTENSION_BUNDLE_IDENTIFIER</string>
   <key>CFBundleInfoDictionaryVersion</key>
   <string>6.0</string>
   <key>CFBundleName</key>
-  <string>RightToolFinderExtension</string>
+  <string>RightClickProFinderExtension</string>
   <key>CFBundlePackageType</key>
   <string>XPC!</string>
   <key>CFBundleShortVersionString</key>
@@ -289,7 +289,7 @@ copy_app_icon_resources() {
   rm -rf "$iconset_path"
 }
 
-build_righttool_core_dylib() {
+build_rightclickpro_core_dylib() {
   local build_dir="$1"
   mkdir -p "$build_dir"
 
@@ -304,18 +304,18 @@ build_righttool_core_dylib() {
     "${swift_flags[@]}" \
     -emit-library \
     -emit-module \
-    -module-name RightToolCore \
-    -emit-module-path "$build_dir/RightToolCore.swiftmodule" \
+    -module-name RightClickProCore \
+    -emit-module-path "$build_dir/RightClickProCore.swiftmodule" \
     -Xlinker -install_name \
-    -Xlinker "@rpath/libRightToolCore.dylib" \
-    Sources/RightToolCore/*.swift \
-    -o "$build_dir/libRightToolCore.dylib"
+    -Xlinker "@rpath/libRightClickProCore.dylib" \
+    Sources/RightClickProCore/*.swift \
+    -o "$build_dir/libRightClickProCore.dylib"
 }
 
 build_finder_extension_bundle() {
   local core_build_dir="$1"
   local appex_path="$2"
-  local executable_path="$appex_path/Contents/MacOS/RightToolFinderExtension"
+  local executable_path="$appex_path/Contents/MacOS/RightClickProFinderExtension"
 
   mkdir -p \
     "$appex_path/Contents/MacOS" \
@@ -332,20 +332,20 @@ build_finder_extension_bundle() {
   swiftc \
     "${swift_flags[@]}" \
     -parse-as-library \
-    -module-name RightToolFinderExtension \
+    -module-name RightClickProFinderExtension \
     -I "$core_build_dir" \
     -L "$core_build_dir" \
-    -lRightToolCore \
+    -lRightClickProCore \
     -framework AppKit \
     -framework FinderSync \
     -Xlinker -e \
     -Xlinker _NSExtensionMain \
     -Xlinker -rpath \
     -Xlinker "@executable_path/../Frameworks" \
-    Sources/RightToolFinderExtension/FinderSyncController.swift \
+    Sources/RightClickProFinderExtension/FinderSyncController.swift \
     -o "$executable_path"
 
-  cp "$core_build_dir/libRightToolCore.dylib" "$appex_path/Contents/Frameworks/"
+  cp "$core_build_dir/libRightClickProCore.dylib" "$appex_path/Contents/Frameworks/"
   write_finder_extension_info_plist "$appex_path/Contents/Info.plist"
 }
 
@@ -356,11 +356,11 @@ build_preview_executables() {
   local bin_path
   local swiftpm_log="$DIST_DIR/swiftpm-build.log"
 
-  if swift build -c "$CONFIGURATION" --product righttool-app-preview >"$swiftpm_log" 2>&1 \
-    && swift build -c "$CONFIGURATION" --product righttool-action-runner >>"$swiftpm_log" 2>&1 \
+  if swift build -c "$CONFIGURATION" --product rightclickpro-app-preview >"$swiftpm_log" 2>&1 \
+    && swift build -c "$CONFIGURATION" --product rightclickpro-action-runner >>"$swiftpm_log" 2>&1 \
     && bin_path="$(swift build -c "$CONFIGURATION" --show-bin-path 2>>"$swiftpm_log")"; then
-    cp "$bin_path/righttool-app-preview" "$app_executable_path"
-    cp "$bin_path/righttool-action-runner" "$xpc_executable_path"
+    cp "$bin_path/rightclickpro-app-preview" "$app_executable_path"
+    cp "$bin_path/rightclickpro-action-runner" "$xpc_executable_path"
     return
   fi
 
@@ -376,26 +376,26 @@ build_preview_executables() {
   swiftc \
     "${swift_flags[@]}" \
     -parse-as-library \
-    -module-name RightTool \
+    -module-name RightClickPro \
     -I "$core_build_dir" \
     -L "$core_build_dir" \
-    -lRightToolCore \
+    -lRightClickProCore \
     -framework AppKit \
     -framework SwiftUI \
     -Xlinker -rpath \
     -Xlinker "@executable_path/../Frameworks" \
-    Sources/RightToolAppPreview/RightToolAppPreview.swift \
+    Sources/RightClickProAppPreview/RightClickProAppPreview.swift \
     -o "$app_executable_path"
 
   swiftc \
     "${swift_flags[@]}" \
-    -module-name RightToolActionRunner \
+    -module-name RightClickProActionRunner \
     -I "$core_build_dir" \
     -L "$core_build_dir" \
-    -lRightToolCore \
+    -lRightClickProCore \
     -Xlinker -rpath \
     -Xlinker "@executable_path/../Frameworks" \
-    Sources/RightToolActionRunnerService/main.swift \
+    Sources/RightClickProActionRunnerService/main.swift \
     -o "$xpc_executable_path"
 }
 
@@ -412,10 +412,10 @@ codesign_if_available() {
     return
   fi
 
-  codesign --force --sign "$CODE_SIGN_IDENTITY" "$app_path/Contents/Frameworks/libRightToolCore.dylib"
-  codesign --force --sign "$CODE_SIGN_IDENTITY" "$xpc_path/Contents/Frameworks/libRightToolCore.dylib"
-  codesign --force --sign "$CODE_SIGN_IDENTITY" "$appex_path/Contents/Frameworks/libRightToolCore.dylib"
-  codesign --force --sign "$CODE_SIGN_IDENTITY" "$appex_xpc_path/Contents/Frameworks/libRightToolCore.dylib"
+  codesign --force --sign "$CODE_SIGN_IDENTITY" "$app_path/Contents/Frameworks/libRightClickProCore.dylib"
+  codesign --force --sign "$CODE_SIGN_IDENTITY" "$xpc_path/Contents/Frameworks/libRightClickProCore.dylib"
+  codesign --force --sign "$CODE_SIGN_IDENTITY" "$appex_path/Contents/Frameworks/libRightClickProCore.dylib"
+  codesign --force --sign "$CODE_SIGN_IDENTITY" "$appex_xpc_path/Contents/Frameworks/libRightClickProCore.dylib"
   codesign --force --sign "$CODE_SIGN_IDENTITY" --entitlements "$xpc_entitlements_path" "$xpc_path"
   codesign --force --sign "$CODE_SIGN_IDENTITY" --entitlements "$xpc_entitlements_path" "$appex_xpc_path"
   codesign --force --sign "$CODE_SIGN_IDENTITY" --entitlements "$entitlements_path" "$appex_path"
@@ -427,19 +427,19 @@ validate_preview_bundle() {
   local xpc_path="$2"
   local appex_path="$3"
   local appex_xpc_path="$4"
-  local appex_executable="$appex_path/Contents/MacOS/RightToolFinderExtension"
+  local appex_executable="$appex_path/Contents/MacOS/RightClickProFinderExtension"
   local extension_point
 
   test -x "$app_path/Contents/MacOS/$APP_NAME"
-  test -x "$xpc_path/Contents/MacOS/RightToolActionRunner"
-  test -x "$appex_xpc_path/Contents/MacOS/RightToolActionRunner"
+  test -x "$xpc_path/Contents/MacOS/RightClickProActionRunner"
+  test -x "$appex_xpc_path/Contents/MacOS/RightClickProActionRunner"
   test -x "$appex_executable"
   test -f "$app_path/Contents/Resources/$APP_ICON_NAME.icns"
   test -f "$app_path/Contents/Resources/$APP_ICON_NAME.png"
-  test -f "$app_path/Contents/Frameworks/libRightToolCore.dylib"
-  test -f "$xpc_path/Contents/Frameworks/libRightToolCore.dylib"
-  test -f "$appex_path/Contents/Frameworks/libRightToolCore.dylib"
-  test -f "$appex_xpc_path/Contents/Frameworks/libRightToolCore.dylib"
+  test -f "$app_path/Contents/Frameworks/libRightClickProCore.dylib"
+  test -f "$xpc_path/Contents/Frameworks/libRightClickProCore.dylib"
+  test -f "$appex_path/Contents/Frameworks/libRightClickProCore.dylib"
+  test -f "$appex_xpc_path/Contents/Frameworks/libRightClickProCore.dylib"
 
   local app_icon
   app_icon="$(/usr/libexec/PlistBuddy -c "Print :CFBundleIconFile" "$app_path/Contents/Info.plist")"
@@ -567,12 +567,12 @@ package_preview_dmg() {
 package_swiftpm_preview_bundle() {
   local staging="$PWD/$DIST_DIR/staging"
   local app_path="$staging/$APP_NAME.app"
-  local xpc_path="$app_path/Contents/XPCServices/RightToolActionRunner.xpc"
-  local appex_path="$app_path/Contents/PlugIns/RightToolFinderExtension.appex"
-  local appex_xpc_path="$appex_path/Contents/XPCServices/RightToolActionRunner.xpc"
+  local xpc_path="$app_path/Contents/XPCServices/RightClickProActionRunner.xpc"
+  local appex_path="$app_path/Contents/PlugIns/RightClickProFinderExtension.appex"
+  local appex_xpc_path="$appex_path/Contents/XPCServices/RightClickProActionRunner.xpc"
   local manual_build_dir="$PWD/$DIST_DIR/manual-build"
-  local entitlements_path="$manual_build_dir/RightTool.entitlements"
-  local xpc_entitlements_path="$manual_build_dir/RightToolActionRunner.entitlements"
+  local entitlements_path="$manual_build_dir/RightClickPro.entitlements"
+  local xpc_entitlements_path="$manual_build_dir/RightClickProActionRunner.entitlements"
 
   rm -rf "$staging" "$manual_build_dir"
   mkdir -p \
@@ -586,13 +586,13 @@ package_swiftpm_preview_bundle() {
     "$appex_xpc_path/Contents/MacOS" \
     "$appex_xpc_path/Contents/Frameworks"
 
-  build_righttool_core_dylib "$manual_build_dir/core"
+  build_rightclickpro_core_dylib "$manual_build_dir/core"
   build_preview_executables \
     "$manual_build_dir/core" \
     "$app_path/Contents/MacOS/$APP_NAME" \
-    "$xpc_path/Contents/MacOS/RightToolActionRunner"
-  cp "$manual_build_dir/core/libRightToolCore.dylib" "$app_path/Contents/Frameworks/"
-  cp "$manual_build_dir/core/libRightToolCore.dylib" "$xpc_path/Contents/Frameworks/"
+    "$xpc_path/Contents/MacOS/RightClickProActionRunner"
+  cp "$manual_build_dir/core/libRightClickProCore.dylib" "$app_path/Contents/Frameworks/"
+  cp "$manual_build_dir/core/libRightClickProCore.dylib" "$xpc_path/Contents/Frameworks/"
   copy_app_icon_resources "$app_path/Contents/Resources"
   write_app_info_plist "$app_path/Contents/Info.plist"
   write_xpc_info_plist "$xpc_path/Contents/Info.plist"
@@ -615,7 +615,7 @@ NOTES
 
   mkdir -p "$DIST_DIR"
   ditto -c -k --keepParent "$app_path" "$DIST_DIR/$APP_NAME-$(version_name)-$ARTIFACT_SUFFIX-preview.zip"
-  if [[ "$RIGHTTOOL_PACKAGE_DMG" == "1" ]]; then
+  if [[ "$RIGHTCLICKPRO_PACKAGE_DMG" == "1" ]]; then
     package_preview_dmg "$app_path"
   fi
   PACKAGED_FINDER_EXTENSION_PATH="$appex_path"
@@ -634,8 +634,8 @@ enable_finder_extension() {
   pluginkit -e use -i "$FINDER_EXTENSION_BUNDLE_IDENTIFIER" >/dev/null 2>&1 || true
 }
 
-if [[ "$RIGHTTOOL_PACKAGE_DMG" == "1" && -n "${RIGHTTOOL_XCODE_PROJECT:-}" && -n "${RIGHTTOOL_XCODE_SCHEME:-}" ]]; then
-  echo "RIGHTTOOL_PACKAGE_DMG=1 is only supported for the SwiftPM preview bundle path." >&2
+if [[ "$RIGHTCLICKPRO_PACKAGE_DMG" == "1" && -n "${RIGHTCLICKPRO_XCODE_PROJECT:-}" && -n "${RIGHTCLICKPRO_XCODE_SCHEME:-}" ]]; then
+  echo "RIGHTCLICKPRO_PACKAGE_DMG=1 is only supported for the SwiftPM preview bundle path." >&2
   exit 64
 fi
 

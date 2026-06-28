@@ -1,10 +1,10 @@
 import XCTest
-@testable import RightToolCore
+@testable import RightClickProCore
 
 final class MenuBuilderTests: XCTestCase {
     func testRootMenuItemsAreLimitedToConfiguredMaximum() {
         let actions = (0..<7).map { index in
-            RightToolAction(
+            RightClickProAction(
                 id: "root-\(index)",
                 title: "Root \(index)",
                 kind: .paste,
@@ -13,7 +13,7 @@ final class MenuBuilderTests: XCTestCase {
                 order: index
             )
         }
-        let config = RightToolConfig(maxRootMenuActions: 5, actions: actions)
+        let config = RightClickProConfig(maxRootMenuActions: 5, actions: actions)
         let context = FinderContext(invocation: .container, targetDirectory: URL(fileURLWithPath: "/tmp"))
 
         let menu = MenuBuilder().buildMenu(config: config, context: context)
@@ -23,7 +23,7 @@ final class MenuBuilderTests: XCTestCase {
 
     func testMenuFiltersByFinderInvocation() {
         let actions = [
-            RightToolAction(
+            RightClickProAction(
                 id: "selection",
                 title: "Selection",
                 kind: .cut,
@@ -32,7 +32,7 @@ final class MenuBuilderTests: XCTestCase {
                 group: .fileOperations,
                 order: 1
             ),
-            RightToolAction(
+            RightClickProAction(
                 id: "container",
                 title: "Container",
                 kind: .paste,
@@ -42,7 +42,7 @@ final class MenuBuilderTests: XCTestCase {
                 order: 2
             )
         ]
-        let config = RightToolConfig(actions: actions)
+        let config = RightClickProConfig(actions: actions)
         let context = FinderContext(invocation: .selection, targetDirectory: URL(fileURLWithPath: "/tmp"))
 
         let menu = MenuBuilder().buildMenu(config: config, context: context)
@@ -56,7 +56,7 @@ final class MenuBuilderTests: XCTestCase {
             title: "Cursor",
             bundleIdentifier: "com.todesktop.230313mzl4w4u92"
         )
-        let action = RightToolAction(
+        let action = RightClickProAction(
             id: "open-cursor",
             title: "Open Cursor",
             kind: .openInApp,
@@ -65,7 +65,7 @@ final class MenuBuilderTests: XCTestCase {
             order: 1,
             payload: ActionPayload(developerEntrypointID: entrypoint.id)
         )
-        let config = RightToolConfig(actions: [action], developerEntrypoints: [entrypoint])
+        let config = RightClickProConfig(actions: [action], developerEntrypoints: [entrypoint])
         let context = FinderContext(invocation: .container, targetDirectory: URL(fileURLWithPath: "/tmp"))
 
         let menu = MenuBuilder().buildMenu(config: config, context: context)
@@ -75,7 +75,7 @@ final class MenuBuilderTests: XCTestCase {
 
     func testMenuAssignsTemplateFileTypeIcon() {
         let template = FileTemplate(id: "markdown", title: "Markdown", defaultFileName: "Note.md")
-        let action = RightToolAction(
+        let action = RightClickProAction(
             id: "new-markdown",
             title: "New Markdown",
             kind: .createFile,
@@ -84,7 +84,7 @@ final class MenuBuilderTests: XCTestCase {
             order: 1,
             payload: ActionPayload(templateID: template.id)
         )
-        let config = RightToolConfig(actions: [action], fileTemplates: [template])
+        let config = RightClickProConfig(actions: [action], fileTemplates: [template])
         let context = FinderContext(invocation: .container, targetDirectory: URL(fileURLWithPath: "/tmp"))
 
         let menu = MenuBuilder().buildMenu(config: config, context: context)
@@ -94,7 +94,7 @@ final class MenuBuilderTests: XCTestCase {
 
     func testMenuAssignsDirectoryPathIcon() {
         let bookmark = DirectoryBookmark(id: "code", displayName: "Code", path: "/Users/test/Code")
-        let action = RightToolAction(
+        let action = RightClickProAction(
             id: "open-code",
             title: "Open Code",
             kind: .openDirectory,
@@ -103,7 +103,7 @@ final class MenuBuilderTests: XCTestCase {
             order: 1,
             payload: ActionPayload(directoryID: bookmark.id)
         )
-        let config = RightToolConfig(actions: [action])
+        let config = RightClickProConfig(actions: [action])
         let bookmarks = DirectoryBookmarkCatalog(bookmarks: [bookmark])
         let context = FinderContext(invocation: .container, targetDirectory: URL(fileURLWithPath: "/tmp"))
 
@@ -114,7 +114,7 @@ final class MenuBuilderTests: XCTestCase {
 
     func testRootItemStaysRootWhenMatchingSubmenuGroupExists() {
         let actions = [
-            RightToolAction(
+            RightClickProAction(
                 id: "new-markdown",
                 title: "新建 Markdown",
                 kind: .createFile,
@@ -124,7 +124,7 @@ final class MenuBuilderTests: XCTestCase {
                 order: 20,
                 payload: ActionPayload(templateID: "template-md")
             ),
-            RightToolAction(
+            RightClickProAction(
                 id: "new-json",
                 title: "新建 JSON",
                 kind: .createFile,
@@ -135,7 +135,7 @@ final class MenuBuilderTests: XCTestCase {
                 payload: ActionPayload(templateID: "template-json")
             )
         ]
-        let config = RightToolConfig(actions: actions)
+        let config = RightClickProConfig(actions: actions)
         let context = FinderContext(invocation: .container, targetDirectory: URL(fileURLWithPath: "/tmp"))
 
         let menu = MenuBuilder().buildMenu(config: config, context: context)
@@ -146,7 +146,7 @@ final class MenuBuilderTests: XCTestCase {
 
     func testMenuAssignsCommandTemplateIconAndGroup() {
         let template = CommandTemplate(id: "command-git-status", title: "Git Status", command: "git status --short")
-        let action = RightToolAction(
+        let action = RightClickProAction(
             id: "run-git-status",
             title: "Git Status",
             kind: .runCommand,
@@ -156,7 +156,7 @@ final class MenuBuilderTests: XCTestCase {
             order: 1,
             payload: ActionPayload(commandTemplateID: template.id)
         )
-        let config = RightToolConfig(actions: [action], commandTemplates: [template])
+        let config = RightClickProConfig(actions: [action], commandTemplates: [template])
         let context = FinderContext(invocation: .container, targetDirectory: URL(fileURLWithPath: "/tmp"))
 
         let menu = MenuBuilder().buildMenu(config: config, context: context)

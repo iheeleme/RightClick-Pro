@@ -1,5 +1,5 @@
 import AppKit
-import RightToolCore
+import RightClickProCore
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -21,8 +21,8 @@ private enum AppMetadata {
 }
 
 @main
-struct RightToolAppPreview: App {
-    @NSApplicationDelegateAdaptor(RightToolAppDelegate.self) private var appDelegate
+struct RightClickProAppPreview: App {
+    @NSApplicationDelegateAdaptor(RightClickProAppDelegate.self) private var appDelegate
     @StateObject private var viewModel = SettingsViewModel.bootstrap()
 
     var body: some Scene {
@@ -38,7 +38,7 @@ struct RightToolAppPreview: App {
     }
 }
 
-final class RightToolAppDelegate: NSObject, NSApplicationDelegate {
+final class RightClickProAppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         applyApplicationMenuTitle()
     }
@@ -147,7 +147,7 @@ final class SettingsViewModel: NSObject, ObservableObject {
     }
 
     @Published var selectedSection: Section = .onboarding
-    @Published var config = RightToolConfig()
+    @Published var config = RightClickProConfig()
     @Published var bookmarks = DirectoryBookmarkCatalog()
     @Published var storagePath = ""
     @Published var statusMessage = ""
@@ -159,7 +159,7 @@ final class SettingsViewModel: NSObject, ObservableObject {
     @Published var commandTemplateAddRequest = 0
     @Published var actionSearchText = ""
 
-    private var paths = RightToolStoragePaths.defaultForCurrentProcess()
+    private var paths = RightClickProStoragePaths.defaultForCurrentProcess()
     private let commandSecretStore = KeychainCommandSecretStore()
 
     override init() {
@@ -167,7 +167,7 @@ final class SettingsViewModel: NSObject, ObservableObject {
         DistributedNotificationCenter.default().addObserver(
             self,
             selector: #selector(handlePendingCommandRunNotification),
-            name: Notification.Name(RightToolConstants.pendingCommandRunNotificationName),
+            name: Notification.Name(RightClickProConstants.pendingCommandRunNotificationName),
             object: nil
         )
         NotificationCenter.default.addObserver(
@@ -261,7 +261,7 @@ final class SettingsViewModel: NSObject, ObservableObject {
             let defaultConfig = bootstrapper.defaultConfig(bookmarks: defaultBookmarks)
 
             try JSONFileStore<DirectoryBookmarkCatalog>(url: paths.bookmarksURL).save(defaultBookmarks)
-            try JSONFileStore<RightToolConfig>(url: paths.configURL).save(defaultConfig)
+            try JSONFileStore<RightClickProConfig>(url: paths.configURL).save(defaultConfig)
 
             bookmarks = defaultBookmarks
             config = defaultConfig
@@ -277,7 +277,7 @@ final class SettingsViewModel: NSObject, ObservableObject {
         do {
             try validateConfig()
             try JSONFileStore<DirectoryBookmarkCatalog>(url: paths.bookmarksURL).save(bookmarks)
-            try JSONFileStore<RightToolConfig>(url: paths.configURL).save(config)
+            try JSONFileStore<RightClickProConfig>(url: paths.configURL).save(config)
             hasUnsavedChanges = false
             setStatus("配置已保存，重新打开 Finder 右键菜单后生效", tone: .success)
         } catch {
@@ -707,7 +707,7 @@ final class SettingsViewModel: NSObject, ObservableObject {
         recentOperations = (try? JSONLineOperationLog(url: result.paths.operationLogURL).loadRecent().suffix(80).reversed()) ?? []
     }
 
-    private func updateAction(_ actionID: String, mutate: (inout RightToolAction) -> Void) {
+    private func updateAction(_ actionID: String, mutate: (inout RightClickProAction) -> Void) {
         guard let index = config.actions.firstIndex(where: { $0.id == actionID }) else {
             return
         }
@@ -752,7 +752,7 @@ final class SettingsViewModel: NSObject, ObservableObject {
         }
 
         config.actions.append(
-            RightToolAction(
+            RightClickProAction(
                 id: uniqueActionID(base: "create-\(template.id)"),
                 title: "新建\(template.title)",
                 kind: .createFile,
@@ -826,7 +826,7 @@ final class SettingsViewModel: NSObject, ObservableObject {
         }
 
         config.actions.append(
-            RightToolAction(
+            RightClickProAction(
                 id: uniqueActionID(base: "open-\(entrypoint.id)"),
                 title: entrypoint.title,
                 kind: .openInApp,
@@ -853,7 +853,7 @@ final class SettingsViewModel: NSObject, ObservableObject {
         }
 
         config.actions.append(
-            RightToolAction(
+            RightClickProAction(
                 id: uniqueActionID(base: "run-\(template.id)"),
                 title: template.title,
                 kind: .runCommand,
@@ -960,7 +960,7 @@ final class SettingsViewModel: NSObject, ObservableObject {
             }
 
             config.actions.append(
-                RightToolAction(
+                RightClickProAction(
                     id: uniqueActionID(base: "\(spec.idPrefix)-\(bookmark.id)"),
                     title: "\(spec.titlePrefix)\(bookmark.displayName)",
                     kind: spec.kind,
@@ -1044,7 +1044,7 @@ final class SettingsViewModel: NSObject, ObservableObject {
         do {
             try validateConfig()
             try JSONFileStore<DirectoryBookmarkCatalog>(url: paths.bookmarksURL).save(bookmarks)
-            try JSONFileStore<RightToolConfig>(url: paths.configURL).save(config)
+            try JSONFileStore<RightClickProConfig>(url: paths.configURL).save(config)
             hasUnsavedChanges = false
             setStatus(message, tone: .success)
         } catch {
@@ -1243,7 +1243,7 @@ final class SettingsViewModel: NSObject, ObservableObject {
             guard !template.command.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
                 throw SettingsValidationError.emptyCommand
             }
-            guard (RightToolConstants.minimumCommandTimeoutSeconds...RightToolConstants.maximumCommandTimeoutSeconds).contains(template.timeoutSeconds) else {
+            guard (RightClickProConstants.minimumCommandTimeoutSeconds...RightClickProConstants.maximumCommandTimeoutSeconds).contains(template.timeoutSeconds) else {
                 throw SettingsValidationError.invalidCommandTimeout(template.timeoutSeconds)
             }
 
@@ -1383,7 +1383,7 @@ final class CommandRunViewModel: ObservableObject {
     @Published var durationText = "—"
 
     private let request: PendingCommandRunRequest
-    private let paths: RightToolStoragePaths
+    private let paths: RightClickProStoragePaths
     private let onFinish: () -> Void
     private let secretStore = KeychainCommandSecretStore()
     private var process: Process?
@@ -1397,7 +1397,7 @@ final class CommandRunViewModel: ObservableObject {
 
     init(
         request: PendingCommandRunRequest,
-        paths: RightToolStoragePaths,
+        paths: RightClickProStoragePaths,
         onFinish: @escaping () -> Void
     ) {
         self.request = request
@@ -1411,7 +1411,7 @@ final class CommandRunViewModel: ObservableObject {
         }
 
         do {
-            let configProvider = FileBackedRightToolConfigProvider(paths: paths)
+            let configProvider = FileBackedRightClickProConfigProvider(paths: paths)
             let config = try configProvider.loadConfig()
             let bookmarks = try configProvider.loadBookmarkCatalog()
             guard
@@ -1750,7 +1750,7 @@ final class CommandRunWindowCoordinator {
 
     func open(
         request: PendingCommandRunRequest,
-        paths: RightToolStoragePaths,
+        paths: RightClickProStoragePaths,
         onFinish: @escaping () -> Void
     ) {
         let viewModel = CommandRunViewModel(request: request, paths: paths, onFinish: onFinish)
@@ -2118,8 +2118,8 @@ private enum SettingsTheme {
     }
 }
 
-private enum RightToolIconAsset {
-    static let resourceName = "RightToolIcon"
+private enum RightClickProIconAsset {
+    static let resourceName = "RightClickProIcon"
     static let pngExtension = "png"
     static let sourceRelativePath = "design/icon.png"
     static let image = loadImage()
@@ -2153,12 +2153,12 @@ private enum RightToolIconAsset {
     }
 }
 
-struct RightToolBrandIcon: View {
+struct RightClickProBrandIcon: View {
     let size: CGFloat
 
     var body: some View {
         Group {
-            if let image = RightToolIconAsset.image {
+            if let image = RightClickProIconAsset.image {
                 Image(nsImage: image)
                     .resizable()
                     .interpolation(.high)
@@ -2193,7 +2193,7 @@ struct SettingsSidebar: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 26) {
             HStack(spacing: 12) {
-                RightToolBrandIcon(size: 44)
+                RightClickProBrandIcon(size: 44)
                     .shadow(color: SettingsTheme.accent.opacity(0.18), radius: 14, x: 0, y: 8)
 
                 VStack(alignment: .leading, spacing: 3) {
@@ -3602,7 +3602,7 @@ enum ActionManagementFilter: String, CaseIterable, Identifiable {
 
     var id: String { rawValue }
 
-    func matches(_ action: RightToolAction) -> Bool {
+    func matches(_ action: RightClickProAction) -> Bool {
         switch self {
         case .all:
             return true
@@ -3662,7 +3662,7 @@ enum ActionSortingMode: String, CaseIterable, Identifiable {
 struct ActionGroupSection: Identifiable {
     let id: String
     let title: String
-    var rows: [RightToolAction]
+    var rows: [RightClickProAction]
 }
 
 struct ActionListView: View {
@@ -3673,7 +3673,7 @@ struct ActionListView: View {
     @State private var sortingMode: ActionSortingMode = .custom
     @State private var showsGroupSeparators = true
 
-    private var sortedActions: [RightToolAction] {
+    private var sortedActions: [RightClickProAction] {
         viewModel.config.actions.sorted(by: { $0.order < $1.order })
     }
 
@@ -3685,7 +3685,7 @@ struct ActionListView: View {
         )
     }
 
-    private func filteredActions(from actions: [RightToolAction]) -> [RightToolAction] {
+    private func filteredActions(from actions: [RightClickProAction]) -> [RightClickProAction] {
         let categoryRows = actions.filter { selectedFilter.matches($0) }
         let keyword = viewModel.actionSearchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         guard !keyword.isEmpty else { return categoryRows }
@@ -3697,7 +3697,7 @@ struct ActionListView: View {
         }
     }
 
-    private func arrangedActions(from actions: [RightToolAction]) -> [RightToolAction] {
+    private func arrangedActions(from actions: [RightClickProAction]) -> [RightClickProAction] {
         let rows = filteredActions(from: actions)
 
         switch sortingMode {
@@ -3723,7 +3723,7 @@ struct ActionListView: View {
         }
     }
 
-    private func actionSections(from rows: [RightToolAction]) -> [ActionGroupSection] {
+    private func actionSections(from rows: [RightClickProAction]) -> [ActionGroupSection] {
         guard groupingMode != .none else {
             return [ActionGroupSection(id: "all", title: "全部菜单项", rows: rows)]
         }
@@ -3744,7 +3744,7 @@ struct ActionListView: View {
         return sections
     }
 
-    private func groupTitle(for action: RightToolAction) -> String {
+    private func groupTitle(for action: RightClickProAction) -> String {
         switch groupingMode {
         case .type:
             return action.managementType
@@ -3834,7 +3834,7 @@ struct ActionListView: View {
 
 struct ActionManagementTable: View {
     let sections: [ActionGroupSection]
-    let allActions: [RightToolAction]
+    let allActions: [RightClickProAction]
     let showsGroupSeparators: Bool
     let allowsCustomOrdering: Bool
     @Binding var selectedFilter: ActionManagementFilter
@@ -3849,7 +3849,7 @@ struct ActionManagementTable: View {
         allActions.filter { !$0.isEnabled }.count
     }
 
-    private var rows: [RightToolAction] {
+    private var rows: [RightClickProAction] {
         sections.flatMap(\.rows)
     }
 
@@ -4046,7 +4046,7 @@ struct ActionTableHeader: View {
 }
 
 struct ActionEditorRow: View {
-    let action: RightToolAction
+    let action: RightClickProAction
     @ObservedObject var viewModel: SettingsViewModel
     let canMoveUp: Bool
     let canMoveDown: Bool
@@ -4157,7 +4157,7 @@ struct FlowPillGroup: View {
 }
 
 struct ActionVisibilityMenu: View {
-    let action: RightToolAction
+    let action: RightClickProAction
     @ObservedObject var viewModel: SettingsViewModel
     @State private var isHovered = false
     @State private var isPresented = false
@@ -4307,7 +4307,7 @@ struct ActionVisibilityOptionRow: View {
 }
 
 struct ActionPlacementMenu: View {
-    let action: RightToolAction
+    let action: RightClickProAction
     @ObservedObject var viewModel: SettingsViewModel
     @State private var isHovered = false
     @State private var isPresented = false
@@ -4469,7 +4469,7 @@ struct ActionPlacementOptionRow: View {
 }
 
 struct ActionTypeBadge: View {
-    let action: RightToolAction
+    let action: RightClickProAction
 
     var body: some View {
         Text(action.managementType)
@@ -4684,8 +4684,8 @@ struct ActionManagementHintBar: View {
 
 struct ActionMenuPreviewCard: View {
     @Binding var selectedContext: ActionPreviewContext
-    let actions: [RightToolAction]
-    let config: RightToolConfig
+    let actions: [RightClickProAction]
+    let config: RightClickProConfig
     let bookmarks: DirectoryBookmarkCatalog
 
     var body: some View {
@@ -4760,8 +4760,8 @@ struct ActionPreviewContextPicker: View {
 
 struct FinderContextMenuMock: View {
     let selectedContext: ActionPreviewContext
-    let actions: [RightToolAction]
-    let config: RightToolConfig
+    let actions: [RightClickProAction]
+    let config: RightClickProConfig
     let bookmarks: DirectoryBookmarkCatalog
 
     var body: some View {
@@ -5009,7 +5009,7 @@ struct TemplateTableRow: View {
     let onMoveUp: () -> Void
     let onMoveDown: () -> Void
 
-    private var matchingAction: RightToolAction? {
+    private var matchingAction: RightClickProAction? {
         viewModel.config.actions.first {
             $0.kind == .createFile && $0.payload.templateID == template.id
         }
@@ -5290,7 +5290,7 @@ struct CommandTemplateTableRow: View {
     let onMoveUp: () -> Void
     let onMoveDown: () -> Void
 
-    private var matchingAction: RightToolAction? {
+    private var matchingAction: RightClickProAction? {
         viewModel.config.actions.first {
             $0.kind == .runCommand && $0.payload.commandTemplateID == template.id
         }
@@ -5646,7 +5646,7 @@ struct DeveloperTableRow: View {
     let onMoveDown: () -> Void
     let onEdit: () -> Void
 
-    private var matchingAction: RightToolAction? {
+    private var matchingAction: RightClickProAction? {
         viewModel.config.actions.first {
             $0.kind == .openInApp && $0.payload.developerEntrypointID == entrypoint.id
         }
@@ -5840,7 +5840,7 @@ struct OperationHistoryView: View {
         }
     }
 
-    private var fileOperationActions: [RightToolAction] {
+    private var fileOperationActions: [RightClickProAction] {
         viewModel.config.actions
             .filter { $0.group == .fileOperations || [.cut, .paste, .moveToDirectory, .copyToDirectory].contains($0.kind) }
             .sorted { $0.order < $1.order }
@@ -6032,7 +6032,7 @@ struct ClipboardHistoryRow: View {
 }
 
 struct FileOperationQuickAction: View {
-    let action: RightToolAction
+    let action: RightClickProAction
     @ObservedObject var viewModel: SettingsViewModel
 
     var body: some View {
@@ -6626,7 +6626,7 @@ struct CommandTemplateDraft: Identifiable {
         title = "自定义命令"
         command = "pwd"
         workingDirectoryMode = .currentDirectory
-        timeoutSecondsText = "\(RightToolConstants.defaultCommandTimeoutSeconds)"
+        timeoutSecondsText = "\(RightClickProConstants.defaultCommandTimeoutSeconds)"
         environmentText = ""
         existingEnvironment = []
     }
@@ -6651,7 +6651,7 @@ struct CommandTemplateDraft: Identifiable {
 
     func makeTemplate(secretStore: CommandSecretStoring) throws -> CommandTemplate {
         let trimmedID = templateID.trimmingCharacters(in: .whitespacesAndNewlines)
-        let timeout = Int(timeoutSecondsText.trimmingCharacters(in: .whitespacesAndNewlines)) ?? RightToolConstants.defaultCommandTimeoutSeconds
+        let timeout = Int(timeoutSecondsText.trimmingCharacters(in: .whitespacesAndNewlines)) ?? RightClickProConstants.defaultCommandTimeoutSeconds
         let environment = try makeEnvironment(templateID: trimmedID, secretStore: secretStore)
 
         return CommandTemplate(
@@ -6837,7 +6837,7 @@ struct CommandTemplateEditorSheet: View {
         guard let timeout = Int(draft.timeoutSecondsText.trimmingCharacters(in: .whitespacesAndNewlines)) else {
             return "超时必须是数字"
         }
-        if !(RightToolConstants.minimumCommandTimeoutSeconds...RightToolConstants.maximumCommandTimeoutSeconds).contains(timeout) {
+        if !(RightClickProConstants.minimumCommandTimeoutSeconds...RightClickProConstants.maximumCommandTimeoutSeconds).contains(timeout) {
             return "超时必须在 5-600 秒之间"
         }
         return nil
@@ -7116,7 +7116,7 @@ private let operationDateFormatter: DateFormatter = {
     return formatter
 }()
 
-private extension RightToolAction {
+private extension RightClickProAction {
     var managementTint: Color {
         switch group {
         case .commonDirectories, .moveToCommonDirectory, .copyToCommonDirectory:

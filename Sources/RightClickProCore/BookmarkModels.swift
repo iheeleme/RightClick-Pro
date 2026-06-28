@@ -31,7 +31,7 @@ public struct DirectoryBookmarkCatalog: Codable, Equatable {
     public var bookmarks: [DirectoryBookmark]
 
     public init(
-        schemaVersion: Int = RightToolConstants.currentSchemaVersion,
+        schemaVersion: Int = RightClickProConstants.currentSchemaVersion,
         bookmarks: [DirectoryBookmark] = []
     ) {
         self.schemaVersion = schemaVersion

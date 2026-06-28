@@ -1,10 +1,10 @@
 import XCTest
-@testable import RightToolCore
+@testable import RightClickProCore
 
 final class ConfigurationBootstrapperTests: XCTestCase {
     func testBootstrapCreatesConfigBookmarksAndDirectoryActions() throws {
         let baseDirectory = try temporaryDirectory()
-        let paths = RightToolStoragePaths(baseURL: baseDirectory.appendingPathComponent("config"))
+        let paths = RightClickProStoragePaths(baseURL: baseDirectory.appendingPathComponent("config"))
         let bootstrapper = ConfigurationBootstrapper()
 
         let result = try bootstrapper.bootstrap(paths: paths)
@@ -31,7 +31,7 @@ final class ConfigurationBootstrapperTests: XCTestCase {
         let processHome = baseDirectory
             .appendingPathComponent("Library")
             .appendingPathComponent("Containers")
-            .appendingPathComponent(RightToolConstants.mainAppBundleIdentifier)
+            .appendingPathComponent(RightClickProConstants.mainAppBundleIdentifier)
             .appendingPathComponent("Data")
         let realHome = baseDirectory.appendingPathComponent("real-home")
         try FileManager.default.createDirectory(
@@ -59,11 +59,11 @@ final class ConfigurationBootstrapperTests: XCTestCase {
 
     func testBootstrapSanitizesExistingSandboxContainerBookmarks() throws {
         let baseDirectory = try temporaryDirectory()
-        let paths = RightToolStoragePaths(baseURL: baseDirectory.appendingPathComponent("config"))
+        let paths = RightClickProStoragePaths(baseURL: baseDirectory.appendingPathComponent("config"))
         let processHome = baseDirectory
             .appendingPathComponent("Library")
             .appendingPathComponent("Containers")
-            .appendingPathComponent(RightToolConstants.mainAppBundleIdentifier)
+            .appendingPathComponent(RightClickProConstants.mainAppBundleIdentifier)
             .appendingPathComponent("Data")
         let realHome = baseDirectory.appendingPathComponent("real-home")
         let createdAt = Date(timeIntervalSince1970: 100)
@@ -109,11 +109,11 @@ final class ConfigurationBootstrapperTests: XCTestCase {
 
     func testBootstrapRepairsMissingDefaultDirectoryInjection() throws {
         let baseDirectory = try temporaryDirectory()
-        let paths = RightToolStoragePaths(baseURL: baseDirectory.appendingPathComponent("config"))
+        let paths = RightClickProStoragePaths(baseURL: baseDirectory.appendingPathComponent("config"))
         let processHome = baseDirectory
             .appendingPathComponent("Library")
             .appendingPathComponent("Containers")
-            .appendingPathComponent(RightToolConstants.mainAppBundleIdentifier)
+            .appendingPathComponent(RightClickProConstants.mainAppBundleIdentifier)
             .appendingPathComponent("Data")
         let realHome = baseDirectory.appendingPathComponent("real-home")
         let desktop = realHome.appendingPathComponent("Desktop")
@@ -130,7 +130,7 @@ final class ConfigurationBootstrapperTests: XCTestCase {
         )
         var existingConfig = bootstrapper.defaultConfig(bookmarks: existingBookmarks)
         existingConfig.actions.append(
-            RightToolAction(
+            RightClickProAction(
                 id: "custom-action",
                 title: "Custom",
                 kind: .paste,
@@ -140,11 +140,11 @@ final class ConfigurationBootstrapperTests: XCTestCase {
             )
         )
         try JSONFileStore<DirectoryBookmarkCatalog>(url: paths.bookmarksURL).save(existingBookmarks)
-        try JSONFileStore<RightToolConfig>(url: paths.configURL).save(existingConfig)
+        try JSONFileStore<RightClickProConfig>(url: paths.configURL).save(existingConfig)
 
         let result = try bootstrapper.bootstrap(paths: paths)
         let savedBookmarks = try JSONFileStore<DirectoryBookmarkCatalog>(url: paths.bookmarksURL).loadRequired()
-        let savedConfig = try JSONFileStore<RightToolConfig>(url: paths.configURL).loadRequired()
+        let savedConfig = try JSONFileStore<RightClickProConfig>(url: paths.configURL).loadRequired()
 
         XCTAssertFalse(result.didCreateBookmarks)
         XCTAssertFalse(result.didCreateConfig)
@@ -159,16 +159,16 @@ final class ConfigurationBootstrapperTests: XCTestCase {
 
     func testBootstrapRepairsMissingCommandActionsForExistingTemplates() throws {
         let baseDirectory = try temporaryDirectory()
-        let paths = RightToolStoragePaths(baseURL: baseDirectory.appendingPathComponent("config"))
-        var config = RightToolConfig(actions: [], commandTemplates: [
+        let paths = RightClickProStoragePaths(baseURL: baseDirectory.appendingPathComponent("config"))
+        var config = RightClickProConfig(actions: [], commandTemplates: [
             CommandTemplate(id: "command-custom", title: "Custom Command", command: "pwd")
         ])
         config.fileTemplates = []
         config.developerEntrypoints = []
-        try JSONFileStore<RightToolConfig>(url: paths.configURL).save(config)
+        try JSONFileStore<RightClickProConfig>(url: paths.configURL).save(config)
 
         _ = try ConfigurationBootstrapper().bootstrap(paths: paths)
-        let savedConfig = try JSONFileStore<RightToolConfig>(url: paths.configURL).loadRequired()
+        let savedConfig = try JSONFileStore<RightClickProConfig>(url: paths.configURL).loadRequired()
 
         XCTAssertTrue(savedConfig.actions.contains { action in
             action.kind == .runCommand && action.payload.commandTemplateID == "command-custom"
@@ -177,9 +177,9 @@ final class ConfigurationBootstrapperTests: XCTestCase {
 
     func testBootstrapRepairsBuiltInDeveloperEntrypointsToDynamicTarget() throws {
         let baseDirectory = try temporaryDirectory()
-        let paths = RightToolStoragePaths(baseURL: baseDirectory.appendingPathComponent("config"))
-        var config = RightToolConfig()
-        config.developerEntrypoints = RightToolConfig.defaultDeveloperEntrypoints().map { entrypoint in
+        let paths = RightClickProStoragePaths(baseURL: baseDirectory.appendingPathComponent("config"))
+        var config = RightClickProConfig()
+        config.developerEntrypoints = RightClickProConfig.defaultDeveloperEntrypoints().map { entrypoint in
             DeveloperEntrypoint(
                 id: entrypoint.id,
                 title: entrypoint.title,
@@ -187,7 +187,7 @@ final class ConfigurationBootstrapperTests: XCTestCase {
                 targetMode: .currentDirectory
             )
         }
-        try JSONFileStore<RightToolConfig>(url: paths.configURL).save(config)
+        try JSONFileStore<RightClickProConfig>(url: paths.configURL).save(config)
 
         let result = try ConfigurationBootstrapper().bootstrap(paths: paths)
 

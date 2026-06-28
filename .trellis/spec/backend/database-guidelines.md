@@ -1,10 +1,10 @@
 # File-Backed Storage Guidelines
 
-RightTool has no database layer. Durable state is file-backed JSON/JSONL in an App Group container when available, with an Application Support fallback for unsigned/local preview builds.
+RightClick Pro has no database layer. Durable state is file-backed JSON/JSONL in an App Group container when available, with an Application Support fallback for unsigned/local preview builds.
 
 ## Storage Layout
 
-`RightToolStoragePaths` defines the complete storage contract:
+`RightClickProStoragePaths` defines the complete storage contract:
 
 ```text
 baseURL/
@@ -14,7 +14,7 @@ baseURL/
 └── operation-log.jsonl
 ```
 
-Reference files: `Sources/RightToolCore/Storage.swift`, `OperationLogStore.swift`, `CutClipboardStore.swift`, `docs/architecture.md`.
+Reference files: `Sources/RightClickProCore/Storage.swift`, `OperationLogStore.swift`, `CutClipboardStore.swift`, `docs/architecture.md`.
 
 ## JSON Stores
 
@@ -31,13 +31,13 @@ Reference files: `Sources/RightToolCore/Storage.swift`, `OperationLogStore.swift
 - The default cap is 500 records. Settings UI currently displays the latest 80 in reverse chronological order.
 - Invalid JSONL lines are ignored by `loadRecent()` through `try?`; do not make the UI fail just because one historical line is corrupt.
 
-Reference tests: `Tests/RightToolCoreTests/StorageTests.swift`.
+Reference tests: `Tests/RightClickProCoreTests/StorageTests.swift`.
 
 ## App Group and Fallback Rules
 
-- Prefer `RightToolStoragePaths.defaultForCurrentProcess()` for production paths.
-- Use `RightToolStoragePaths.appGroup(identifier:)` only when absence should be reported as `StorageError.appGroupContainerUnavailable`.
-- Use `RIGHTTOOL_STORAGE_PATH` only for the ActionRunner process/testing override in `Sources/RightToolActionRunnerService/main.swift`.
+- Prefer `RightClickProStoragePaths.defaultForCurrentProcess()` for production paths.
+- Use `RightClickProStoragePaths.appGroup(identifier:)` only when absence should be reported as `StorageError.appGroupContainerUnavailable`.
+- Use `RIGHTCLICKPRO_STORAGE_PATH` only for the ActionRunner process/testing override in `Sources/RightClickProActionRunnerService/main.swift`.
 - Default preview configuration may be created by either the app or Finder extension; both must use the same storage path resolution.
 
 ## Config Repair Rules
@@ -51,7 +51,7 @@ Reference tests: `Tests/RightToolCoreTests/StorageTests.swift`.
 - Existing sandbox-container bookmark paths must be remapped to the real user home.
 - Bookmark IDs, display names, bookmark data, and timestamps must be preserved during path sanitization.
 
-Reference tests: `Tests/RightToolCoreTests/ConfigurationBootstrapperTests.swift`.
+Reference tests: `Tests/RightClickProCoreTests/ConfigurationBootstrapperTests.swift`.
 
 ## Anti-Patterns
 

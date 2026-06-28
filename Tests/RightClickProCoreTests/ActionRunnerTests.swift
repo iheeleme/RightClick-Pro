@@ -1,11 +1,11 @@
 import XCTest
-@testable import RightToolCore
+@testable import RightClickProCore
 
 final class ActionRunnerTests: XCTestCase {
     func testCreateFileActionCreatesTemplateAndLogsOperation() throws {
         let directory = try temporaryDirectory()
         let bookmark = DirectoryBookmark(id: "workspace", displayName: "Workspace", path: directory.path)
-        let action = RightToolAction(
+        let action = RightClickProAction(
             id: "new-md",
             title: "New Markdown",
             kind: .createFile,
@@ -15,7 +15,7 @@ final class ActionRunnerTests: XCTestCase {
             order: 1,
             payload: ActionPayload(templateID: "markdown")
         )
-        let config = RightToolConfig(
+        let config = RightClickProConfig(
             monitoredDirectoryIDs: ["workspace"],
             commonDirectoryIDs: ["workspace"],
             actions: [action],
@@ -24,7 +24,7 @@ final class ActionRunnerTests: XCTestCase {
         let log = InMemoryOperationLog()
         let opener = RecordingURLOpener()
         let runner = ActionRunner(
-            configProvider: StaticRightToolConfigProvider(
+            configProvider: StaticRightClickProConfigProvider(
                 config: config,
                 bookmarkCatalog: DirectoryBookmarkCatalog(bookmarks: [bookmark])
             ),
@@ -54,7 +54,7 @@ final class ActionRunnerTests: XCTestCase {
 
         let bookmark = DirectoryBookmark(id: "workspace", displayName: "Workspace", path: directory.path)
         let actions = [
-            RightToolAction(
+            RightClickProAction(
                 id: "cut",
                 title: "Cut",
                 kind: .cut,
@@ -63,7 +63,7 @@ final class ActionRunnerTests: XCTestCase {
                 group: .fileOperations,
                 order: 1
             ),
-            RightToolAction(
+            RightClickProAction(
                 id: "paste",
                 title: "Paste",
                 kind: .paste,
@@ -73,7 +73,7 @@ final class ActionRunnerTests: XCTestCase {
                 order: 2
             )
         ]
-        let config = RightToolConfig(
+        let config = RightClickProConfig(
             monitoredDirectoryIDs: ["workspace"],
             commonDirectoryIDs: ["workspace"],
             actions: actions
@@ -82,7 +82,7 @@ final class ActionRunnerTests: XCTestCase {
         let log = InMemoryOperationLog()
         let opener = RecordingURLOpener()
         let runner = ActionRunner(
-            configProvider: StaticRightToolConfigProvider(
+            configProvider: StaticRightClickProConfigProvider(
                 config: config,
                 bookmarkCatalog: DirectoryBookmarkCatalog(bookmarks: [bookmark])
             ),
@@ -114,9 +114,9 @@ final class ActionRunnerTests: XCTestCase {
 
     func testOpenDirectoryUsesResolvedBookmarkURL() throws {
         let resolvedDirectory = try temporaryDirectory()
-        let staleFallbackDirectory = URL(fileURLWithPath: "/RightToolTests/stale")
+        let staleFallbackDirectory = URL(fileURLWithPath: "/RightClickProTests/stale")
         let bookmark = DirectoryBookmark(id: "workspace", displayName: "Workspace", path: staleFallbackDirectory.path)
-        let action = RightToolAction(
+        let action = RightClickProAction(
             id: "open-workspace",
             title: "Open Workspace",
             kind: .openDirectory,
@@ -126,7 +126,7 @@ final class ActionRunnerTests: XCTestCase {
             order: 1,
             payload: ActionPayload(directoryID: "workspace")
         )
-        let config = RightToolConfig(
+        let config = RightClickProConfig(
             monitoredDirectoryIDs: ["workspace"],
             commonDirectoryIDs: ["workspace"],
             actions: [action]
@@ -134,7 +134,7 @@ final class ActionRunnerTests: XCTestCase {
         let log = InMemoryOperationLog()
         let opener = RecordingURLOpener()
         let runner = ActionRunner(
-            configProvider: StaticRightToolConfigProvider(
+            configProvider: StaticRightClickProConfigProvider(
                 config: config,
                 bookmarkCatalog: DirectoryBookmarkCatalog(bookmarks: [bookmark])
             ),
@@ -235,7 +235,7 @@ final class ActionRunnerTests: XCTestCase {
             bundleIdentifier: "com.example.TestApp",
             targetMode: targetMode
         )
-        let action = RightToolAction(
+        let action = RightClickProAction(
             id: "open-test-app",
             title: "Open in Test App",
             kind: .openInApp,
@@ -245,7 +245,7 @@ final class ActionRunnerTests: XCTestCase {
             order: 1,
             payload: ActionPayload(developerEntrypointID: entrypoint.id)
         )
-        let config = RightToolConfig(
+        let config = RightClickProConfig(
             monitoredDirectoryIDs: ["workspace"],
             commonDirectoryIDs: ["workspace"],
             actions: [action],
@@ -253,7 +253,7 @@ final class ActionRunnerTests: XCTestCase {
         )
         let opener = RecordingURLOpener()
         let runner = ActionRunner(
-            configProvider: StaticRightToolConfigProvider(
+            configProvider: StaticRightClickProConfigProvider(
                 config: config,
                 bookmarkCatalog: DirectoryBookmarkCatalog(bookmarks: [bookmark])
             ),

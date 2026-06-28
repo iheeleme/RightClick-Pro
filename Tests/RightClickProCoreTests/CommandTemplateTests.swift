@@ -1,5 +1,5 @@
 import XCTest
-@testable import RightToolCore
+@testable import RightClickProCore
 
 final class CommandTemplateTests: XCTestCase {
     func testCommandVariableInterpolationShellQuotesPaths() throws {

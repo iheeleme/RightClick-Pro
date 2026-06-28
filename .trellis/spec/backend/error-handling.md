@@ -1,6 +1,6 @@
 # Error Handling
 
-RightTool favors typed errors at Core boundaries, user-facing Chinese `LocalizedError` messages for action/settings failures, and best-effort diagnostics at process adapters.
+RightClick Pro favors typed errors at Core boundaries, user-facing Chinese `LocalizedError` messages for action/settings failures, and best-effort diagnostics at process adapters.
 
 ## Error Types
 
@@ -11,10 +11,10 @@ Use focused `Error` enums near the owning domain:
 - `AuthorizationError` for paths outside configured monitored/common directories.
 - `FileOperationError` for invalid file operations, conflicts, and cancellation.
 - `ActionRunnerError` for action lookup, unsupported kinds, missing payloads, and missing related config.
-- `RightToolXPCClientError` for unavailable XPC service or missing replies.
+- `RightClickProXPCClientError` for unavailable XPC service or missing replies.
 - `SettingsValidationError` for settings UI save validation.
 
-Reference files: `Sources/RightToolCore/Storage.swift`, `BookmarkModels.swift`, `Authorization.swift`, `FileOperations.swift`, `ActionRunner.swift`, `XPCAdapter.swift`, `Sources/RightToolAppPreview/RightToolAppPreview.swift`.
+Reference files: `Sources/RightClickProCore/Storage.swift`, `BookmarkModels.swift`, `Authorization.swift`, `FileOperations.swift`, `ActionRunner.swift`, `XPCAdapter.swift`, `Sources/RightClickProAppPreview/RightClickProAppPreview.swift`.
 
 ## Propagation Rules
 
@@ -27,12 +27,12 @@ Reference files: `Sources/RightToolCore/Storage.swift`, `BookmarkModels.swift`, 
 ## Validation Patterns
 
 - Validate authorized paths before file mutations in `ActionRunner`.
-- Validate `RightToolConfig` before saving from settings UI.
+- Validate `RightClickProConfig` before saving from settings UI.
 - Validate root-menu count against `config.maxRootMenuActions` both when promoting an action and on save.
 - Validate template and developer IDs for emptiness and duplicates before persisting.
 - Validate filenames by rejecting empty strings and `/`.
 
-Reference files: `Sources/RightToolCore/ActionRunner.swift`, `FileOperations.swift`, `Sources/RightToolAppPreview/RightToolAppPreview.swift`.
+Reference files: `Sources/RightClickProCore/ActionRunner.swift`, `FileOperations.swift`, `Sources/RightClickProAppPreview/RightClickProAppPreview.swift`.
 
 ## Cancellation
 

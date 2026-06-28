@@ -1,22 +1,22 @@
 #if canImport(FinderSync) && canImport(AppKit)
 import AppKit
 import FinderSync
-import RightToolCore
+import RightClickProCore
 import UniformTypeIdentifiers
 
 @objc(FinderSyncController)
 final class FinderSyncController: FIFinderSync {
     private let menuBuilder = MenuBuilder()
-    private let paths: RightToolStoragePaths
-    private let configProvider: RightToolConfigProviding
-    private let xpcClient = RightToolActionRunnerXPCClient()
+    private let paths: RightClickProStoragePaths
+    private let configProvider: RightClickProConfigProviding
+    private let xpcClient = RightClickProActionRunnerXPCClient()
     private var pendingMenuActions: [Int: PendingMenuAction] = [:]
     private var nextMenuActionTag = 1
 
     override init() {
-        let paths = RightToolStoragePaths.defaultForCurrentProcess()
+        let paths = RightClickProStoragePaths.defaultForCurrentProcess()
         self.paths = paths
-        self.configProvider = FileBackedRightToolConfigProvider(paths: paths)
+        self.configProvider = FileBackedRightClickProConfigProvider(paths: paths)
         super.init()
         bootstrapConfiguration(paths: paths)
         reloadMonitoredDirectories()
@@ -54,7 +54,7 @@ final class FinderSyncController: FIFinderSync {
         return menu.items.isEmpty ? nil : menu
     }
 
-    private func bootstrapConfiguration(paths: RightToolStoragePaths) {
+    private func bootstrapConfiguration(paths: RightClickProStoragePaths) {
         do {
             _ = try ConfigurationBootstrapper().bootstrap(paths: paths)
         } catch {
@@ -95,7 +95,7 @@ final class FinderSyncController: FIFinderSync {
         nextMenuActionTag += 1
         pendingMenuActions[tag] = PendingMenuAction(actionID: item.actionID, context: context)
 
-        let menuItem = NSMenuItem(title: item.title, action: #selector(performRightToolAction(_:)), keyEquivalent: "")
+        let menuItem = NSMenuItem(title: item.title, action: #selector(performRightClickProAction(_:)), keyEquivalent: "")
         menuItem.target = self
         menuItem.image = nsImage(for: item.icon)
         // Finder Sync does not reliably preserve representedObject when
@@ -104,8 +104,8 @@ final class FinderSyncController: FIFinderSync {
         return menuItem
     }
 
-    @objc(performRightToolAction:)
-    func performRightToolAction(_ sender: NSMenuItem) {
+    @objc(performRightClickProAction:)
+    func performRightClickProAction(_ sender: NSMenuItem) {
         guard let pending = pendingMenuActions[sender.tag] else {
             NSLog("RightClick Pro Finder extension received menu action without pending payload for tag: \(sender.tag)")
             return
@@ -146,7 +146,7 @@ final class FinderSyncController: FIFinderSync {
             )
             try JSONFileStore<PendingCommandRunRequest>(url: paths.pendingCommandRunURL).save(pendingRequest)
             DistributedNotificationCenter.default().post(
-                name: Notification.Name(RightToolConstants.pendingCommandRunNotificationName),
+                name: Notification.Name(RightClickProConstants.pendingCommandRunNotificationName),
                 object: nil
             )
             launchMainAppForCommandWindow()
@@ -158,8 +158,8 @@ final class FinderSyncController: FIFinderSync {
     }
 
     private func launchMainAppForCommandWindow() {
-        guard let appURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: RightToolConstants.mainAppBundleIdentifier) else {
-            NSLog("RightClick Pro main app bundle not found: \(RightToolConstants.mainAppBundleIdentifier)")
+        guard let appURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: RightClickProConstants.mainAppBundleIdentifier) else {
+            NSLog("RightClick Pro main app bundle not found: \(RightClickProConstants.mainAppBundleIdentifier)")
             return
         }
         let configuration = NSWorkspace.OpenConfiguration()

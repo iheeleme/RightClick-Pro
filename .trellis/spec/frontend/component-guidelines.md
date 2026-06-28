@@ -6,7 +6,7 @@
 
 ## Overview
 
-RightTool settings components are native SwiftUI views with a restrained macOS utility feel. They should be dense, scannable, and directly connected to `SettingsViewModel` commands and `RightToolCore` data.
+RightClick Pro settings components are native SwiftUI views with a restrained macOS utility feel. They should be dense, scannable, and directly connected to `SettingsViewModel` commands and `RightClickProCore` data.
 
 ---
 
@@ -24,7 +24,7 @@ Reference examples: `ActionListView`, `ActionManagementTable`, `TemplateListView
 
 ## Props Conventions
 
-- Pass Core model values by value (`RightToolAction`, `FileTemplate`, `DeveloperEntrypoint`, `OperationRecord`).
+- Pass Core model values by value (`RightClickProAction`, `FileTemplate`, `DeveloperEntrypoint`, `OperationRecord`).
 - Pass `@ObservedObject var viewModel: SettingsViewModel` when the component edits config or needs shared status/count state.
 - Pass `@Binding` only for local UI controls owned by the parent, such as selected filters or preview context.
 - Prefer explicit callbacks for simple row actions: `onEdit`, `onMoveUp`, `onMoveDown`.
@@ -64,7 +64,7 @@ Reference examples: `ActionListView`, `ActionManagementTable`, `TemplateListView
 
 #### 1. Scope / Trigger
 
-- Trigger: changes to `Sources/RightToolAppPreview/RightToolAppPreview.swift` or future SwiftUI settings screens that edit `RightToolConfig`.
+- Trigger: changes to `Sources/RightClickProAppPreview/RightClickProAppPreview.swift` or future SwiftUI settings screens that edit `RightClickProConfig`.
 - This is a frontend contract with persistence consequences because the settings UI writes JSON config that Finder Sync and ActionRunner later consume.
 
 #### 2. Signatures
@@ -84,11 +84,11 @@ Reference examples: `ActionListView`, `ActionManagementTable`, `TemplateListView
 
 - Child views may hold local draft state for sheets/forms.
 - Child views call ViewModel commands on save/delete/toggle.
-- `saveConfig()` is the only operation that persists `RightToolConfig` to disk.
+- `saveConfig()` is the only operation that persists `RightClickProConfig` to disk.
 - Adding a `FileTemplate` must also create or update its matching `.createFile` action.
 - Adding a `DeveloperEntrypoint` must also create or update its matching `.openInApp` action.
 - Deleting a template or developer entrypoint must remove its associated action so Finder menus do not reference missing payloads.
-- Promoting actions to `rootMenu` must enforce `RightToolConfig.maxRootMenuActions`.
+- Promoting actions to `rootMenu` must enforce `RightClickProConfig.maxRootMenuActions`.
 
 #### 4. Validation & Error Matrix
 
@@ -133,7 +133,7 @@ viewModel.upsertTemplate(template, replacing: originalID)
 Wrong:
 ```swift
 Button("保存") {
-    try? JSONFileStore<RightToolConfig>(url: url).save(config)
+    try? JSONFileStore<RightClickProConfig>(url: url).save(config)
 }
 ```
 
@@ -148,7 +148,7 @@ Button("保存配置") {
 
 #### 1. Scope / Trigger
 
-- Trigger: redesigning or refactoring `Sources/RightToolAppPreview/RightToolAppPreview.swift` presentation components, especially dashboards, tables, menu previews, and section navigation.
+- Trigger: redesigning or refactoring `Sources/RightClickProAppPreview/RightClickProAppPreview.swift` presentation components, especially dashboards, tables, menu previews, and section navigation.
 
 #### 2. Signatures
 
@@ -164,13 +164,13 @@ Button("保存配置") {
 
 #### 3. Contracts
 
-- Menu previews must be derived from `RightToolConfig`, `DirectoryBookmarkCatalog`, `FileTemplate`, `DeveloperEntrypoint`, or `OperationRecord` values.
+- Menu previews must be derived from `RightClickProConfig`, `DirectoryBookmarkCatalog`, `FileTemplate`, `DeveloperEntrypoint`, or `OperationRecord` values.
 - Do not make a preview imply that an edit/add/delete operation is available unless there is a matching `SettingsViewModel` command.
 - Read-only visual affordances such as disabled toggles or static edit icons are acceptable only when they reflect current model state.
 - Rule controls that visually look clickable, such as menu rows or toggles in settings cards, must have backing state and update the visible table or preview they describe.
 - Settings menu rows must render `MenuIconDescriptor` through `MenuIconView`; application actions use installed app icons, templates use file type icons, directories use path/folder icons, and unsupported cases fall back to semantic SF Symbols.
-- Sorting controls must call `SettingsViewModel` commands that update `RightToolAction.order`, `fileTemplates`, `developerEntrypoints`, or bookmark order as appropriate; sorting UI must update the table and the Finder preview in the same interaction.
-- Display-condition controls must mutate `RightToolAction.visibility` through `SettingsViewModel` and must prevent leaving an action with no visible invocation.
+- Sorting controls must call `SettingsViewModel` commands that update `RightClickProAction.order`, `fileTemplates`, `developerEntrypoints`, or bookmark order as appropriate; sorting UI must update the table and the Finder preview in the same interaction.
+- Display-condition controls must mutate `RightClickProAction.visibility` through `SettingsViewModel` and must prevent leaving an action with no visible invocation.
 - Display-condition controls must show selected and unselected visibility states distinctly; do not rely only on native menu checkmarks for this editing surface.
 - Action-management rows must expose the `ActionPlacement` choice as a visible table control, such as `"一级菜单"` / `"分组菜单"`, not only behind an unlabeled icon-only menu.
 - Placement controls must keep the compact row label readable and must show the current placement with a selected state that is visually distinct from hover/highlight state.
@@ -181,7 +181,7 @@ Button("保存配置") {
 
 #### 4. Validation & Error Matrix
 
-- Preview shows an action as enabled but `RightToolAction.isEnabled == false` -> bug; derive enabled state from the action.
+- Preview shows an action as enabled but `RightClickProAction.isEnabled == false` -> bug; derive enabled state from the action.
 - Toggle changes a template/developer entrypoint but bypasses `setActionEnabled` or upsert/delete commands -> persistence contract violation.
 - Table displays an edit/delete control with no backing command -> either wire it to a ViewModel command or render it as static/read-only.
 - A grouping/sorting card renders chevrons or switches but does not change the action table -> wire it to local state and the table's filtered/sorted data pipeline.
@@ -203,7 +203,7 @@ Button("保存配置") {
 
 #### 6. Tests Required
 
-- Run `swift build --target RightToolAppPreview`.
+- Run `swift build --target RightClickProAppPreview`.
 - Run `scripts/ci-swift-check.sh debug`.
 - Run `scripts/package-macos.sh debug` after SwiftUI settings changes.
 - Run `git diff --check`.
@@ -242,7 +242,7 @@ SortStepControls(
 
 #### 1. Scope / Trigger
 
-- Trigger: changing add/edit sheets, row action buttons, sort controls, overflow menus, or other icon-only controls in `Sources/RightToolAppPreview/RightToolAppPreview.swift`.
+- Trigger: changing add/edit sheets, row action buttons, sort controls, overflow menus, or other icon-only controls in `Sources/RightClickProAppPreview/RightClickProAppPreview.swift`.
 - This is a frontend interaction contract because icon-only controls can otherwise look clickable while lacking hover, disabled, help, or accessibility feedback.
 
 #### 2. Signatures
@@ -339,7 +339,7 @@ EditorSheetFooter(
 
 #### 1. Scope / Trigger
 
-- Trigger: changing the add/edit flow for `DeveloperEntrypoint` rows in `Sources/RightToolAppPreview/RightToolAppPreview.swift`.
+- Trigger: changing the add/edit flow for `DeveloperEntrypoint` rows in `Sources/RightClickProAppPreview/RightClickProAppPreview.swift`.
 - This is a settings UX contract because user-selected apps are persisted as `DeveloperEntrypoint.bundleIdentifier` and later rendered in Finder menus with real app icons.
 
 #### 2. Signatures
@@ -387,7 +387,7 @@ EditorSheetFooter(
 
 #### 6. Tests Required
 
-- Run direct Swift type checks or `swift build --target RightToolAppPreview` when the local SwiftPM manifest toolchain works.
+- Run direct Swift type checks or `swift build --target RightClickProAppPreview` when the local SwiftPM manifest toolchain works.
 - Run `scripts/package-macos.sh debug`.
 - Run `git diff --check`.
 - Manually smoke-test add, cancel, invalid selection, duplicate selection, edit, and "更换应用" flows.
@@ -414,7 +414,7 @@ DeveloperApplicationPickerCard(draft: draft) {
 
 #### 1. Scope / Trigger
 
-- Trigger: changing the macOS app icon, `design/icon.png`, or the settings sidebar brand mark in `Sources/RightToolAppPreview/RightToolAppPreview.swift`.
+- Trigger: changing the macOS app icon, `design/icon.png`, or the settings sidebar brand mark in `Sources/RightClickProAppPreview/RightClickProAppPreview.swift`.
 - This is both a frontend and packaging contract because the settings UI reads the runtime PNG while the `.app` bundle uses the generated `.icns`.
 
 #### 2. Signatures
@@ -422,20 +422,20 @@ DeveloperApplicationPickerCard(draft: draft) {
 - `scripts/package-macos.sh` exposes these environment overrides:
   ```bash
   APP_ICON_SOURCE="${APP_ICON_SOURCE:-design/icon.png}"
-  APP_ICON_NAME="${APP_ICON_NAME:-RightToolIcon}"
+  APP_ICON_NAME="${APP_ICON_NAME:-RightClickProIcon}"
   ```
 - The app `Info.plist` must set:
   ```xml
   <key>CFBundleIconFile</key>
-  <string>RightToolIcon</string>
+  <string>RightClickProIcon</string>
   ```
-- SwiftUI settings should load the same base asset through `RightToolIconAsset` and render it with `RightToolBrandIcon`.
+- SwiftUI settings should load the same base asset through `RightClickProIconAsset` and render it with `RightClickProBrandIcon`.
 
 #### 3. Contracts
 
 - `design/icon.png` is the source of truth for the product icon.
-- Packaging must copy it to `Contents/Resources/RightToolIcon.png` for the settings page.
-- Packaging must generate `Contents/Resources/RightToolIcon.icns` with `sips` + `iconutil` for the app icon.
+- Packaging must copy it to `Contents/Resources/RightClickProIcon.png` for the settings page.
+- Packaging must generate `Contents/Resources/RightClickProIcon.icns` with `sips` + `iconutil` for the app icon.
 - Local development may fall back to the repository `design/icon.png`; packaged app rendering must not depend on repository paths.
 
 #### 4. Validation & Error Matrix
@@ -443,11 +443,11 @@ DeveloperApplicationPickerCard(draft: draft) {
 - Missing `APP_ICON_SOURCE` -> packaging exits before producing an app bundle.
 - Missing `sips` or `iconutil` -> packaging exits because the `.icns` cannot be generated.
 - `CFBundleIconFile` does not match `APP_ICON_NAME` -> bundle validation fails.
-- Packaged app lacks `RightToolIcon.png` -> settings page brand icon falls back to the system symbol and should be treated as a packaging bug.
+- Packaged app lacks `RightClickProIcon.png` -> settings page brand icon falls back to the system symbol and should be treated as a packaging bug.
 
 #### 5. Good/Base/Bad Cases
 
-- Good: update `design/icon.png`, run packaging, and both `RightToolIcon.png` and `RightToolIcon.icns` are regenerated in the bundle.
+- Good: update `design/icon.png`, run packaging, and both `RightClickProIcon.png` and `RightClickProIcon.icns` are regenerated in the bundle.
 - Base: run the settings preview from the repository and the UI loads `design/icon.png` directly.
 - Bad: add a separate copied icon under `Sources/` and let it drift from `design/icon.png`.
 - Bad: set `CFBundleIconFile` without validating that the referenced `.icns` exists in `Contents/Resources`.
@@ -462,9 +462,9 @@ DeveloperApplicationPickerCard(draft: draft) {
   ```
 - Verify:
   ```bash
-  /usr/libexec/PlistBuddy -c 'Print :CFBundleIconFile' dist/staging/RightTool.app/Contents/Info.plist
-  test -f dist/staging/RightTool.app/Contents/Resources/RightToolIcon.icns
-  test -f dist/staging/RightTool.app/Contents/Resources/RightToolIcon.png
+  /usr/libexec/PlistBuddy -c 'Print :CFBundleIconFile' dist/staging/RightClick Pro.app/Contents/Info.plist
+  test -f dist/staging/RightClick Pro.app/Contents/Resources/RightClickProIcon.icns
+  test -f dist/staging/RightClick Pro.app/Contents/Resources/RightClickProIcon.png
   ```
 - Run `scripts/ci-swift-check.sh debug` when the local SwiftPM manifest toolchain is healthy.
 
@@ -477,7 +477,7 @@ Image(systemName: "cursorarrow")
 
 Correct:
 ```swift
-RightToolBrandIcon(size: 44)
+RightClickProBrandIcon(size: 44)
 ```
 
 Wrong:
@@ -520,7 +520,7 @@ Root settings content must not set a finite `maxWidth`; otherwise resizing the r
 Wrong:
 ```swift
 WindowControlDots()
-Text("RightTool 设置")
+Text("RightClick Pro 设置")
 ```
 
 Correct:
@@ -543,7 +543,7 @@ SettingsRootView(viewModel: viewModel)
 
 **Cause**: Using a default SwiftUI `Button` for navigation rows in a dense macOS settings sidebar can defer the action until mouseUp.
 
-**Fix**: For custom sidebar navigation in `RightToolAppPreview.swift`, use a full-row hit target and select on mouseDown with `DragGesture(minimumDistance: 0)`. Keep accessibility traits so the row is still announced as a button. If the detail view is heavy, split selection into `visualSelection` for immediate sidebar highlight and `renderedSection` for the delayed detail rebuild.
+**Fix**: For custom sidebar navigation in `RightClickProAppPreview.swift`, use a full-row hit target and select on mouseDown with `DragGesture(minimumDistance: 0)`. Keep accessibility traits so the row is still announced as a button. If the detail view is heavy, split selection into `visualSelection` for immediate sidebar highlight and `renderedSection` for the delayed detail rebuild.
 
 Wrong:
 ```swift
