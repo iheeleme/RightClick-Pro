@@ -27,10 +27,10 @@ Reference file: `Sources/RightClickProFinderExtension/FinderSyncController.swift
 
 ## Shell Script Output
 
-Packaging scripts should fail loudly for hard gates and stay best-effort for local PlugInKit enablement.
+Packaging scripts should fail loudly for hard gates and stay best-effort for opt-in local PlugInKit enablement.
 
 - Hard gates: unsupported config, invalid Xcode env pairing, missing icon source, invalid Finder extension binary, missing XPC service, deep codesign verification.
-- Best effort: `pluginkit` unavailable or local `pluginkit -a` / `pluginkit -e use` failures.
+- Best effort: `pluginkit` unavailable or local `pluginkit -a` / `pluginkit -e use` failures when `RIGHTCLICKPRO_REGISTER_FINDER_EXTENSION=1` is explicitly set.
 - Runtime Finder menu repair should return concise user-facing diagnostics through `SystemMaintenanceResult`; do not print noisy command output from the App UI.
 
 Reference file: `scripts/package-macos.sh`.

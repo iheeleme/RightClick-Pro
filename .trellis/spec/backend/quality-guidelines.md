@@ -258,14 +258,16 @@ case .currentDirectory:
   ```bash
   scripts/package-macos.sh <release|debug>
   RIGHTCLICKPRO_PACKAGE_DMG=1 scripts/package-macos.sh <release|debug>
+  RIGHTCLICKPRO_REGISTER_FINDER_EXTENSION=1 scripts/package-macos.sh debug
   ```
 - Finder extension bootstrap before monitored-directory registration:
   ```swift
   _ = try ConfigurationBootstrapper().bootstrap(paths: paths)
   FIFinderSyncController.default().directoryURLs = Set(urls)
   ```
-- Local preview PlugInKit registration order:
+- Opt-in local preview PlugInKit registration order:
   ```bash
+  RIGHTCLICKPRO_REGISTER_FINDER_EXTENSION=1 scripts/package-macos.sh debug
   pluginkit -a "$appex_path"
   pluginkit -e use -i "$FINDER_EXTENSION_BUNDLE_IDENTIFIER"
   ```
@@ -318,7 +320,8 @@ case .currentDirectory:
 - The ActionRunner must resolve directory bookmarks and hold security-scoped access during request execution before creating the authorized-path validator.
 - The preview app, XPC service, Finder extension, and their embedded `libRightClickProCore.dylib` copies must be signed before zipping. Ad-hoc signing is acceptable for local test artifacts; public distribution still requires Developer ID signing and notarization.
 - The packaging script must validate the preview bundle before upload so CI cannot publish an artifact that lacks a discoverable Finder Sync extension.
-- For local preview smoke tests, the packaging script should explicitly register the just-built `.appex` path with `pluginkit -a` before applying `pluginkit -e use`; enabling by identifier alone only affects already-discovered extension records and may miss reinstalls.
+- The packaging script must not register the staging `.appex` with PlugInKit by default. Build artifacts often live under source directories such as `~/Code`, and registering those paths can make Finder display the app icon against source-directory sidebar items.
+- For local preview Finder Sync smoke tests only, `RIGHTCLICKPRO_REGISTER_FINDER_EXTENSION=1` may explicitly register the just-built `.appex` path with `pluginkit -a` before applying `pluginkit -e use`; enabling by identifier alone only affects already-discovered extension records and may miss reinstalls.
 - After a DMG install, the settings app must not assume build-time PlugInKit registration exists on the user's machine. On launch it should ask the embedded ActionRunner XPC service to register the bundled `.appex`, request enablement, and reload Finder once for the current packaged extension signature.
 - The packaged extension setup signature must include filesystem resource identity for the physical `.appex`, `Info.plist`, extension executable, and host app bundle. Path, version, and modification time alone are not enough because same-version reinstall/overwrite can keep those values unchanged while Finder/PlugInKit still needs a fresh preload.
 - Finder restart/repair controls should also run through the ActionRunner XPC maintenance path because the menu-bar app is sandboxed; direct `killall Finder` or `pluginkit` from the app can fail.
@@ -335,6 +338,7 @@ case .currentDirectory:
 
 - Unsupported configuration argument -> exit 64.
 - Unsupported `RIGHTCLICKPRO_PACKAGE_DMG` value -> exit 64.
+- Unsupported `RIGHTCLICKPRO_REGISTER_FINDER_EXTENSION` value -> exit 64.
 - Only one of `RIGHTCLICKPRO_XCODE_PROJECT` / `RIGHTCLICKPRO_XCODE_SCHEME` is set -> exit 64.
 - `RIGHTCLICKPRO_PACKAGE_DMG=1` with a configured Xcode archive path -> exit 64 before archive.
 - `RIGHTCLICKPRO_XCODE_PROJECT` path is missing -> exit 66.
@@ -350,8 +354,8 @@ case .currentDirectory:
 - Preview bundle is missing app or extension-local `RightClickProActionRunner.xpc` -> packaging fails before zip upload.
 - Preview XPC service has app sandbox entitlement -> local smoke tests against auto-injected protected folders may fail.
 - Preview deep code-sign verification fails -> packaging fails before zip upload.
-- `pluginkit` unavailable on the runner -> skip registration/enablement without failing packaging.
-- `pluginkit -a` or `pluginkit -e use` fails during local preview enablement -> do not fail packaging; the bundle validation remains the hard gate.
+- `pluginkit` unavailable during `RIGHTCLICKPRO_REGISTER_FINDER_EXTENSION=1` -> skip registration/enablement without failing packaging.
+- `pluginkit -a` or `pluginkit -e use` fails during opt-in local preview enablement -> do not fail packaging; the bundle validation remains the hard gate.
 - Runtime maintenance cannot find bundled `RightClickProFinderExtension.appex` -> show a user-facing error that the app should be installed from the DMG into Applications.
 - Runtime maintenance XPC is unavailable -> show a user-facing error and keep the manual System Settings fallback available.
 - Direct sandboxed app `killall Finder` fails -> bug; restart should be delegated to the unsandboxed ActionRunner XPC maintenance service.
@@ -366,7 +370,8 @@ case .currentDirectory:
 - Good: Finder starts the extension before the app has opened; the extension bootstraps config/bookmarks and assigns real-home Desktop/Downloads/Documents/Code URLs to `directoryURLs`.
 - Good: after Finder has unloaded the extension, the next right-click cold-start sets fallback monitored directories immediately, returns menu items from cached config once loaded, and refreshes repaired config asynchronously.
 - Good: an older install has Desktop/Downloads/Documents only and `~/Code` exists; bootstrap appends the `code` bookmark, monitors it, and adds `open-directory-code`, `move-to-code`, and `copy-to-code`.
-- Good: rebuilding/reinstalling a local preview registers the new `RightClickProFinderExtension.appex` path, then enables `com.iheeleme.rightclickpro.FinderExtension`.
+- Good: normal local packaging validates `RightClickProFinderExtension.appex` but does not register the `dist/staging` or `tmp` path into the user's PlugInKit database.
+- Good: opt-in `RIGHTCLICKPRO_REGISTER_FINDER_EXTENSION=1` local smoke packaging registers the new `RightClickProFinderExtension.appex` path, then enables `com.iheeleme.rightclickpro.FinderExtension`.
 - Good: first app launch after dragging from the DMG registers `Contents/PlugIns/RightClickProFinderExtension.appex` through ActionRunner XPC and reloads Finder once, so PlugInKit can discover the right physical extension path on that machine without a slow first right-click wait.
 - Good: reinstalling the same app version at the same `/Applications` path changes the packaged extension resource identity and triggers one fresh Finder preload instead of reusing the previous setup marker.
 - Good: clicking "重启 Finder" asks ActionRunner XPC to register/enable the extension and then restart Finder; if `killall Finder` fails, the service tries an AppleScript fallback and reports diagnostics.
@@ -374,6 +379,7 @@ case .currentDirectory:
 - Base: manual workflow dispatch with `package_dmg=false` uploads only zip output in a clean runner workspace.
 - Bad: bootstrap writes `~/Library/Containers/com.iheeleme.rightclickpro/Data/Desktop` as a monitored directory, so the Finder menu never appears on the user's real Desktop.
 - Bad: `FinderSyncController.menu(for:)` reads `config.json`, reads `bookmarks.json`, resolves all app icons, and runs bootstrap synchronously on every right-click.
+- Bad: every normal `scripts/package-macos.sh` run registers `dist/staging/.../RightClickProFinderExtension.appex`, causing Finder/PlugInKit state to point at source-tree build artifacts and display RightClick Pro icons beside directories such as `~/Code`.
 - Bad: the packaging script only runs `pluginkit -e use -i com.iheeleme.rightclickpro.FinderExtension`; after reinstall, PlugInKit may still know only an old or missing physical extension path.
 - Bad: the sandboxed menu-bar app directly runs `/usr/bin/killall Finder`, then reports failure even though the embedded unsandboxed XPC service could perform the repair.
 - Bad: every normal launch restarts Finder even when the same bundled extension was already repaired successfully.
@@ -467,16 +473,30 @@ where the real home bypasses sandbox container redirection and existing containe
 
 Wrong:
 ```bash
-pluginkit -e use -i "$FINDER_EXTENSION_BUNDLE_IDENTIFIER"
+scripts/package-macos.sh debug
+pluginkit -a "$PWD/dist/staging/RightClick Pro.app/Contents/PlugIns/RightClickProFinderExtension.appex"
 ```
-as the only local reinstall step.
+as the default packaging behavior, because it persists build-artifact paths in the user's PlugInKit database.
 
 Correct:
 ```bash
+scripts/package-macos.sh debug
+```
+for normal packaging, with installed-app runtime repair handling `/Applications/RightClick Pro.app`.
+
+Wrong:
+```bash
+pluginkit -e use -i "$FINDER_EXTENSION_BUNDLE_IDENTIFIER"
+```
+as the only opt-in local smoke registration step.
+
+Correct:
+```bash
+RIGHTCLICKPRO_REGISTER_FINDER_EXTENSION=1 scripts/package-macos.sh debug
 pluginkit -a "$appex_path"
 pluginkit -e use -i "$FINDER_EXTENSION_BUNDLE_IDENTIFIER"
 ```
-so the physical `.appex` path is registered before enablement.
+so the physical `.appex` path is registered before enablement when explicitly requested.
 
 Wrong:
 ```swift

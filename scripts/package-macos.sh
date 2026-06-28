@@ -14,6 +14,7 @@ DERIVED_DATA_PATH="${DERIVED_DATA_PATH:-DerivedData}"
 APP_ICON_SOURCE="${APP_ICON_SOURCE:-design/icon.png}"
 APP_ICON_NAME="${APP_ICON_NAME:-RightClickProIcon}"
 RIGHTCLICKPRO_PACKAGE_DMG="${RIGHTCLICKPRO_PACKAGE_DMG:-0}"
+RIGHTCLICKPRO_REGISTER_FINDER_EXTENSION="${RIGHTCLICKPRO_REGISTER_FINDER_EXTENSION:-0}"
 PACKAGED_FINDER_EXTENSION_PATH=""
 
 case "$CONFIGURATION" in
@@ -28,6 +29,14 @@ case "$RIGHTCLICKPRO_PACKAGE_DMG" in
   0|1) ;;
   *)
     echo "Unsupported RIGHTCLICKPRO_PACKAGE_DMG value: $RIGHTCLICKPRO_PACKAGE_DMG. Use 1 to build a DMG." >&2
+    exit 64
+    ;;
+esac
+
+case "$RIGHTCLICKPRO_REGISTER_FINDER_EXTENSION" in
+  0|1) ;;
+  *)
+    echo "Unsupported RIGHTCLICKPRO_REGISTER_FINDER_EXTENSION value: $RIGHTCLICKPRO_REGISTER_FINDER_EXTENSION. Use 1 only for local Finder Sync smoke tests." >&2
     exit 64
     ;;
 esac
@@ -623,16 +632,18 @@ NOTES
   PACKAGED_FINDER_EXTENSION_PATH="$appex_path"
 }
 
-enable_finder_extension() {
+register_finder_extension_for_local_smoke() {
   local appex_path="${1:-}"
   if ! command -v pluginkit >/dev/null 2>&1; then
     return
   fi
 
-  if [[ -n "$appex_path" && -d "$appex_path" ]]; then
-    pluginkit -a "$appex_path" >/dev/null 2>&1 || true
+  if [[ -z "$appex_path" || ! -d "$appex_path" ]]; then
+    return
   fi
 
+  echo "Registering preview Finder Extension for local smoke testing: $appex_path" >&2
+  pluginkit -a "$appex_path" >/dev/null 2>&1 || true
   pluginkit -e use -i "$FINDER_EXTENSION_BUNDLE_IDENTIFIER" >/dev/null 2>&1 || true
 }
 
@@ -645,4 +656,6 @@ if ! package_xcode_archive_if_configured; then
   package_swiftpm_preview_bundle
 fi
 
-enable_finder_extension "$PACKAGED_FINDER_EXTENSION_PATH"
+if [[ "$RIGHTCLICKPRO_REGISTER_FINDER_EXTENSION" == "1" ]]; then
+  register_finder_extension_for_local_smoke "$PACKAGED_FINDER_EXTENSION_PATH"
+fi

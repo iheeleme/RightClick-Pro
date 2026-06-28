@@ -53,6 +53,12 @@ The Finder Sync extension is manually linked with `_NSExtensionMain` so PlugInKi
 
 The preview app and Finder Sync extension are sandboxed and include App Group, user-selected read/write, and app-scope bookmark entitlements. The preview ActionRunner XPC service is signed with the App Group entitlement but without app sandboxing so local smoke tests can exercise the auto-injected Desktop/Documents/Downloads/Code directories. Runtime authorization still rejects paths outside the configured monitored/common directory set.
 
+Packaging does not register the staging Finder Sync extension with the local PlugInKit database by default. The installed app owns runtime registration after it is copied to `/Applications`; this avoids Finder showing build-artifact app icons for local source directories such as `~/Code`. For a one-off local smoke test against the staging bundle, run:
+
+```bash
+RIGHTCLICKPRO_REGISTER_FINDER_EXTENSION=1 scripts/package-macos.sh debug
+```
+
 Default identifiers for the current preview distribution are:
 
 ```text
