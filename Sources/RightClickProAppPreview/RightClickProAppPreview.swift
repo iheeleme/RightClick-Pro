@@ -734,7 +734,7 @@ final class SettingsViewModel: NSObject, ObservableObject {
     }
 
     private func scheduleFinderExtensionRegistration() {
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
             guard let self else {
                 return
             }
@@ -838,14 +838,10 @@ final class SettingsViewModel: NSObject, ObservableObject {
     }
 
     private func finderExtensionSetupSignature(for appexURL: URL) -> String {
-        let executableURL = appexURL
-            .appendingPathComponent("Contents")
-            .appendingPathComponent("MacOS")
-            .appendingPathComponent("RightClickProFinderExtension")
-        let modifiedAt = ((try? FileManager.default.attributesOfItem(atPath: executableURL.path)[.modificationDate]) as? Date)?
-            .timeIntervalSince1970 ?? 0
-        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "unknown"
-        return "\(appexURL.path)|\(version)|\(Int(modifiedAt))"
+        FinderExtensionInstallSignature.make(
+            appexURL: appexURL,
+            hostBundleURL: Bundle.main.bundleURL
+        )
     }
 
     private func updateAction(_ actionID: String, mutate: (inout RightClickProAction) -> Void) {

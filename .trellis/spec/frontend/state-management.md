@@ -21,7 +21,7 @@ Reference file: `Sources/RightClickProAppPreview/RightClickProAppPreview.swift`.
 - Template/action/developer edits mark unsaved changes and require the main save action.
 - `reloadRecentOperations()` reads `operation-log.jsonl` and keeps the latest 80 reversed for display.
 - Finder menu repair state lives in `SettingsViewModel.isRepairingFinderMenu`, `finderExtensionNeedsAttention`, and `finderExtensionSetupMessage`; the ViewModel sends `SystemMaintenanceRequest` through ActionRunner XPC instead of running system commands directly from SwiftUI.
-- Successful automatic Finder extension setup is keyed by the bundled `.appex` executable signature in `UserDefaults`; skip repeated Finder restarts when the same extension was already repaired.
+- Successful automatic Finder extension setup is keyed by the bundled `.appex` install signature in `UserDefaults`; the signature must include filesystem resource identity so same-version reinstall/overwrite triggers one fresh Finder preload, while repeated launches of the same physical extension skip Finder restarts.
 
 ## Command Rules
 

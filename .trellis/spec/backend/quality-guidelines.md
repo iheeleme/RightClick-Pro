@@ -320,6 +320,7 @@ case .currentDirectory:
 - The packaging script must validate the preview bundle before upload so CI cannot publish an artifact that lacks a discoverable Finder Sync extension.
 - For local preview smoke tests, the packaging script should explicitly register the just-built `.appex` path with `pluginkit -a` before applying `pluginkit -e use`; enabling by identifier alone only affects already-discovered extension records and may miss reinstalls.
 - After a DMG install, the settings app must not assume build-time PlugInKit registration exists on the user's machine. On launch it should ask the embedded ActionRunner XPC service to register the bundled `.appex`, request enablement, and reload Finder once for the current packaged extension signature.
+- The packaged extension setup signature must include filesystem resource identity for the physical `.appex`, `Info.plist`, extension executable, and host app bundle. Path, version, and modification time alone are not enough because same-version reinstall/overwrite can keep those values unchanged while Finder/PlugInKit still needs a fresh preload.
 - Finder restart/repair controls should also run through the ActionRunner XPC maintenance path because the menu-bar app is sandboxed; direct `killall Finder` or `pluginkit` from the app can fail.
 - When both `RIGHTCLICKPRO_XCODE_PROJECT` and `RIGHTCLICKPRO_XCODE_SCHEME` are configured, packaging must use `xcodebuild archive`.
 - If only one Xcode variable is configured, packaging must fail instead of silently falling back to SwiftPM preview output.
@@ -367,6 +368,7 @@ case .currentDirectory:
 - Good: an older install has Desktop/Downloads/Documents only and `~/Code` exists; bootstrap appends the `code` bookmark, monitors it, and adds `open-directory-code`, `move-to-code`, and `copy-to-code`.
 - Good: rebuilding/reinstalling a local preview registers the new `RightClickProFinderExtension.appex` path, then enables `com.iheeleme.rightclickpro.FinderExtension`.
 - Good: first app launch after dragging from the DMG registers `Contents/PlugIns/RightClickProFinderExtension.appex` through ActionRunner XPC and reloads Finder once, so PlugInKit can discover the right physical extension path on that machine without a slow first right-click wait.
+- Good: reinstalling the same app version at the same `/Applications` path changes the packaged extension resource identity and triggers one fresh Finder preload instead of reusing the previous setup marker.
 - Good: clicking "重启 Finder" asks ActionRunner XPC to register/enable the extension and then restart Finder; if `killall Finder` fails, the service tries an AppleScript fallback and reports diagnostics.
 - Base: manual workflow dispatch with no Xcode env vars produces a SwiftPM preview bundle with App, app-local XPC service, extension-local XPC service, Finder extension, and shared core dylib.
 - Base: manual workflow dispatch with `package_dmg=false` uploads only zip output in a clean runner workspace.
