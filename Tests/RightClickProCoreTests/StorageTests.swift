@@ -27,13 +27,13 @@ final class StorageTests: XCTestCase {
         XCTAssertEqual(records.map(\.actionID), ["b", "c"])
     }
 
-    func testConfigDecodesOldJSONWithDefaultCommandTemplates() throws {
+    func testConfigDecodesV1JSONIntoShortcutDirectoriesAndDefaultCommandTemplates() throws {
         let json = """
         {
           "schemaVersion": 1,
           "maxRootMenuActions": 5,
-          "monitoredDirectoryIDs": [],
-          "commonDirectoryIDs": [],
+          "monitoredDirectoryIDs": ["legacy-scope"],
+          "commonDirectoryIDs": ["desktop", "downloads"],
           "actions": [],
           "fileTemplates": [],
           "developerEntrypoints": []
@@ -42,6 +42,20 @@ final class StorageTests: XCTestCase {
 
         let config = try JSONDecoder().decode(RightClickProConfig.self, from: Data(json.utf8))
 
+        XCTAssertEqual(config.schemaVersion, 2)
+        XCTAssertEqual(config.shortcutDirectoryIDs, ["desktop", "downloads"])
         XCTAssertEqual(config.commandTemplates.map(\.id), RightClickProConfig.defaultCommandTemplates().map(\.id))
+    }
+
+    func testConfigEncodesV2ShortcutDirectoriesOnly() throws {
+        let config = RightClickProConfig(shortcutDirectoryIDs: ["desktop"])
+
+        let data = try JSONEncoder().encode(config)
+        let object = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+
+        XCTAssertEqual(object["schemaVersion"] as? Int, 2)
+        XCTAssertEqual(object["shortcutDirectoryIDs"] as? [String], ["desktop"])
+        XCTAssertNil(object["monitoredDirectoryIDs"])
+        XCTAssertNil(object["commonDirectoryIDs"])
     }
 }

@@ -24,7 +24,8 @@ if let override = ProcessInfo.processInfo.environment["RIGHTCLICKPRO_STORAGE_PAT
 }
 
 let runner = RightClickProRuntimeFactory.makeActionRunner(paths: paths)
-let adapter = RightClickProActionRunnerXPCAdapter(runner: runner)
+let commandRunService = CommandRunService(paths: paths)
+let adapter = RightClickProActionRunnerXPCAdapter(runner: runner, commandRunService: commandRunService)
 let delegate = ActionRunnerServiceDelegate(exportedObject: adapter)
 let listener = NSXPCListener.service()
 listener.delegate = delegate

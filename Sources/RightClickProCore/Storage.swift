@@ -7,6 +7,7 @@ public struct RightClickProStoragePaths: Equatable {
     public var cutClipboardURL: URL
     public var operationLogURL: URL
     public var pendingCommandRunURL: URL
+    public var commandRunStateDirectoryURL: URL
 
     public init(baseURL: URL) {
         self.baseURL = baseURL
@@ -15,6 +16,7 @@ public struct RightClickProStoragePaths: Equatable {
         self.cutClipboardURL = baseURL.appendingPathComponent("cut-clipboard.json")
         self.operationLogURL = baseURL.appendingPathComponent("operation-log.jsonl")
         self.pendingCommandRunURL = baseURL.appendingPathComponent("pending-command-run.json")
+        self.commandRunStateDirectoryURL = baseURL.appendingPathComponent("command-runs", isDirectory: true)
     }
 
     public static func appGroup(identifier: String = RightClickProConstants.defaultAppGroupIdentifier) throws -> RightClickProStoragePaths {

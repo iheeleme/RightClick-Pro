@@ -76,9 +76,9 @@ public enum CommandTemplateError: Error, Equatable, LocalizedError {
         case .missingCommandTemplate(let id):
             return "找不到命令模板：\(id)"
         case .unauthorizedWorkingDirectory(let path):
-            return "命令工作目录未授权：\(path)"
+            return "命令工作目录无法访问：\(path)。\(FullDiskAccessAdvisor.guidance)"
         case .inaccessibleWorkingDirectory(let path):
-            return "命令工作目录无法访问：\(path)。请在设置页重新添加/授权该目录，或从已授权的 Finder 目录触发命令。"
+            return "命令工作目录无法访问：\(path)。\(FullDiskAccessAdvisor.guidance)"
         case .invalidScopedBookmark(let path):
             return "命令目录授权已失效：\(path)。请重新授权后再运行。"
         case .invalidEnvironmentName(let name):

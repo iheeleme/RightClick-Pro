@@ -16,8 +16,7 @@ final class ActionRunnerTests: XCTestCase {
             payload: ActionPayload(templateID: "markdown")
         )
         let config = RightClickProConfig(
-            monitoredDirectoryIDs: ["workspace"],
-            commonDirectoryIDs: ["workspace"],
+            shortcutDirectoryIDs: ["workspace"],
             actions: [action],
             fileTemplates: [FileTemplate(id: "markdown", title: "Markdown", defaultFileName: "Note.md", contents: "# Note\n")]
         )
@@ -43,6 +42,42 @@ final class ActionRunnerTests: XCTestCase {
         XCTAssertEqual(result.status, .success)
         XCTAssertTrue(FileManager.default.fileExists(atPath: directory.appendingPathComponent("Note.md").path))
         XCTAssertEqual(try log.loadRecent().first?.kind, .createFile)
+    }
+
+    func testFileActionsAreNotBoundedByShortcutDirectories() throws {
+        let directory = try temporaryDirectory()
+        let action = RightClickProAction(
+            id: "new-md",
+            title: "New Markdown",
+            kind: .createFile,
+            visibility: [.container],
+            placement: .submenu,
+            group: .createFile,
+            order: 1,
+            payload: ActionPayload(templateID: "markdown")
+        )
+        let config = RightClickProConfig(
+            shortcutDirectoryIDs: [],
+            actions: [action],
+            fileTemplates: [FileTemplate(id: "markdown", title: "Markdown", defaultFileName: "Loose.md")]
+        )
+        let runner = ActionRunner(
+            configProvider: StaticRightClickProConfigProvider(config: config),
+            operationLog: InMemoryOperationLog(),
+            cutClipboard: InMemoryCutClipboardStore(),
+            urlOpener: RecordingURLOpener(),
+            developerAppOpener: RecordingURLOpener()
+        )
+
+        let result = runner.run(
+            ActionRequest(
+                actionID: "new-md",
+                context: FinderContext(invocation: .container, targetDirectory: directory)
+            )
+        )
+
+        XCTAssertEqual(result.status, .success)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: directory.appendingPathComponent("Loose.md").path))
     }
 
     func testCutThenPasteMovesSelectionThroughInternalClipboard() throws {
@@ -74,8 +109,7 @@ final class ActionRunnerTests: XCTestCase {
             )
         ]
         let config = RightClickProConfig(
-            monitoredDirectoryIDs: ["workspace"],
-            commonDirectoryIDs: ["workspace"],
+            shortcutDirectoryIDs: ["workspace"],
             actions: actions
         )
         let clipboard = InMemoryCutClipboardStore()
@@ -127,8 +161,7 @@ final class ActionRunnerTests: XCTestCase {
             payload: ActionPayload(directoryID: "workspace")
         )
         let config = RightClickProConfig(
-            monitoredDirectoryIDs: ["workspace"],
-            commonDirectoryIDs: ["workspace"],
+            shortcutDirectoryIDs: ["workspace"],
             actions: [action]
         )
         let log = InMemoryOperationLog()
@@ -246,8 +279,7 @@ final class ActionRunnerTests: XCTestCase {
             payload: ActionPayload(developerEntrypointID: entrypoint.id)
         )
         let config = RightClickProConfig(
-            monitoredDirectoryIDs: ["workspace"],
-            commonDirectoryIDs: ["workspace"],
+            shortcutDirectoryIDs: ["workspace"],
             actions: [action],
             developerEntrypoints: [entrypoint]
         )

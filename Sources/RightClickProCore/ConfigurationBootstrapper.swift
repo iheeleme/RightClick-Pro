@@ -91,9 +91,7 @@ public struct ConfigurationBootstrapper {
         let home = realUserHomeDirectory
         let candidates: [(String, String, URL)] = [
             ("desktop", "桌面", home.appendingPathComponent("Desktop")),
-            ("downloads", "下载", home.appendingPathComponent("Downloads")),
-            ("documents", "文稿", home.appendingPathComponent("Documents")),
-            ("code", "代码", home.appendingPathComponent("Code"))
+            ("downloads", "下载", home.appendingPathComponent("Downloads"))
         ]
 
         let bookmarks = candidates
@@ -128,8 +126,7 @@ public struct ConfigurationBootstrapper {
         let bookmarkIDs = Set(bookmarks.bookmarks.map(\.id))
         let directoryIDs = defaultBookmarkIDs.filter { bookmarkIDs.contains($0) }
 
-        appendMissing(directoryIDs, to: &repaired.monitoredDirectoryIDs)
-        appendMissing(directoryIDs, to: &repaired.commonDirectoryIDs)
+        appendMissing(directoryIDs, to: &repaired.shortcutDirectoryIDs)
         appendMissingDirectoryActions(for: directoryIDs, bookmarks: bookmarks, to: &repaired.actions)
         appendMissingCommandActions(for: repaired.commandTemplates, to: &repaired.actions)
         repairDefaultDeveloperEntrypointTargets(in: &repaired.developerEntrypoints)
@@ -319,8 +316,7 @@ public struct ConfigurationBootstrapper {
     public func defaultConfig(bookmarks: DirectoryBookmarkCatalog) -> RightClickProConfig {
         let directoryIDs = bookmarks.bookmarks.map(\.id)
         return RightClickProConfig(
-            monitoredDirectoryIDs: directoryIDs,
-            commonDirectoryIDs: directoryIDs,
+            shortcutDirectoryIDs: directoryIDs,
             actions: defaultActions(bookmarks: bookmarks)
         )
     }

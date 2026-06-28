@@ -165,6 +165,8 @@ final class SettingsViewModel: NSObject, ObservableObject {
     @Published var isRepairingFinderMenu = false
     @Published var finderExtensionNeedsAttention = false
     @Published var finderExtensionSetupMessage = ""
+    @Published var fullDiskAccessStatusMessage = "尚未检查完全磁盘访问权限"
+    @Published var fullDiskAccessStatusTone: StatusTone = .neutral
 
     private var paths = RightClickProStoragePaths.defaultForCurrentProcess()
     private let commandSecretStore = KeychainCommandSecretStore()
@@ -308,6 +310,31 @@ final class SettingsViewModel: NSObject, ObservableObject {
             setStatus("已打开系统设置，请启用 \(AppMetadata.displayName) Finder Extension", tone: .neutral)
         } else {
             setStatus("无法打开系统设置，请手动前往隐私与安全性 > 扩展 > Finder 扩展", tone: .warning)
+        }
+    }
+
+    func openFullDiskAccessSettings() {
+        guard let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles") else {
+            setStatus("无法打开完全磁盘访问权限设置，请手动前往系统设置 > 隐私与安全性 > 完全磁盘访问权限", tone: .error)
+            return
+        }
+
+        if NSWorkspace.shared.open(url) {
+            setStatus("已打开完全磁盘访问权限设置，请允许 \(AppMetadata.displayName)", tone: .neutral)
+        } else {
+            setStatus("无法打开系统设置，请手动前往隐私与安全性 > 完全磁盘访问权限", tone: .warning)
+        }
+    }
+
+    func checkFullDiskAccess() {
+        if FullDiskAccessAdvisor.checkRepresentativeAccess() {
+            fullDiskAccessStatusMessage = "检测结果：很可能已授予完全磁盘访问权限"
+            fullDiskAccessStatusTone = .success
+            setStatus(fullDiskAccessStatusMessage, tone: .success)
+        } else {
+            fullDiskAccessStatusMessage = "检测结果：可能尚未授予完全磁盘访问权限"
+            fullDiskAccessStatusTone = .warning
+            setStatus("\(fullDiskAccessStatusMessage)。文件动作仍会尝试执行，并在失败时提示。", tone: .warning)
         }
     }
 
@@ -659,8 +686,7 @@ final class SettingsViewModel: NSObject, ObservableObject {
         }
 
         bookmarks.bookmarks.removeAll { $0.id == bookmarkID }
-        config.commonDirectoryIDs.removeAll { $0 == bookmarkID }
-        config.monitoredDirectoryIDs.removeAll { $0 == bookmarkID }
+        config.shortcutDirectoryIDs.removeAll { $0 == bookmarkID }
         config.actions.removeAll { action in
             directoryActionKinds.contains(action.kind) && action.payload.directoryID == bookmarkID
         }
@@ -695,7 +721,7 @@ final class SettingsViewModel: NSObject, ObservableObject {
     }
 
     func isDirectoryBookmarkEnabled(_ bookmarkID: String) -> Bool {
-        let isReferenced = config.commonDirectoryIDs.contains(bookmarkID) && config.monitoredDirectoryIDs.contains(bookmarkID)
+        let isReferenced = config.shortcutDirectoryIDs.contains(bookmarkID)
         let openAction = config.actions.first { action in
             action.kind == .openDirectory && action.payload.directoryID == bookmarkID
         }
@@ -709,12 +735,10 @@ final class SettingsViewModel: NSObject, ObservableObject {
         }
 
         if isEnabled {
-            appendUnique(bookmarkID, to: &config.commonDirectoryIDs)
-            appendUnique(bookmarkID, to: &config.monitoredDirectoryIDs)
+            appendUnique(bookmarkID, to: &config.shortcutDirectoryIDs)
             syncDirectoryActions(for: bookmark)
         } else {
-            config.commonDirectoryIDs.removeAll { $0 == bookmarkID }
-            config.monitoredDirectoryIDs.removeAll { $0 == bookmarkID }
+            config.shortcutDirectoryIDs.removeAll { $0 == bookmarkID }
         }
 
         for index in config.actions.indices where directoryActionKinds.contains(config.actions[index].kind) && config.actions[index].payload.directoryID == bookmarkID {
@@ -1058,8 +1082,7 @@ final class SettingsViewModel: NSObject, ObservableObject {
                 addedAt: bookmarks.bookmarks[index].addedAt
             )
             bookmarks.bookmarks[index] = updated
-            appendUnique(bookmarkID, to: &config.commonDirectoryIDs)
-            appendUnique(bookmarkID, to: &config.monitoredDirectoryIDs)
+            appendUnique(bookmarkID, to: &config.shortcutDirectoryIDs)
             syncDirectoryActions(for: updated)
             saveDirectoryChanges("已更新目录：\(displayName)")
             return
@@ -1072,8 +1095,7 @@ final class SettingsViewModel: NSObject, ObservableObject {
             bookmarkDataBase64: bookmarkDataBase64
         )
         bookmarks.bookmarks.append(bookmark)
-        appendUnique(bookmark.id, to: &config.commonDirectoryIDs)
-        appendUnique(bookmark.id, to: &config.monitoredDirectoryIDs)
+        appendUnique(bookmark.id, to: &config.shortcutDirectoryIDs)
         syncDirectoryActions(for: bookmark)
         saveDirectoryChanges("已添加目录：\(displayName)")
     }
@@ -1084,7 +1106,7 @@ final class SettingsViewModel: NSObject, ObservableObject {
             (.moveToDirectory, "move-to", "移动到", [.selection], .moveToCommonDirectory),
             (.copyToDirectory, "copy-to", "复制到", [.selection], .copyToCommonDirectory)
         ]
-        let isEnabled = config.commonDirectoryIDs.contains(bookmark.id) && config.monitoredDirectoryIDs.contains(bookmark.id)
+        let isEnabled = config.shortcutDirectoryIDs.contains(bookmark.id)
         var order = nextActionOrder
 
         for spec in specs {
@@ -1115,8 +1137,7 @@ final class SettingsViewModel: NSObject, ObservableObject {
 
     private func reorderDirectoryIDReferences() {
         let orderedIDs = bookmarks.bookmarks.map(\.id)
-        config.commonDirectoryIDs = orderedIDs.filter { config.commonDirectoryIDs.contains($0) }
-        config.monitoredDirectoryIDs = orderedIDs.filter { config.monitoredDirectoryIDs.contains($0) }
+        config.shortcutDirectoryIDs = orderedIDs.filter { config.shortcutDirectoryIDs.contains($0) }
     }
 
     private func normalizeDirectoryActionOrder() {
@@ -1520,365 +1541,147 @@ final class CommandRunViewModel: ObservableObject {
     @Published var durationText = "—"
 
     private let request: PendingCommandRunRequest
-    private let paths: RightClickProStoragePaths
     private let onFinish: () -> Void
-    private let secretStore = KeychainCommandSecretStore()
-    private var process: Process?
-    private var startedAt: Date?
-    private var timeoutWorkItem: DispatchWorkItem?
-    private var didRequestStop = false
-    private var didTimeout = false
-    private var outputSummary = ""
-    private var bookmarkAccess: AuthorizedBookmarkAccess?
-    private var commandScopedAccessURLs: [URL] = []
+    private let actionRunnerClient = RightClickProActionRunnerXPCClient()
+    private var didNotifyFinish = false
+    private var pollTimer: Timer?
 
     init(
         request: PendingCommandRunRequest,
-        paths: RightClickProStoragePaths,
         onFinish: @escaping () -> Void
     ) {
         self.request = request
-        self.paths = paths
         self.onFinish = onFinish
     }
 
+    deinit {
+        pollTimer?.invalidate()
+    }
+
     func start() {
-        guard process == nil else {
+        guard pollTimer == nil, !statusIsTerminal else {
             return
         }
 
-        do {
-            let configProvider = FileBackedRightClickProConfigProvider(paths: paths)
-            let config = try configProvider.loadConfig()
-            let bookmarks = try configProvider.loadBookmarkCatalog()
-            guard
-                let action = config.actions.first(where: { $0.id == request.actionID }),
-                let templateID = action.payload.commandTemplateID,
-                let template = config.commandTemplates.first(where: { $0.id == templateID })
-            else {
-                throw CommandTemplateError.missingCommandTemplate(request.actionID)
-            }
-
-            let bookmarkAccess = try AuthorizedBookmarkAccess(
-                catalog: bookmarks,
-                ids: config.monitoredDirectoryIDs + config.commonDirectoryIDs
-            )
-            self.bookmarkAccess = bookmarkAccess
-            let validator = AuthorizedPathValidator(authorizedDirectories: bookmarkAccess.urls)
-            let directory = CommandTemplateVariableResolver.workingDirectory(for: template, context: request.context)
-            guard validator.isAuthorized(directory) else {
-                throw CommandTemplateError.unauthorizedWorkingDirectory(directory.path)
-            }
-            try ensureReadableWorkingDirectory(directory, bookmarks: bookmarks)
-
-            let resolvedCommand = try CommandTemplateVariableResolver.interpolatedCommand(template: template, context: request.context)
-            let environment = try commandEnvironment(for: template)
-
-            title = template.title
-            command = resolvedCommand
-            workingDirectory = directory.path
-            appendOutput("$ cd \(directory.path)\n$ \(resolvedCommand)\n\n")
-
-            let process = Process()
-            process.executableURL = URL(fileURLWithPath: "/bin/zsh")
-            process.arguments = ["-lc", resolvedCommand]
-            process.currentDirectoryURL = directory
-            process.environment = environment
-
-            let stdout = Pipe()
-            let stderr = Pipe()
-            process.standardOutput = stdout
-            process.standardError = stderr
-            stdout.fileHandleForReading.readabilityHandler = { [weak self] handle in
-                self?.readAvailableOutput(from: handle)
-            }
-            stderr.fileHandleForReading.readabilityHandler = { [weak self] handle in
-                self?.readAvailableOutput(from: handle)
-            }
-
-            process.terminationHandler = { [weak self] process in
-                stdout.fileHandleForReading.readabilityHandler = nil
-                stderr.fileHandleForReading.readabilityHandler = nil
-                DispatchQueue.main.async {
-                    self?.finish(exitCode: process.terminationStatus)
+        status = .preparing
+        actionRunnerClient.startCommandRun(request) { [weak self] result in
+            DispatchQueue.main.async {
+                guard let self else { return }
+                switch result {
+                case .success(let snapshot):
+                    self.apply(snapshot: snapshot)
+                    if !snapshot.status.isTerminal {
+                        self.scheduleStatusPolling()
+                    }
+                case .failure(let error):
+                    self.status = .error(error.localizedDescription)
+                    self.output = "运行失败：\(error.localizedDescription)\n"
+                    self.notifyFinishIfNeeded()
                 }
             }
-
-            self.process = process
-            startedAt = Date()
-            status = .running
-            try process.run()
-            scheduleTimeout(seconds: template.timeoutSeconds)
-        } catch {
-            status = .error(error.localizedDescription)
-            appendOutput("运行失败：\(error.localizedDescription)\n")
-            logFailure(message: error.localizedDescription)
-            releaseCommandScopedBookmarks()
-            bookmarkAccess = nil
-            onFinish()
         }
     }
 
     func stop() {
-        didRequestStop = true
-        appendOutput("\n用户请求停止命令...\n")
-        terminateThenKillIfNeeded()
-    }
-
-    private func commandEnvironment(for template: CommandTemplate) throws -> [String: String] {
-        var environment = ProcessInfo.processInfo.environment
-        let defaultPath = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
-        if let path = environment["PATH"], !path.isEmpty {
-            environment["PATH"] = "\(path):\(defaultPath)"
-        } else {
-            environment["PATH"] = defaultPath
-        }
-
-        for variable in template.environment {
-            guard CommandTemplateVariableResolver.validateEnvironmentName(variable.name) else {
-                throw CommandTemplateError.invalidEnvironmentName(variable.name)
-            }
-
-            if variable.isSensitive {
-                guard
-                    let reference = variable.secretReference,
-                    let value = try secretStore.load(reference: reference)
-                else {
-                    throw CommandTemplateError.missingSecret(variable.name)
-                }
-                environment[variable.name] = value
-            } else {
-                environment[variable.name] = variable.value ?? ""
-            }
-        }
-        return environment
-    }
-
-    private func ensureReadableWorkingDirectory(_ directory: URL, bookmarks: DirectoryBookmarkCatalog) throws {
-        if isReadableDirectory(directory) {
-            return
-        }
-
-        guard let authorizedURL = requestWorkingDirectoryAuthorization(for: directory) else {
-            throw CommandTemplateError.inaccessibleWorkingDirectory(directory.path)
-        }
-
-        let didAccess = authorizedURL.startAccessingSecurityScopedResource()
-        if didAccess {
-            commandScopedAccessURLs.append(authorizedURL)
-        }
-
-        if let data = try? authorizedURL.bookmarkData(
-            options: [.withSecurityScope],
-            includingResourceValuesForKeys: nil,
-            relativeTo: nil
-        ) {
-            persistWorkingDirectoryAuthorization(
-                directory: directory,
-                authorizedURL: authorizedURL,
-                bookmarkDataBase64: data.base64EncodedString(),
-                bookmarks: bookmarks
-            )
-        }
-
-        guard isReadableDirectory(directory) else {
-            throw CommandTemplateError.inaccessibleWorkingDirectory(directory.path)
-        }
-    }
-
-    private func isReadableDirectory(_ directory: URL) -> Bool {
-        var isDirectory: ObjCBool = false
-        guard FileManager.default.fileExists(atPath: directory.path, isDirectory: &isDirectory), isDirectory.boolValue else {
-            return false
-        }
-
-        do {
-            _ = try FileManager.default.contentsOfDirectory(atPath: directory.path)
-            return true
-        } catch {
-            return false
-        }
-    }
-
-    private func requestWorkingDirectoryAuthorization(for directory: URL) -> URL? {
-        let panel = NSOpenPanel()
-        panel.title = "授权命令工作目录"
-        panel.message = "\(AppMetadata.displayName) 需要访问该目录后才能在里面运行命令：\(directory.path)"
-        panel.prompt = "授权并运行"
-        panel.canChooseFiles = false
-        panel.canChooseDirectories = true
-        panel.canCreateDirectories = false
-        panel.allowsMultipleSelection = false
-        panel.directoryURL = directory.deletingLastPathComponent()
-
-        guard panel.runModal() == .OK, let url = panel.url?.standardizedFileURL else {
-            return nil
-        }
-
-        let selectedPath = normalizedPath(url)
-        let directoryPath = normalizedPath(directory)
-        guard directoryPath == selectedPath || directoryPath.hasPrefix(selectedPath + "/") else {
-            return nil
-        }
-        return url
-    }
-
-    private func persistWorkingDirectoryAuthorization(
-        directory: URL,
-        authorizedURL: URL,
-        bookmarkDataBase64: String,
-        bookmarks: DirectoryBookmarkCatalog
-    ) {
-        let directoryPath = normalizedPath(directory)
-        let authorizedPath = normalizedPath(authorizedURL)
-        guard directoryPath == authorizedPath || directoryPath.hasPrefix(authorizedPath + "/") else {
-            return
-        }
-
-        do {
-            var catalog = (try? JSONFileStore<DirectoryBookmarkCatalog>(url: paths.bookmarksURL).loadRequired()) ?? bookmarks
-            guard let index = catalog.bookmarks.firstIndex(where: {
-                normalizedPath(URL(fileURLWithPath: $0.path)) == authorizedPath
-            }) else {
-                return
-            }
-            catalog.bookmarks[index].bookmarkDataBase64 = bookmarkDataBase64
-            try JSONFileStore<DirectoryBookmarkCatalog>(url: paths.bookmarksURL).save(catalog)
-        } catch {
-            appendOutput("目录授权已生效，但保存授权失败：\(error.localizedDescription)\n")
-        }
-    }
-
-    private func normalizedPath(_ url: URL) -> String {
-        url.standardizedFileURL.path
-    }
-
-    private func releaseCommandScopedBookmarks() {
-        for url in commandScopedAccessURLs {
-            url.stopAccessingSecurityScopedResource()
-        }
-        commandScopedAccessURLs.removeAll()
-    }
-
-    private func readAvailableOutput(from handle: FileHandle) {
-        let data = handle.availableData
-        guard !data.isEmpty, let text = String(data: data, encoding: .utf8) else {
-            return
-        }
-        DispatchQueue.main.async { [weak self] in
-            self?.appendOutput(text)
-        }
-    }
-
-    private func appendOutput(_ text: String) {
-        output += text
-        outputSummary += text
-        if outputSummary.count > 4000 {
-            outputSummary = String(outputSummary.suffix(4000))
-        }
-    }
-
-    private func scheduleTimeout(seconds: Int) {
-        let workItem = DispatchWorkItem { [weak self] in
+        actionRunnerClient.stopCommandRun(runID: request.id) { [weak self] result in
             DispatchQueue.main.async {
-                guard let self, self.process?.isRunning == true else {
-                    return
+                guard let self else { return }
+                switch result {
+                case .success(let snapshot):
+                    self.apply(snapshot: snapshot)
+                case .failure(let error):
+                    self.status = .error(error.localizedDescription)
+                    self.output += "\n停止命令失败：\(error.localizedDescription)\n"
+                    self.notifyFinishIfNeeded()
                 }
-                self.didTimeout = true
-                self.appendOutput("\n命令超过 \(seconds) 秒，正在停止...\n")
-                self.terminateThenKillIfNeeded()
             }
         }
-        timeoutWorkItem = workItem
-        DispatchQueue.global().asyncAfter(deadline: .now() + .seconds(seconds), execute: workItem)
     }
 
-    private func terminateThenKillIfNeeded() {
-        guard let process, process.isRunning else {
+    private var statusIsTerminal: Bool {
+        switch status {
+        case .preparing, .running:
+            return false
+        case .succeeded, .failed, .timedOut, .stopped, .error:
+            return true
+        }
+    }
+
+    private func scheduleStatusPolling() {
+        pollTimer?.invalidate()
+        pollTimer = Timer.scheduledTimer(withTimeInterval: 0.3, repeats: true) { [weak self] _ in
+            self?.pollStatus()
+        }
+    }
+
+    private func pollStatus() {
+        actionRunnerClient.commandRunStatus(runID: request.id) { [weak self] result in
+            DispatchQueue.main.async {
+                guard let self else { return }
+                switch result {
+                case .success(let snapshot):
+                    self.apply(snapshot: snapshot)
+                case .failure(let error):
+                    self.pollTimer?.invalidate()
+                    self.pollTimer = nil
+                    self.status = .error(error.localizedDescription)
+                    self.output += "\n读取命令状态失败：\(error.localizedDescription)\n"
+                    self.notifyFinishIfNeeded()
+                }
+            }
+        }
+    }
+
+    private func apply(snapshot: CommandRunSnapshot) {
+        title = snapshot.title
+        command = snapshot.command
+        workingDirectory = snapshot.workingDirectory
+        output = snapshot.combinedOutput
+        exitCode = snapshot.exitCode
+        durationText = formattedDuration(milliseconds: snapshot.durationMilliseconds)
+        status = runStatus(for: snapshot)
+
+        if snapshot.status.isTerminal {
+            pollTimer?.invalidate()
+            pollTimer = nil
+            notifyFinishIfNeeded()
+        }
+    }
+
+    private func runStatus(for snapshot: CommandRunSnapshot) -> RunStatus {
+        switch snapshot.status {
+        case .preparing:
+            return .preparing
+        case .running:
+            return .running
+        case .succeeded:
+            return .succeeded(snapshot.exitCode ?? 0)
+        case .failed:
+            return .failed(snapshot.exitCode ?? 1)
+        case .timedOut:
+            return .timedOut
+        case .stopped:
+            return .stopped
+        case .error:
+            return .error(snapshot.errorMessage ?? "命令运行失败")
+        }
+    }
+
+    private func formattedDuration(milliseconds: Int?) -> String {
+        guard let milliseconds else {
+            return "—"
+        }
+        return String(format: "%.1fs", Double(milliseconds) / 1000)
+    }
+
+    private func notifyFinishIfNeeded() {
+        guard !didNotifyFinish else {
             return
         }
-        process.terminate()
-        DispatchQueue.global().asyncAfter(deadline: .now() + 2) { [weak process] in
-            guard let process, process.isRunning else {
-                return
-            }
-            kill(process.processIdentifier, SIGKILL)
-        }
-    }
-
-    private func finish(exitCode: Int32) {
-        timeoutWorkItem?.cancel()
-        self.exitCode = exitCode
-        durationText = formattedDuration()
-
-        if didTimeout {
-            status = .timedOut
-        } else if didRequestStop {
-            status = .stopped
-        } else if exitCode == 0 {
-            status = .succeeded(exitCode)
-        } else {
-            status = .failed(exitCode)
-        }
-
-        appendOutput("\n退出码：\(exitCode) · 耗时：\(durationText)\n")
-        logCompletion(exitCode: exitCode)
-        releaseCommandScopedBookmarks()
-        bookmarkAccess = nil
+        didNotifyFinish = true
         onFinish()
     }
 
-    private func formattedDuration() -> String {
-        guard let startedAt else {
-            return "—"
-        }
-        let interval = Date().timeIntervalSince(startedAt)
-        return String(format: "%.1fs", interval)
-    }
-
-    private func durationMilliseconds() -> Int? {
-        guard let startedAt else {
-            return nil
-        }
-        return Int(Date().timeIntervalSince(startedAt) * 1000)
-    }
-
-    private func logCompletion(exitCode: Int32) {
-        let recordStatus: OperationRecordStatus
-        switch status {
-        case .succeeded:
-            recordStatus = .success
-        case .stopped:
-            recordStatus = .cancelled
-        default:
-            recordStatus = .failure
-        }
-        try? JSONLineOperationLog(url: paths.operationLogURL).append(
-            OperationRecord(
-                actionID: request.actionID,
-                kind: .runCommand,
-                status: recordStatus,
-                sourcePaths: request.context.selectedItems.map(\.path),
-                destinationPaths: [workingDirectory],
-                message: outputSummary.trimmingCharacters(in: .whitespacesAndNewlines),
-                commandExitCode: Int(exitCode),
-                durationMilliseconds: durationMilliseconds()
-            )
-        )
-    }
-
-    private func logFailure(message: String) {
-        try? JSONLineOperationLog(url: paths.operationLogURL).append(
-            OperationRecord(
-                actionID: request.actionID,
-                kind: .runCommand,
-                status: .failure,
-                sourcePaths: request.context.selectedItems.map(\.path),
-                destinationPaths: [request.context.targetDirectory.path],
-                message: message
-            )
-        )
-    }
 }
 
 final class CommandRunWindowCoordinator {
@@ -1890,7 +1693,7 @@ final class CommandRunWindowCoordinator {
         paths: RightClickProStoragePaths,
         onFinish: @escaping () -> Void
     ) {
-        let viewModel = CommandRunViewModel(request: request, paths: paths, onFinish: onFinish)
+        let viewModel = CommandRunViewModel(request: request, onFinish: onFinish)
         let view = CommandRunWindow(viewModel: viewModel)
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 860, height: 560),
@@ -3082,6 +2885,8 @@ struct OnboardingView: View {
                 FinderExtensionSetupBanner(viewModel: viewModel)
             }
 
+            FullDiskAccessBanner(viewModel: viewModel)
+
             HStack(alignment: .top, spacing: 40) {
                 VStack(alignment: .leading, spacing: 16) {
                     Text("功能总览")
@@ -3226,6 +3031,65 @@ struct FinderExtensionSetupBanner: View {
                 }
                 .fixedSize(horizontal: true, vertical: false)
             }
+        }
+    }
+}
+
+struct FullDiskAccessBanner: View {
+    @ObservedObject var viewModel: SettingsViewModel
+
+    var body: some View {
+        DesignPanel {
+            HStack(alignment: .center, spacing: 16) {
+                IconBadge(systemImage: "lock.shield", tint: fullDiskAccessTint)
+
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("完全磁盘访问权限")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(SettingsTheme.ink)
+                    Text("Finder 菜单会全局显示；文件动作和命令模板执行时依赖 macOS 的完全磁盘访问权限。\(viewModel.fullDiskAccessStatusMessage)")
+                        .font(.system(size: 12))
+                        .foregroundStyle(SettingsTheme.muted)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .layoutPriority(1)
+
+                Spacer(minLength: 12)
+
+                HStack(spacing: 10) {
+                    Button {
+                        viewModel.checkFullDiskAccess()
+                    } label: {
+                        Label("检查权限", systemImage: "checkmark.shield")
+                            .frame(minWidth: 104)
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.large)
+
+                    Button {
+                        viewModel.openFullDiskAccessSettings()
+                    } label: {
+                        Label("打开权限设置", systemImage: "gearshape")
+                            .frame(minWidth: 124)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
+                }
+                .fixedSize(horizontal: true, vertical: false)
+            }
+        }
+    }
+
+    private var fullDiskAccessTint: Color {
+        switch viewModel.fullDiskAccessStatusTone {
+        case .success:
+            return .green
+        case .warning:
+            return .orange
+        case .error:
+            return .red
+        case .neutral:
+            return SettingsTheme.accent
         }
     }
 }
@@ -5581,7 +5445,7 @@ struct CommandHintBanner: View {
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(.orange)
 
-            Text("命令只在已授权目录内运行；敏感环境变量存入 Keychain，不写入配置 JSON。")
+            Text("命令由 ActionRunner.xpc 执行；访问受 macOS 完全磁盘访问权限控制，敏感环境变量存入 Keychain。")
                 .font(.system(size: 13))
                 .foregroundStyle(SettingsTheme.muted)
                 .lineLimit(1)

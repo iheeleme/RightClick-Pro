@@ -24,7 +24,9 @@ App Group Container
 ├── config.json
 ├── bookmarks.json
 ├── cut-clipboard.json
-└── operation-log.jsonl
+├── operation-log.jsonl
+├── pending-command-run.json
+└── command-runs/
 ```
 
 Config writes use atomic file replacement via `Data.write(..., .atomic)`. Operation logs are stored as JSONL and capped to the latest 500 records by default.
@@ -35,15 +37,19 @@ Unsigned/local preview builds may not have an App Group entitlement. In that cas
 ~/Library/Application Support/com.iheeleme.rightclickpro
 ```
 
-On machines where `group.com.iheeleme.rightclickpro` is available, the app writes default preview configuration there. The bootstrapper injects existing Desktop, Downloads, Documents, and Code directories as monitored/common directories.
+On machines where `group.com.iheeleme.rightclickpro` is available, the app writes default preview configuration there. New installs inject existing Desktop and Downloads directories as shortcut targets. Existing bookmark entries are preserved during bootstrap and migration.
 
 ## Authorization Model
 
-The ActionRunner resolves monitored and common directory bookmarks before each request, starts security-scoped access when bookmark data exists, then builds an `AuthorizedPathValidator` from those resolved URLs. MVP file operations must target authorized paths only.
+Finder menu scope is global: the Finder Sync extension registers `/` with `FIFinderSyncController.directoryURLs` and no longer filters menu visibility by configured directories. Configured directories are shortcut targets only.
+
+The ActionRunner no longer treats configured directories as an authorization boundary. File actions and command templates attempt the requested file-system operation directly. When macOS denies access, user-facing failures point to System Settings > Privacy & Security > Full Disk Access. Directory bookmarks are still resolved opportunistically for shortcut destination actions and existing security-scoped bookmark data can help those paths, but real execution success is determined by macOS permissions.
+
+Command templates execute in `RightClickProActionRunner.xpc`. The main app still owns the command output window, but it starts/stops runs through XPC and polls `command-runs/<run-id>.json` snapshots for stdout/stderr chunks, final status, exit code, and duration.
 
 Finder Sync copies menu items through Finder before dispatching the selected command back to the extension. Do not rely on `representedObject` for action payloads there; leaf menu items use stable integer `tag` values that map back to pending actions held by `FinderSyncController`.
 
-Finder may cold-start the Finder Sync extension after a long idle period. The extension therefore sets a fast monitored-directory fallback first, loads config/bookmarks into memory, and serves `menu(for:)` from cached values instead of doing synchronous JSON/bootstrap work during the menu request. Background refresh keeps settings changes visible without blocking the first right-click menu.
+Finder may cold-start the Finder Sync extension after a long idle period. The extension therefore sets the global Finder Sync scope immediately, loads config/bookmarks into memory, and serves `menu(for:)` from cached values instead of doing synchronous JSON/bootstrap work during the menu request. Background refresh keeps settings changes visible without blocking the first right-click menu.
 
 ## Current Build Note
 
@@ -58,8 +64,8 @@ RightClick Pro.app
 
 The preview `.appex` is linked as an `_NSExtensionMain` executable so PlugInKit can discover it for local Finder Sync testing. A complete Xcode project plus Developer ID signing and notarization are still required before treating the artifact as a normal public macOS download.
 
-For local preview testing, the embedded ActionRunner XPC service is signed with the App Group entitlement but without the app sandbox entitlement. The code-level authorized-directory validator still constrains file mutations, while this avoids sandbox denial when exercising auto-injected Desktop/Documents/Downloads/Code paths before a real user-selected security-scoped bookmark flow is implemented.
+For local preview testing, the embedded ActionRunner XPC service is signed with the App Group entitlement but without the app sandbox entitlement. File actions and command templates rely on macOS Full Disk Access at execution time instead of a code-level configured-directory validator.
 
 On first app launch after a DMG install, the settings app asks the embedded ActionRunner XPC service to register the bundled Finder Sync extension with PlugInKit, request enablement, and reload Finder once for the current packaged extension signature. The signature includes filesystem resource identity for the `.appex`, its `Info.plist`, the extension executable, and the host app bundle, so replacing the same version at the same path still triggers one fresh preload. Successful setup is recorded in user defaults, so subsequent launches skip the repair until the physical packaged extension changes again. The same XPC maintenance path backs the manual "restart Finder" repair action, so the sandboxed app does not run `pluginkit` or signal Finder directly.
 
-Finder Sync receives parent sync roots instead of the exact configured directory paths. For example, a configured `~/Code` directory registers `~` with `FIFinderSyncController.directoryURLs`, then the extension filters each `FinderContext` back to the configured `~/Code` scope before returning menu items. This keeps the menu available in configured folders without making Finder sidebar favorites render with the RightClick Pro app icon.
+Finder Sync receives `/` as its sync root. Menu items remain visible globally; individual actions are still filtered by invocation shape such as container, selection, or toolbar.

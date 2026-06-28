@@ -66,15 +66,13 @@ public final class ActionRunner {
 
             let bookmarkAccess = try AuthorizedBookmarkAccess(
                 catalog: bookmarks,
-                ids: config.monitoredDirectoryIDs + config.commonDirectoryIDs,
+                ids: bookmarks.bookmarks.map(\.id),
                 resolver: bookmarkResolver
             )
-            let validator = AuthorizedPathValidator(authorizedDirectories: bookmarkAccess.urls)
             let result = try execute(
                 action,
                 config: config,
                 bookmarkAccess: bookmarkAccess,
-                validator: validator,
                 request: request
             )
             try log(action: action, request: request, result: result)
@@ -83,7 +81,7 @@ public final class ActionRunner {
             let result = ActionResult(
                 requestID: request.id,
                 status: .failure,
-                message: error.localizedDescription
+                message: FullDiskAccessAdvisor.userFacingMessage(for: error)
             )
             try? operationLog.append(
                 OperationRecord(
@@ -92,7 +90,7 @@ public final class ActionRunner {
                     status: .failure,
                     sourcePaths: request.context.selectedItems.map(\.path),
                     destinationPaths: [request.context.targetDirectory.path],
-                    message: error.localizedDescription
+                    message: result.message
                 )
             )
             return result
@@ -103,47 +101,37 @@ public final class ActionRunner {
         _ action: RightClickProAction,
         config: RightClickProConfig,
         bookmarkAccess: AuthorizedBookmarkAccess,
-        validator: AuthorizedPathValidator,
         request: ActionRequest
     ) throws -> ActionResult {
         switch action.kind {
         case .openDirectory:
             let directory = try directoryURL(from: action, bookmarkAccess: bookmarkAccess)
-            try validator.validate(directory)
             try urlOpener.open(directory)
             return ActionResult(requestID: request.id, status: .success, message: "已打开目录", affectedURLs: [directory])
 
         case .moveToDirectory:
             let directory = try directoryURL(from: action, bookmarkAccess: bookmarkAccess)
-            try validator.validate(request.context.selectedItems)
-            try validator.validate(directory)
             let outcomes = try fileService.move(request.context.selectedItems, to: directory)
             return ActionResult(requestID: request.id, status: .success, message: "移动完成", affectedURLs: outcomes.map(\.destinationURL))
 
         case .copyToDirectory:
             let directory = try directoryURL(from: action, bookmarkAccess: bookmarkAccess)
-            try validator.validate(request.context.selectedItems)
-            try validator.validate(directory)
             let outcomes = try fileService.copy(request.context.selectedItems, to: directory)
             return ActionResult(requestID: request.id, status: .success, message: "复制完成", affectedURLs: outcomes.map(\.destinationURL))
 
         case .cut:
-            try validator.validate(request.context.selectedItems)
             try cutClipboard.save(CutClipboardRecord(sourceURLs: request.context.selectedItems))
             return ActionResult(requestID: request.id, status: .success, message: "已记录剪切项目", affectedURLs: request.context.selectedItems)
 
         case .paste:
-            try validator.validate(request.context.targetDirectory)
             guard let record = try cutClipboard.load(), !record.sourceURLs.isEmpty else {
                 throw ActionRunnerError.emptyClipboard
             }
-            try validator.validate(record.sourceURLs)
             let outcomes = try fileService.move(record.sourceURLs, to: request.context.targetDirectory)
             try cutClipboard.clear()
             return ActionResult(requestID: request.id, status: .success, message: "粘贴完成", affectedURLs: outcomes.map(\.destinationURL))
 
         case .createFile:
-            try validator.validate(request.context.targetDirectory)
             let template = try fileTemplate(from: action, config: config)
             let outcome = try fileService.createFile(template: template, in: request.context.targetDirectory)
             return ActionResult(requestID: request.id, status: .success, message: "文件已创建", affectedURLs: [outcome.destinationURL])
@@ -151,7 +139,6 @@ public final class ActionRunner {
         case .openInApp:
             let entrypoint = try developerEntrypoint(from: action, config: config)
             let targetURL = developerTargetURL(for: entrypoint, context: request.context)
-            try validator.validate(targetURL)
             try developerAppOpener.open(entrypoint, targetURL: targetURL)
             return ActionResult(requestID: request.id, status: .success, message: "已打开开发者入口", affectedURLs: [targetURL])
 

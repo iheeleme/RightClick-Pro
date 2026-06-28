@@ -25,9 +25,8 @@ final class FinderSyncController: FIFinderSync {
         self.paths = paths
         self.configProvider = FileBackedRightClickProConfigProvider(paths: paths)
         super.init()
-        installFastMonitoredDirectoryFallback(paths: paths)
+        installGlobalFinderSyncScope()
         loadConfigurationForStartup(paths: paths)
-        reloadMonitoredDirectoriesFromCache()
         repairConfigurationInBackground(paths: paths)
     }
 
@@ -35,7 +34,7 @@ final class FinderSyncController: FIFinderSync {
         let context = finderContext(menuKind: menuKind)
         refreshConfigurationFromDiskIfNeeded()
 
-        guard hasLoadedConfiguration, isContextInsideMonitoredDirectories(context) else {
+        guard hasLoadedConfiguration else {
             return nil
         }
 
@@ -86,25 +85,8 @@ final class FinderSyncController: FIFinderSync {
         }
     }
 
-    private func installFastMonitoredDirectoryFallback(paths: RightClickProStoragePaths) {
-        if
-            FileManager.default.fileExists(atPath: paths.bookmarksURL.path),
-            let bookmarks = try? configProvider.loadBookmarkCatalog()
-        {
-            let urls = bookmarks.bookmarks.map { URL(fileURLWithPath: $0.path) }
-            if !urls.isEmpty {
-                FIFinderSyncController.default().directoryURLs = Set(FinderSyncScope.syncRoots(for: urls))
-                return
-            }
-        }
-
-        let defaultURLs = ConfigurationBootstrapper()
-            .defaultBookmarks()
-            .bookmarks
-            .map { URL(fileURLWithPath: $0.path) }
-        if !defaultURLs.isEmpty {
-            FIFinderSyncController.default().directoryURLs = Set(FinderSyncScope.syncRoots(for: defaultURLs))
-        }
+    private func installGlobalFinderSyncScope() {
+        FIFinderSyncController.default().directoryURLs = Set(FinderSyncScope.syncRoots())
     }
 
     private func repairConfigurationInBackground(paths: RightClickProStoragePaths) {
@@ -113,7 +95,7 @@ final class FinderSyncController: FIFinderSync {
                 let result = try ConfigurationBootstrapper().bootstrap(paths: paths)
                 DispatchQueue.main.async {
                     self?.applyCachedConfiguration(config: result.config, bookmarks: result.bookmarks)
-                    self?.reloadMonitoredDirectoriesFromCache()
+                    self?.installGlobalFinderSyncScope()
                 }
             } catch {
                 NSLog("RightClick Pro Finder extension background bootstrap failed: \(error.localizedDescription)")
@@ -139,7 +121,7 @@ final class FinderSyncController: FIFinderSync {
                 }
                 if loadedConfig != self.cachedConfig || loadedBookmarks != self.cachedBookmarks {
                     self.applyCachedConfiguration(config: loadedConfig, bookmarks: loadedBookmarks)
-                    self.reloadMonitoredDirectoriesFromCache()
+                    self.installGlobalFinderSyncScope()
                 } else {
                     self.lastCacheRefresh = Date()
                 }
@@ -152,21 +134,6 @@ final class FinderSyncController: FIFinderSync {
         cachedBookmarks = bookmarks
         hasLoadedConfiguration = true
         lastCacheRefresh = Date()
-    }
-
-    private func reloadMonitoredDirectoriesFromCache() {
-        guard hasLoadedConfiguration else {
-            return
-        }
-        let urls = cachedBookmarks.urls(for: cachedConfig.monitoredDirectoryIDs)
-        FIFinderSyncController.default().directoryURLs = Set(FinderSyncScope.syncRoots(for: urls))
-    }
-
-    private func isContextInsideMonitoredDirectories(_ context: FinderContext) -> Bool {
-        FinderSyncScope.contextIsInsideMonitoredDirectories(
-            context,
-            monitoredURLs: cachedBookmarks.urls(for: cachedConfig.monitoredDirectoryIDs)
-        )
     }
 
     private func finderContext(menuKind: FIMenuKind) -> FinderContext {

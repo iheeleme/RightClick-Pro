@@ -1,7 +1,7 @@
 import Foundation
 
 public enum RightClickProConstants {
-    public static let currentSchemaVersion = 1
+    public static let currentSchemaVersion = 2
     public static let defaultAppGroupIdentifier = "group.com.iheeleme.rightclickpro"
     public static let defaultXPCServiceName = "com.iheeleme.rightclickpro.ActionRunner"
     public static let finderExtensionBundleIdentifier = "com.iheeleme.rightclickpro.FinderExtension"
@@ -189,8 +189,7 @@ public struct DeveloperEntrypoint: Codable, Equatable, Identifiable {
 public struct RightClickProConfig: Codable, Equatable {
     public var schemaVersion: Int
     public var maxRootMenuActions: Int
-    public var monitoredDirectoryIDs: [String]
-    public var commonDirectoryIDs: [String]
+    public var shortcutDirectoryIDs: [String]
     public var actions: [RightClickProAction]
     public var fileTemplates: [FileTemplate]
     public var developerEntrypoints: [DeveloperEntrypoint]
@@ -199,8 +198,7 @@ public struct RightClickProConfig: Codable, Equatable {
     public init(
         schemaVersion: Int = RightClickProConstants.currentSchemaVersion,
         maxRootMenuActions: Int = RightClickProConstants.defaultMaxRootMenuActions,
-        monitoredDirectoryIDs: [String] = [],
-        commonDirectoryIDs: [String] = [],
+        shortcutDirectoryIDs: [String] = [],
         actions: [RightClickProAction] = RightClickProConfig.defaultActions(),
         fileTemplates: [FileTemplate] = RightClickProConfig.defaultFileTemplates(),
         developerEntrypoints: [DeveloperEntrypoint] = RightClickProConfig.defaultDeveloperEntrypoints(),
@@ -208,8 +206,7 @@ public struct RightClickProConfig: Codable, Equatable {
     ) {
         self.schemaVersion = schemaVersion
         self.maxRootMenuActions = maxRootMenuActions
-        self.monitoredDirectoryIDs = monitoredDirectoryIDs
-        self.commonDirectoryIDs = commonDirectoryIDs
+        self.shortcutDirectoryIDs = shortcutDirectoryIDs
         self.actions = actions
         self.fileTemplates = fileTemplates
         self.developerEntrypoints = developerEntrypoints
@@ -219,6 +216,7 @@ public struct RightClickProConfig: Codable, Equatable {
     enum CodingKeys: String, CodingKey {
         case schemaVersion
         case maxRootMenuActions
+        case shortcutDirectoryIDs
         case monitoredDirectoryIDs
         case commonDirectoryIDs
         case actions
@@ -231,12 +229,27 @@ public struct RightClickProConfig: Codable, Equatable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         self.schemaVersion = try container.decodeIfPresent(Int.self, forKey: .schemaVersion) ?? RightClickProConstants.currentSchemaVersion
         self.maxRootMenuActions = try container.decodeIfPresent(Int.self, forKey: .maxRootMenuActions) ?? RightClickProConstants.defaultMaxRootMenuActions
-        self.monitoredDirectoryIDs = try container.decodeIfPresent([String].self, forKey: .monitoredDirectoryIDs) ?? []
-        self.commonDirectoryIDs = try container.decodeIfPresent([String].self, forKey: .commonDirectoryIDs) ?? []
+        self.shortcutDirectoryIDs = try container.decodeIfPresent([String].self, forKey: .shortcutDirectoryIDs)
+            ?? container.decodeIfPresent([String].self, forKey: .commonDirectoryIDs)
+            ?? []
         self.actions = try container.decodeIfPresent([RightClickProAction].self, forKey: .actions) ?? RightClickProConfig.defaultActions()
         self.fileTemplates = try container.decodeIfPresent([FileTemplate].self, forKey: .fileTemplates) ?? RightClickProConfig.defaultFileTemplates()
         self.developerEntrypoints = try container.decodeIfPresent([DeveloperEntrypoint].self, forKey: .developerEntrypoints) ?? RightClickProConfig.defaultDeveloperEntrypoints()
         self.commandTemplates = try container.decodeIfPresent([CommandTemplate].self, forKey: .commandTemplates) ?? RightClickProConfig.defaultCommandTemplates()
+        if self.schemaVersion < RightClickProConstants.currentSchemaVersion {
+            self.schemaVersion = RightClickProConstants.currentSchemaVersion
+        }
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(RightClickProConstants.currentSchemaVersion, forKey: .schemaVersion)
+        try container.encode(maxRootMenuActions, forKey: .maxRootMenuActions)
+        try container.encode(shortcutDirectoryIDs, forKey: .shortcutDirectoryIDs)
+        try container.encode(actions, forKey: .actions)
+        try container.encode(fileTemplates, forKey: .fileTemplates)
+        try container.encode(developerEntrypoints, forKey: .developerEntrypoints)
+        try container.encode(commandTemplates, forKey: .commandTemplates)
     }
 
     public static func defaultFileTemplates() -> [FileTemplate] {

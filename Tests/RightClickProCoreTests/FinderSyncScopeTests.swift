@@ -2,33 +2,19 @@ import XCTest
 @testable import RightClickProCore
 
 final class FinderSyncScopeTests: XCTestCase {
-    func testSyncRootsUseParentDirectoryToAvoidMarkingSidebarFavoriteItself() {
-        let codeURL = URL(fileURLWithPath: "/Users/test/Code")
-        let downloadsURL = URL(fileURLWithPath: "/Users/test/Downloads")
+    func testSyncRootsUseGlobalRoot() {
+        let roots = FinderSyncScope.syncRoots()
 
-        let roots = FinderSyncScope.syncRoots(for: [codeURL, downloadsURL])
-
-        XCTAssertEqual(roots.map(\.path), ["/Users/test"])
+        XCTAssertEqual(roots.map(\.path), ["/"])
     }
 
-    func testContextFilterKeepsMenuScopedToConfiguredDirectory() {
-        let codeURL = URL(fileURLWithPath: "/Users/test/Code")
-        let insideCode = FinderContext(
-            invocation: .container,
-            targetDirectory: URL(fileURLWithPath: "/Users/test/Code/Project")
-        )
-        let outsideCode = FinderContext(
-            invocation: .container,
-            targetDirectory: URL(fileURLWithPath: "/Users/test/Desktop")
-        )
-        let selectedCode = FinderContext(
+    func testGlobalScopeAcceptsAnyFinderContext() {
+        let context = FinderContext(
             invocation: .selection,
-            targetDirectory: URL(fileURLWithPath: "/Users/test"),
-            selectedItems: [codeURL]
+            targetDirectory: URL(fileURLWithPath: "/System"),
+            selectedItems: [URL(fileURLWithPath: "/Users/test/Desktop/file.txt")]
         )
 
-        XCTAssertTrue(FinderSyncScope.contextIsInsideMonitoredDirectories(insideCode, monitoredURLs: [codeURL]))
-        XCTAssertTrue(FinderSyncScope.contextIsInsideMonitoredDirectories(selectedCode, monitoredURLs: [codeURL]))
-        XCTAssertFalse(FinderSyncScope.contextIsInsideMonitoredDirectories(outsideCode, monitoredURLs: [codeURL]))
+        XCTAssertTrue(FinderSyncScope.contextIsInGlobalScope(context))
     }
 }

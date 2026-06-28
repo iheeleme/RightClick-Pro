@@ -21,8 +21,8 @@ final class ConfigurationBootstrapperTests: XCTestCase {
 
         if !result.bookmarks.bookmarks.isEmpty {
             XCTAssertTrue(result.config.actions.contains { $0.kind == .openDirectory })
-            XCTAssertEqual(result.config.monitoredDirectoryIDs, result.bookmarks.bookmarks.map(\.id))
-            XCTAssertEqual(result.config.commonDirectoryIDs, result.bookmarks.bookmarks.map(\.id))
+            XCTAssertEqual(result.config.schemaVersion, 2)
+            XCTAssertEqual(result.config.shortcutDirectoryIDs, result.bookmarks.bookmarks.map(\.id))
         }
     }
 
@@ -104,7 +104,7 @@ final class ConfigurationBootstrapperTests: XCTestCase {
         XCTAssertEqual(savedBookmarks.bookmark(id: "desktop")?.bookmarkDataBase64, "bookmark-data")
         XCTAssertEqual(savedBookmarks.bookmark(id: "desktop")?.addedAt, createdAt)
         XCTAssertEqual(savedBookmarks.bookmark(id: "backup")?.path, unchangedPath)
-        XCTAssertEqual(result.config.monitoredDirectoryIDs, ["desktop", "backup"])
+        XCTAssertEqual(result.config.shortcutDirectoryIDs, ["desktop", "backup"])
     }
 
     func testBootstrapRepairsMissingDefaultDirectoryInjection() throws {
@@ -117,9 +117,9 @@ final class ConfigurationBootstrapperTests: XCTestCase {
             .appendingPathComponent("Data")
         let realHome = baseDirectory.appendingPathComponent("real-home")
         let desktop = realHome.appendingPathComponent("Desktop")
-        let code = realHome.appendingPathComponent("Code")
+        let downloads = realHome.appendingPathComponent("Downloads")
         try FileManager.default.createDirectory(at: desktop, withIntermediateDirectories: true)
-        try FileManager.default.createDirectory(at: code, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: downloads, withIntermediateDirectories: true)
 
         let existingBookmarks = DirectoryBookmarkCatalog(bookmarks: [
             DirectoryBookmark(id: "desktop", displayName: "桌面", path: desktop.path)
@@ -148,13 +148,13 @@ final class ConfigurationBootstrapperTests: XCTestCase {
 
         XCTAssertFalse(result.didCreateBookmarks)
         XCTAssertFalse(result.didCreateConfig)
-        XCTAssertEqual(savedBookmarks.bookmark(id: "code")?.path, code.path)
-        XCTAssertEqual(savedConfig.monitoredDirectoryIDs, ["desktop", "code"])
-        XCTAssertEqual(savedConfig.commonDirectoryIDs, ["desktop", "code"])
+        XCTAssertEqual(savedBookmarks.bookmark(id: "downloads")?.path, downloads.path)
+        XCTAssertNil(savedBookmarks.bookmark(id: "code"))
+        XCTAssertEqual(savedConfig.shortcutDirectoryIDs, ["desktop", "downloads"])
         XCTAssertTrue(savedConfig.actions.contains { $0.id == "custom-action" })
-        XCTAssertTrue(savedConfig.actions.contains { $0.id == "open-directory-code" })
-        XCTAssertTrue(savedConfig.actions.contains { $0.id == "move-to-code" })
-        XCTAssertTrue(savedConfig.actions.contains { $0.id == "copy-to-code" })
+        XCTAssertTrue(savedConfig.actions.contains { $0.id == "open-directory-downloads" })
+        XCTAssertTrue(savedConfig.actions.contains { $0.id == "move-to-downloads" })
+        XCTAssertTrue(savedConfig.actions.contains { $0.id == "copy-to-downloads" })
     }
 
     func testBootstrapRepairsMissingCommandActionsForExistingTemplates() throws {

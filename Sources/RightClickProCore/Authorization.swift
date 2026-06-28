@@ -1,48 +1,52 @@
 import Foundation
 
-public enum AuthorizationError: Error, Equatable, LocalizedError {
-    case unauthorizedPath(String)
+public enum FullDiskAccessAdvisor {
+    public static let guidance = "请在系统设置 > 隐私与安全性 > 完全磁盘访问权限中允许 RightClick Pro，然后重试。"
 
-    public var errorDescription: String? {
-        switch self {
-        case .unauthorizedPath(let path):
-            return "未授权目录：\(path)"
+    public static func userFacingMessage(for error: Error) -> String {
+        let message = error.localizedDescription
+        guard isLikelyPermissionError(error) else {
+            return message
         }
-    }
-}
-
-public struct AuthorizedPathValidator {
-    private let authorizedDirectories: [URL]
-
-    public init(authorizedDirectories: [URL]) {
-        self.authorizedDirectories = authorizedDirectories.map(Self.normalizedDirectory)
+        return "\(message)\n\(guidance)"
     }
 
-    public func validate(_ url: URL) throws {
-        guard isAuthorized(url) else {
-            throw AuthorizationError.unauthorizedPath(url.path)
+    public static func isLikelyPermissionError(_ error: Error) -> Bool {
+        let nsError = error as NSError
+        if nsError.domain == NSCocoaErrorDomain {
+            let permissionCodes: Set<Int> = [
+                NSFileReadNoPermissionError,
+                NSFileWriteNoPermissionError
+            ]
+            if permissionCodes.contains(nsError.code) {
+                return true
+            }
         }
-    }
 
-    public func validate(_ urls: [URL]) throws {
-        for url in urls {
-            try validate(url)
+        if nsError.domain == NSPOSIXErrorDomain {
+            return nsError.code == Int(EACCES) || nsError.code == Int(EPERM)
         }
+
+        let lowercased = nsError.localizedDescription.lowercased()
+        return lowercased.contains("operation not permitted") ||
+            lowercased.contains("permission denied") ||
+            lowercased.contains("not authorized")
     }
 
-    public func isAuthorized(_ url: URL) -> Bool {
-        let candidatePath = Self.normalizedURL(url).path
-        return authorizedDirectories.contains { directory in
-            let basePath = directory.path
-            return candidatePath == basePath || candidatePath.hasPrefix(basePath + "/")
+    public static func checkRepresentativeAccess(fileManager: FileManager = .default) -> Bool {
+        let protectedURLs = [
+            fileManager.homeDirectoryForCurrentUser.appendingPathComponent("Library/Mail"),
+            fileManager.homeDirectoryForCurrentUser.appendingPathComponent("Library/Messages"),
+            fileManager.homeDirectoryForCurrentUser.appendingPathComponent("Library/Safari")
+        ]
+
+        return protectedURLs.contains { url in
+            do {
+                _ = try fileManager.contentsOfDirectory(atPath: url.path)
+                return true
+            } catch {
+                return false
+            }
         }
-    }
-
-    private static func normalizedDirectory(_ url: URL) -> URL {
-        normalizedURL(url)
-    }
-
-    private static func normalizedURL(_ url: URL) -> URL {
-        url.standardizedFileURL.resolvingSymlinksInPath()
     }
 }

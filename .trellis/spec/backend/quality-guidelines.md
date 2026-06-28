@@ -55,6 +55,148 @@ RightClick Pro quality checks center on SwiftPM compilation/tests, Finder extens
 - Does settings UI mutate through `SettingsViewModel` commands?
 - Does packaging still produce a discoverable Finder Sync `.appex` and both ActionRunner XPC placements?
 
+### Scenario: Global Finder Scope and Full Disk Access Runtime
+
+#### 1. Scope / Trigger
+
+- Trigger: changes to `RightClickProConfig`, `FinderSyncScope`, `FinderSyncController`, `ActionRunner`, directory bookmarks, or file-operation permission handling.
+- This is a cross-layer contract because config JSON, Finder Sync menu visibility, XPC action execution, settings UI copy, and operation logs must describe the same authorization model.
+
+#### 2. Signatures
+
+- Persisted config v2:
+  ```swift
+  RightClickProConfig(schemaVersion: 2, shortcutDirectoryIDs: ["desktop", "downloads"])
+  ```
+- Finder Sync scope:
+  ```swift
+  FinderSyncScope.syncRoots() == [URL(fileURLWithPath: "/")]
+  ```
+- Runtime failure copy:
+  ```swift
+  FullDiskAccessAdvisor.userFacingMessage(for: error)
+  ```
+
+#### 3. Contracts
+
+- `shortcutDirectoryIDs` is only a shortcut-target list for directory menu actions.
+- `monitoredDirectoryIDs` is legacy decode input only and must not be encoded in new config JSON.
+- v1 `commonDirectoryIDs` migrates to v2 `shortcutDirectoryIDs`; v1 `monitoredDirectoryIDs` is discarded.
+- Finder menus are globally visible once config is loaded; individual action visibility still depends on `ActionVisibility` and invocation shape.
+- File actions attempt real file operations and let macOS permission results determine success or failure.
+- Permission-like failures must include Full Disk Access guidance.
+
+#### 4. Validation & Error Matrix
+
+- Old config has `commonDirectoryIDs` -> decode into `shortcutDirectoryIDs`.
+- Old config has `monitoredDirectoryIDs` only -> do not use it for menu scope or runtime authorization.
+- File operation fails with `EPERM`, `EACCES`, or Cocoa no-permission errors -> append Full Disk Access guidance.
+- Finder context outside shortcut directories -> still build a menu when actions match the invocation.
+
+#### 5. Good/Base/Bad Cases
+
+- Good: right-clicking `/System` still shows eligible menu items; execution may fail with Full Disk Access guidance.
+- Good: new installs default to Desktop and Downloads shortcuts only.
+- Base: existing custom bookmark entries stay in `bookmarks.json` during bootstrap.
+- Bad: adding a new check that hides Finder menus outside `shortcutDirectoryIDs`.
+- Bad: reintroducing `AuthorizedPathValidator` or any configured-directory allowlist as the file-action boundary.
+
+#### 6. Tests Required
+
+- Codable migration: v1 `commonDirectoryIDs` -> v2 `shortcutDirectoryIDs`; old keys omitted on encode.
+- Finder scope: `FinderSyncScope.syncRoots()` returns `/`.
+- ActionRunner: file actions succeed in temporary directories even when `shortcutDirectoryIDs` is empty.
+- Bootstrap: default bookmarks exclude Documents and Code for new installs while preserving existing bookmarks.
+
+#### 7. Wrong vs Correct
+
+Wrong:
+```swift
+let validator = AuthorizedPathValidator(authorizedDirectories: shortcutURLs)
+try validator.validate(request.context.targetDirectory)
+```
+
+Correct:
+```swift
+let result = try fileService.createFile(template: template, in: request.context.targetDirectory)
+```
+
+### Scenario: XPC-Owned Command Template Runs
+
+#### 1. Scope / Trigger
+
+- Trigger: changes to `.runCommand` actions, `PendingCommandRunRequest`, `RightClickProActionRunnerXPCProtocol`, `CommandRunService`, command output windows, command environment variables, or command operation logging.
+- This is a cross-process execution contract because Finder queues intent, the main app displays output, and `ActionRunner.xpc` owns the `Process`.
+
+#### 2. Signatures
+
+- XPC protocol:
+  ```swift
+  startCommandRun(requestData:reply:)
+  commandRunStatus(requestData:reply:)
+  stopCommandRun(requestData:reply:)
+  ```
+- Shared snapshot:
+  ```swift
+  CommandRunSnapshot(
+      id: request.id,
+      actionID: request.actionID,
+      status: .running,
+      outputChunks: [CommandRunOutputChunk(stream: .stdout, text: "...")]
+  )
+  ```
+- Storage:
+  ```text
+  command-runs/<run-id>.json
+  ```
+
+#### 3. Contracts
+
+- Finder extension may still queue `PendingCommandRunRequest` and wake the main app, but it must not run shell commands.
+- Main app command windows start/stop commands through XPC and poll shared snapshots for realtime output.
+- `ActionRunner.xpc` owns `/bin/zsh`, stdout/stderr pipes, timeout, stop/kill escalation, and final operation logging.
+- Sensitive environment variables are loaded through `CommandSecretStoring`; they must not be written to snapshots or config JSON.
+- Snapshot output chunks may include `.system`, `.stdout`, and `.stderr`; UI can render `combinedOutput`.
+
+#### 4. Validation & Error Matrix
+
+- Missing action/template -> `.error` snapshot and failure operation log.
+- Working directory unreadable -> `.error` snapshot with Full Disk Access guidance.
+- Timeout -> append timeout system chunk, terminate process, final status `.timedOut`.
+- User stop -> append stop system chunk, terminate process, final status `.stopped`.
+- XPC unavailable from UI -> command window shows an error and refreshes operation history once.
+
+#### 5. Good/Base/Bad Cases
+
+- Good: a quick command writes stdout to `command-runs/<id>.json` and logs success with exit code/duration.
+- Good: stop from the command window asks XPC to stop the process and the final snapshot becomes `.stopped`.
+- Base: old pending command payloads without scoped bookmarks still decode.
+- Bad: `CommandRunViewModel` creates `Process()` directly in the main app.
+- Bad: Finder extension sends scoped bookmark data for command execution.
+
+#### 6. Tests Required
+
+- Unit-test `CommandRunService` success path with snapshot output and success operation log.
+- Unit-test `CommandRunService.stop(runID:)` with final `.stopped` status.
+- Codable regression for `PendingCommandRunRequest` legacy scoped-bookmark fields.
+- Direct typecheck or package check for App, Finder extension, XPC service, and Core after protocol changes.
+
+#### 7. Wrong vs Correct
+
+Wrong:
+```swift
+let process = Process()
+try process.run()
+```
+inside `CommandRunViewModel`.
+
+Correct:
+```swift
+actionRunnerClient.startCommandRun(request) { result in
+    // Render CommandRunSnapshot from ActionRunner.xpc.
+}
+```
+
 ### Scenario: Finder Command Template Authorization
 
 #### 1. Scope / Trigger
