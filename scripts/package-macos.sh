@@ -489,14 +489,15 @@ ${APP_NAME} 内测构建
 也可以在 Finder 中右键 "${APP_NAME}.app"，选择“打开”，再确认打开。
 
 启用 Finder Extension
-1. 打开 ${APP_NAME}。
-2. 前往 系统设置 > 隐私与安全性 > 扩展 > Finder 扩展。
+1. 打开 ${APP_NAME}，App 会自动注册并尝试启用 Finder Extension。
+2. 如果系统要求手动确认，请前往 系统设置 > 隐私与安全性 > 扩展 > Finder 扩展。
 3. 启用 "${APP_NAME} Finder Extension"。
 
 如果 Finder 右键菜单没有出现
-1. 确认 Finder 扩展已启用。
-2. 重新打开 Finder 右键菜单。
-3. 如仍未出现，重启 Finder：
+1. 在 ${APP_NAME} 概览页点击“重启 Finder”，App 会重新注册扩展并重启 Finder。
+2. 确认 Finder 扩展已启用。
+3. 重新打开 Finder 右键菜单。
+4. 如仍未出现，可在终端手动运行：
    killall Finder
 
 技术信息

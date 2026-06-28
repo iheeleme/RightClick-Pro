@@ -20,6 +20,7 @@ Reference file: `Sources/RightClickProAppPreview/RightClickProAppPreview.swift`.
 - Directory add/edit/delete operations currently save immediately through `saveDirectoryChanges`.
 - Template/action/developer edits mark unsaved changes and require the main save action.
 - `reloadRecentOperations()` reads `operation-log.jsonl` and keeps the latest 80 reversed for display.
+- Finder menu repair state lives in `SettingsViewModel.isRepairingFinderMenu`; the ViewModel sends `SystemMaintenanceRequest` through ActionRunner XPC instead of running system commands directly from SwiftUI.
 
 ## Command Rules
 
@@ -29,6 +30,7 @@ Use command methods for mutations:
 - Templates: `upsertTemplate`, `deleteTemplate`, `moveTemplate`.
 - Developer entries: `upsertDeveloperEntrypoint`, `deleteDeveloperEntrypoint`, `moveDeveloperEntrypoint`.
 - Directories: `addDirectoryBookmarkFromPanel`, `replaceDirectoryBookmarkFromPanel`, `deleteDirectoryBookmark`, `setDirectoryBookmarkEnabled`, `moveDirectoryBookmark`.
+- Finder repair: `repairFinderContextMenu(restartFinder:userInitiated:)` and `restartFinder()`.
 
 Commands must keep related config references synchronized. Examples:
 
@@ -53,6 +55,7 @@ Use `SettingsValidationError` for user-facing save errors.
 ## Anti-Patterns
 
 - Do not mutate `config.actions` from child views without a ViewModel command.
+- Do not run `pluginkit`, `killall`, or `osascript` directly from SwiftUI views; route Finder menu repair through `SettingsViewModel` and ActionRunner XPC.
 - Do not let an action lose all `ActionVisibility` cases.
 - Do not add config entries without back-reference actions.
 - Do not treat a preview-only filter/sort as persisted unless it updates `RightClickProConfig`.

@@ -30,6 +30,7 @@ Packaging scripts should fail loudly for hard gates and stay best-effort for loc
 
 - Hard gates: unsupported config, invalid Xcode env pairing, missing icon source, invalid Finder extension binary, missing XPC service, deep codesign verification.
 - Best effort: `pluginkit` unavailable or local `pluginkit -a` / `pluginkit -e use` failures.
+- Runtime Finder menu repair should return concise user-facing diagnostics through `SystemMaintenanceResult`; do not print noisy command output from the App UI.
 
 Reference file: `scripts/package-macos.sh`.
 

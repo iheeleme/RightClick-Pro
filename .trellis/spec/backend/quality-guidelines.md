@@ -269,6 +269,15 @@ case .currentDirectory:
   pluginkit -a "$appex_path"
   pluginkit -e use -i "$FINDER_EXTENSION_BUNDLE_IDENTIFIER"
   ```
+- Runtime Finder menu repair path:
+  ```swift
+  RightClickProActionRunnerXPCClient().performMaintenance(
+      SystemMaintenanceRequest(
+          task: .repairFinderContextMenu,
+          finderExtensionPath: bundledAppexPath
+      )
+  )
+  ```
 - Optional Xcode archive inputs:
   ```text
   RIGHTCLICKPRO_XCODE_PROJECT=<path-to-xcodeproj>
@@ -309,6 +318,8 @@ case .currentDirectory:
 - The preview app, XPC service, Finder extension, and their embedded `libRightClickProCore.dylib` copies must be signed before zipping. Ad-hoc signing is acceptable for local test artifacts; public distribution still requires Developer ID signing and notarization.
 - The packaging script must validate the preview bundle before upload so CI cannot publish an artifact that lacks a discoverable Finder Sync extension.
 - For local preview smoke tests, the packaging script should explicitly register the just-built `.appex` path with `pluginkit -a` before applying `pluginkit -e use`; enabling by identifier alone only affects already-discovered extension records and may miss reinstalls.
+- After a DMG install, the settings app must not assume build-time PlugInKit registration exists on the user's machine. On launch it should ask the embedded ActionRunner XPC service to register the bundled `.appex` and request enablement.
+- Finder restart/repair controls should also run through the ActionRunner XPC maintenance path because the menu-bar app is sandboxed; direct `killall Finder` or `pluginkit` from the app can fail.
 - When both `RIGHTCLICKPRO_XCODE_PROJECT` and `RIGHTCLICKPRO_XCODE_SCHEME` are configured, packaging must use `xcodebuild archive`.
 - If only one Xcode variable is configured, packaging must fail instead of silently falling back to SwiftPM preview output.
 - Zip artifacts are written to `dist/RightClick Pro-<version>-<arch>-preview.zip`.
@@ -338,6 +349,9 @@ case .currentDirectory:
 - Preview deep code-sign verification fails -> packaging fails before zip upload.
 - `pluginkit` unavailable on the runner -> skip registration/enablement without failing packaging.
 - `pluginkit -a` or `pluginkit -e use` fails during local preview enablement -> do not fail packaging; the bundle validation remains the hard gate.
+- Runtime maintenance cannot find bundled `RightClickProFinderExtension.appex` -> show a user-facing error that the app should be installed from the DMG into Applications.
+- Runtime maintenance XPC is unavailable -> show a user-facing error and keep the manual System Settings fallback available.
+- Direct sandboxed app `killall Finder` fails -> bug; restart should be delegated to the unsandboxed ActionRunner XPC maintenance service.
 - No `dist/*.zip` output in GitHub Actions -> artifact upload must fail.
 - DMG smoke mount lacks `RightClick Pro.app`, `Applications`, or `README.txt` -> exit 65.
 
@@ -348,10 +362,13 @@ case .currentDirectory:
 - Good: Finder starts the extension before the app has opened; the extension bootstraps config/bookmarks and assigns real-home Desktop/Downloads/Documents/Code URLs to `directoryURLs`.
 - Good: an older install has Desktop/Downloads/Documents only and `~/Code` exists; bootstrap appends the `code` bookmark, monitors it, and adds `open-directory-code`, `move-to-code`, and `copy-to-code`.
 - Good: rebuilding/reinstalling a local preview registers the new `RightClickProFinderExtension.appex` path, then enables `com.iheeleme.rightclickpro.FinderExtension`.
+- Good: first app launch after dragging from the DMG registers `Contents/PlugIns/RightClickProFinderExtension.appex` through ActionRunner XPC, so PlugInKit can discover the right physical extension path on that machine.
+- Good: clicking "重启 Finder" asks ActionRunner XPC to register/enable the extension and then restart Finder; if `killall Finder` fails, the service tries an AppleScript fallback and reports diagnostics.
 - Base: manual workflow dispatch with no Xcode env vars produces a SwiftPM preview bundle with App, app-local XPC service, extension-local XPC service, Finder extension, and shared core dylib.
 - Base: manual workflow dispatch with `package_dmg=false` uploads only zip output in a clean runner workspace.
 - Bad: bootstrap writes `~/Library/Containers/com.iheeleme.rightclickpro/Data/Desktop` as a monitored directory, so the Finder menu never appears on the user's real Desktop.
 - Bad: the packaging script only runs `pluginkit -e use -i com.iheeleme.rightclickpro.FinderExtension`; after reinstall, PlugInKit may still know only an old or missing physical extension path.
+- Bad: the sandboxed menu-bar app directly runs `/usr/bin/killall Finder`, then reports failure even though the embedded unsandboxed XPC service could perform the repair.
 - Bad: workflow upload glob includes `.dmg` but the runner workspace contains a stale DMG from an unrelated previous build.
 - Bad: `RIGHTCLICKPRO_XCODE_PROJECT` set without `RIGHTCLICKPRO_XCODE_SCHEME` silently falls back to preview bundling.
 - Bad: preview bundle contains `Contents/PlugIns/RightClickProFinderExtension.appex` but the appex executable is a `DYLIB`.

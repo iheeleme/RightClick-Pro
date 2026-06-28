@@ -4,6 +4,7 @@ public enum RightClickProConstants {
     public static let currentSchemaVersion = 1
     public static let defaultAppGroupIdentifier = "group.com.iheeleme.rightclickpro"
     public static let defaultXPCServiceName = "com.iheeleme.rightclickpro.ActionRunner"
+    public static let finderExtensionBundleIdentifier = "com.iheeleme.rightclickpro.FinderExtension"
     public static let defaultMaxRootMenuActions = 5
 }
 

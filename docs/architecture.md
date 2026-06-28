@@ -57,3 +57,5 @@ RightClick Pro.app
 The preview `.appex` is linked as an `_NSExtensionMain` executable so PlugInKit can discover it for local Finder Sync testing. A complete Xcode project plus Developer ID signing and notarization are still required before treating the artifact as a normal public macOS download.
 
 For local preview testing, the embedded ActionRunner XPC service is signed with the App Group entitlement but without the app sandbox entitlement. The code-level authorized-directory validator still constrains file mutations, while this avoids sandbox denial when exercising auto-injected Desktop/Documents/Downloads/Code paths before a real user-selected security-scoped bookmark flow is implemented.
+
+On first app launch after a DMG install, the settings app asks the embedded ActionRunner XPC service to register the bundled Finder Sync extension with PlugInKit and request enablement. The same XPC maintenance path backs the "restart Finder" repair action, so the sandboxed app does not run `pluginkit` or signal Finder directly.

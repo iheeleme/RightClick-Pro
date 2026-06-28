@@ -158,9 +158,11 @@ final class SettingsViewModel: NSObject, ObservableObject {
     @Published var templateAddRequest = 0
     @Published var commandTemplateAddRequest = 0
     @Published var actionSearchText = ""
+    @Published var isRepairingFinderMenu = false
 
     private var paths = RightClickProStoragePaths.defaultForCurrentProcess()
     private let commandSecretStore = KeychainCommandSecretStore()
+    private let actionRunnerClient = RightClickProActionRunnerXPCClient()
 
     override init() {
         super.init()
@@ -186,6 +188,7 @@ final class SettingsViewModel: NSObject, ObservableObject {
     static func bootstrap() -> SettingsViewModel {
         let viewModel = SettingsViewModel()
         viewModel.loadOrBootstrap()
+        viewModel.scheduleFinderExtensionRegistration()
         return viewModel
     }
 
@@ -299,32 +302,40 @@ final class SettingsViewModel: NSObject, ObservableObject {
     }
 
     func restartFinder() {
-        setStatus("正在重启 Finder，Finder 窗口会短暂关闭并重新打开", tone: .warning)
+        repairFinderContextMenu(restartFinder: true, userInitiated: true)
+    }
 
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            let process = Process()
-            process.executableURL = URL(fileURLWithPath: "/usr/bin/killall")
-            process.arguments = ["Finder"]
+    func repairFinderContextMenu(restartFinder: Bool = true, userInitiated: Bool = true) {
+        guard !isRepairingFinderMenu else {
+            return
+        }
 
-            let message: String
-            let tone: StatusTone
-            do {
-                try process.run()
-                process.waitUntilExit()
-                if process.terminationStatus == 0 {
-                    message = "Finder 已重启，请重新打开右键菜单检查扩展入口"
-                    tone = .success
-                } else {
-                    message = "重启 Finder 失败，请在终端手动运行 killall Finder"
-                    tone = .error
-                }
-            } catch {
-                message = "重启 Finder 失败：\(error.localizedDescription)"
-                tone = .error
+        guard let appexURL = bundledFinderExtensionURL() else {
+            if userInitiated {
+                setStatus("找不到随 App 打包的 Finder Extension，请确认已从 DMG 拖入 Applications 后再打开", tone: .error)
             }
+            return
+        }
 
+        isRepairingFinderMenu = true
+        if userInitiated {
+            setStatus(
+                restartFinder ? "正在修复右键菜单并重启 Finder..." : "正在注册 Finder Extension...",
+                tone: .warning
+            )
+        }
+
+        let task: SystemMaintenanceTask = restartFinder ? .repairFinderContextMenu : .installFinderExtension
+        let request = SystemMaintenanceRequest(task: task, finderExtensionPath: appexURL.path)
+
+        actionRunnerClient.performMaintenance(request) { [weak self] response in
             DispatchQueue.main.async {
-                self?.setStatus(message, tone: tone)
+                self?.isRepairingFinderMenu = false
+                self?.handleFinderMaintenanceResponse(
+                    response,
+                    didRequestRestart: restartFinder,
+                    userInitiated: userInitiated
+                )
             }
         }
     }
@@ -705,6 +716,61 @@ final class SettingsViewModel: NSObject, ObservableObject {
         storagePath = result.paths.baseURL.path
         hasUnsavedChanges = false
         recentOperations = (try? JSONLineOperationLog(url: result.paths.operationLogURL).loadRecent().suffix(80).reversed()) ?? []
+    }
+
+    private func scheduleFinderExtensionRegistration() {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { [weak self] in
+            self?.repairFinderContextMenu(restartFinder: false, userInitiated: false)
+        }
+    }
+
+    private func bundledFinderExtensionURL() -> URL? {
+        let pluginName = "RightClickProFinderExtension.appex"
+        let candidates = [
+            Bundle.main.builtInPlugInsURL?.appendingPathComponent(pluginName),
+            Bundle.main.bundleURL
+                .appendingPathComponent("Contents")
+                .appendingPathComponent("PlugIns")
+                .appendingPathComponent(pluginName)
+        ].compactMap { $0 }
+
+        return candidates.first { FileManager.default.fileExists(atPath: $0.path) }
+    }
+
+    private func handleFinderMaintenanceResponse(
+        _ response: Result<SystemMaintenanceResult, Error>,
+        didRequestRestart: Bool,
+        userInitiated: Bool
+    ) {
+        switch response {
+        case .success(let result):
+            if result.isSuccess {
+                if didRequestRestart {
+                    setStatus("右键菜单已修复：Finder Extension 已注册并已重启 Finder", tone: .success)
+                } else if userInitiated {
+                    setStatus("Finder Extension 已注册，请重新打开右键菜单检查入口", tone: .success)
+                } else {
+                    setStatus("Finder Extension 已自动注册；如右键菜单未出现，请点“重启 Finder”", tone: .success)
+                }
+                return
+            }
+
+            let detail = result.errors.first ?? "未知错误"
+            if result.didRegisterFinderExtension || result.didEnableFinderExtension || result.didRestartFinder {
+                setStatus("右键菜单部分修复完成，但仍需手动确认：\(detail)", tone: .warning)
+            } else if userInitiated {
+                setStatus("修复右键菜单失败：\(detail)", tone: .error)
+            } else {
+                setStatus("Finder Extension 自动注册失败：\(detail)", tone: .warning)
+            }
+        case .failure(let error):
+            let message = "ActionRunner XPC 服务不可用：\(error.localizedDescription)"
+            if userInitiated {
+                setStatus("修复右键菜单失败：\(message)", tone: .error)
+            } else {
+                setStatus("Finder Extension 自动注册失败：\(message)", tone: .warning)
+            }
+        }
     }
 
     private func updateAction(_ actionID: String, mutate: (inout RightClickProAction) -> Void) {
@@ -3053,7 +3119,7 @@ struct FinderExtensionSetupBanner: View {
                     Text("启用 Finder 扩展")
                         .font(.system(size: 15, weight: .semibold))
                         .foregroundStyle(SettingsTheme.ink)
-                    Text("在系统设置里启用 \(AppMetadata.displayName) Finder Extension；如果菜单仍未出现，重启 Finder 会短暂关闭并重新打开 Finder 窗口。")
+                    Text("\(AppMetadata.displayName) 会自动注册 Finder Extension；如果菜单仍未出现，点重启 Finder 会重新加载扩展并短暂关闭 Finder 窗口。")
                         .font(.system(size: 12))
                         .foregroundStyle(SettingsTheme.muted)
                         .fixedSize(horizontal: false, vertical: true)
@@ -3076,11 +3142,12 @@ struct FinderExtensionSetupBanner: View {
                     Button {
                         viewModel.restartFinder()
                     } label: {
-                        Label("重启 Finder", systemImage: "arrow.clockwise")
-                            .frame(minWidth: 96)
+                        Label(viewModel.isRepairingFinderMenu ? "修复中..." : "重启 Finder", systemImage: "arrow.clockwise")
+                            .frame(minWidth: 104)
                     }
                     .buttonStyle(.bordered)
                     .controlSize(.large)
+                    .disabled(viewModel.isRepairingFinderMenu)
                     .help("会短暂关闭并重新打开 Finder 窗口")
                 }
                 .fixedSize(horizontal: true, vertical: false)
