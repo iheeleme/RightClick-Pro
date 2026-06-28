@@ -48,6 +48,22 @@ final class AppOpeningTests: XCTestCase {
         )
     }
 
+    func testTerminalUsesParentDirectoryForFileTargets() throws {
+        let appURL = try fakeApp(named: "Terminal", executablePaths: [])
+        let workspaceURL = try temporaryDirectory()
+        let fileURL = workspaceURL.appendingPathComponent("README.md")
+        try "# Test\n".write(to: fileURL, atomically: true, encoding: .utf8)
+        let entrypoint = DeveloperEntrypoint(
+            id: "developer-terminal",
+            title: "在 Terminal 打开",
+            bundleIdentifier: "com.apple.Terminal"
+        )
+
+        let plan = DeveloperAppOpenPlanner.plan(for: entrypoint, targetURL: fileURL, appURL: appURL)
+
+        XCTAssertEqual(plan, .application(appURL: appURL, targetURL: workspaceURL))
+    }
+
     func testVSCodeFamilyAppsUseBundledEditorCLI() throws {
         let cases: [(String, String, String)] = [
             ("Visual Studio Code", "com.microsoft.VSCode", "Contents/Resources/app/bin/code"),

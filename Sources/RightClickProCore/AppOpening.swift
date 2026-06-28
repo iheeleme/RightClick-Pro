@@ -40,6 +40,10 @@ enum DeveloperAppOpenPlanner {
         fileManager: FileManager = .default
     ) -> DeveloperAppOpenPlan {
         let workspaceURL = workspaceURL(for: targetURL, fileManager: fileManager)
+        if isTerminalApp(entrypoint: entrypoint, appURL: appURL) {
+            return .application(appURL: appURL, targetURL: workspaceURL)
+        }
+
         if let command = workspaceCommand(
             for: entrypoint,
             appURL: appURL,
@@ -175,6 +179,22 @@ enum DeveloperAppOpenPlanner {
         }
 
         return []
+    }
+
+    private static func isTerminalApp(entrypoint: DeveloperEntrypoint, appURL: URL) -> Bool {
+        let bundleIdentifier = entrypoint.bundleIdentifier.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let appName = appURL.deletingPathExtension().lastPathComponent.lowercased()
+        let title = entrypoint.title.lowercased()
+        let identity = "\(bundleIdentifier) \(appName) \(title)"
+        return [
+            "com.apple.terminal",
+            "com.googlecode.iterm2",
+            "terminal",
+            "iterm",
+            "warp",
+            "alacritty",
+            "kitty"
+        ].contains { identity.contains($0) }
     }
 
     private static func isJetBrainsApp(_ identity: String) -> Bool {
