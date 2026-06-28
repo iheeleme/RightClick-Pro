@@ -20,7 +20,8 @@ Reference file: `Sources/RightClickProAppPreview/RightClickProAppPreview.swift`.
 - Directory add/edit/delete operations currently save immediately through `saveDirectoryChanges`.
 - Template/action/developer edits mark unsaved changes and require the main save action.
 - `reloadRecentOperations()` reads `operation-log.jsonl` and keeps the latest 80 reversed for display.
-- Finder menu repair state lives in `SettingsViewModel.isRepairingFinderMenu`; the ViewModel sends `SystemMaintenanceRequest` through ActionRunner XPC instead of running system commands directly from SwiftUI.
+- Finder menu repair state lives in `SettingsViewModel.isRepairingFinderMenu`, `finderExtensionNeedsAttention`, and `finderExtensionSetupMessage`; the ViewModel sends `SystemMaintenanceRequest` through ActionRunner XPC instead of running system commands directly from SwiftUI.
+- Successful automatic Finder extension setup is keyed by the bundled `.appex` executable signature in `UserDefaults`; skip repeated Finder restarts when the same extension was already repaired.
 
 ## Command Rules
 
@@ -56,6 +57,7 @@ Use `SettingsValidationError` for user-facing save errors.
 
 - Do not mutate `config.actions` from child views without a ViewModel command.
 - Do not run `pluginkit`, `killall`, or `osascript` directly from SwiftUI views; route Finder menu repair through `SettingsViewModel` and ActionRunner XPC.
+- Do not show the Finder Extension setup banner after automatic setup succeeds; show it only when setup fails or needs manual attention.
 - Do not let an action lose all `ActionVisibility` cases.
 - Do not add config entries without back-reference actions.
 - Do not treat a preview-only filter/sort as persisted unless it updates `RightClickProConfig`.

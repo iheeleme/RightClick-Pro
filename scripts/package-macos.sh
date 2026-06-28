@@ -490,6 +490,7 @@ ${APP_NAME} 内测构建
 
 启用 Finder Extension
 1. 打开 ${APP_NAME}，App 会自动注册并尝试启用 Finder Extension。
+   首次完成注入时，Finder 可能会被自动重新加载一次，以便右键菜单更快出现。
 2. 如果系统要求手动确认，请前往 系统设置 > 隐私与安全性 > 扩展 > Finder 扩展。
 3. 启用 "${APP_NAME} Finder Extension"。
 
