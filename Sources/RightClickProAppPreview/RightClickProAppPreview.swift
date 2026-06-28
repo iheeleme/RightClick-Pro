@@ -1685,7 +1685,7 @@ final class CommandRunViewModel: ObservableObject {
     private let onFinish: () -> Void
     private let actionRunnerClient = RightClickProActionRunnerXPCClient()
     private var didNotifyFinish = false
-    private var pollTimer: Timer?
+    private var pollTask: Task<Void, Never>?
 
     init(
         request: PendingCommandRunRequest,
@@ -1696,11 +1696,11 @@ final class CommandRunViewModel: ObservableObject {
     }
 
     deinit {
-        pollTimer?.invalidate()
+        pollTask?.cancel()
     }
 
     func start() {
-        guard pollTimer == nil, !statusIsTerminal else {
+        guard pollTask == nil, !statusIsTerminal else {
             return
         }
 
@@ -1757,10 +1757,14 @@ final class CommandRunViewModel: ObservableObject {
     }
 
     private func scheduleStatusPolling() {
-        pollTimer?.invalidate()
-        pollTimer = Timer.scheduledTimer(withTimeInterval: 0.3, repeats: true) { [weak self] _ in
-            Task { @MainActor [weak self] in
-                self?.pollStatus()
+        pollTask?.cancel()
+        pollTask = Task { @MainActor [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 300_000_000)
+                guard !Task.isCancelled, let self else {
+                    return
+                }
+                self.pollStatus()
             }
         }
     }
@@ -1777,8 +1781,8 @@ final class CommandRunViewModel: ObservableObject {
                 case .success(let snapshot):
                     viewModel.apply(snapshot: snapshot)
                 case .failure(let errorMessage):
-                    viewModel.pollTimer?.invalidate()
-                    viewModel.pollTimer = nil
+                    viewModel.pollTask?.cancel()
+                    viewModel.pollTask = nil
                     viewModel.status = .error(errorMessage)
                     viewModel.output += "\n读取命令状态失败：\(errorMessage)\n"
                     viewModel.notifyFinishIfNeeded()
@@ -1797,8 +1801,8 @@ final class CommandRunViewModel: ObservableObject {
         status = runStatus(for: snapshot)
 
         if snapshot.status.isTerminal {
-            pollTimer?.invalidate()
-            pollTimer = nil
+            pollTask?.cancel()
+            pollTask = nil
             notifyFinishIfNeeded()
         }
     }

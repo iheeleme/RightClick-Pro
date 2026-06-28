@@ -86,6 +86,7 @@ RightClick Pro quality checks center on SwiftPM compilation/tests, Finder extens
 - `capture of self with non-Sendable type ... in a @Sendable closure` for UI/view-model code -> prefer `@MainActor` on the owner and hop with `Task { @MainActor ... }` when the callback itself is nonisolated.
 - `capture of Result<..., Error>` in a `@Sendable` closure -> map to a Sendable response enum before dispatching to the main queue.
 - `static property shared is not concurrency-safe` for UI coordinators -> isolate the coordinator with `@MainActor` when it owns AppKit windows or UI state.
+- `cannot access property ... with a non-Sendable type 'Timer?' from nonisolated deinit` -> replace repeating `Timer` state with a cancellable `Task<Void, Never>` or another Sendable cancellation token.
 - `@unchecked Sendable` without lock/serial-queue/main-actor ownership -> bug; redesign or add a real synchronization boundary before suppressing the compiler check.
 
 #### 5. Good/Base/Bad Cases
@@ -96,20 +97,21 @@ RightClick Pro quality checks center on SwiftPM compilation/tests, Finder extens
 - Base: a local response enum such as `CommandRunClientResponse: Sendable` carries `CommandRunSnapshot` or an error string from an XPC callback into the main actor.
 - Bad: capturing `Result<CommandRunSnapshot, Error>` directly in `DispatchQueue.main.async`.
 - Bad: adding `@unchecked Sendable` to a SwiftUI view model instead of main-actor isolating it.
+- Bad: storing a repeating `Timer?` in a `@MainActor` view model and invalidating it from `deinit`; Swift 6 treats `deinit` as nonisolated.
 - Bad: marking a class `@unchecked Sendable` only to silence CI without documenting and verifying state synchronization.
 
 #### 6. Tests Required
 
 - Run strict concurrency type checks for changed Swift targets:
   ```bash
-  swiftc -typecheck -strict-concurrency=complete -warnings-as-errors Sources/RightClickProCore/*.swift
+  swiftc -typecheck -swift-version 6 -strict-concurrency=complete -warnings-as-errors Sources/RightClickProCore/*.swift
   swiftc -emit-module -parse-as-library -module-name RightClickProCore \
     -emit-module-path /tmp/righttool-sendable-check/RightClickProCore.swiftmodule \
-    -strict-concurrency=complete -warnings-as-errors Sources/RightClickProCore/*.swift
+    -swift-version 6 -strict-concurrency=complete -warnings-as-errors Sources/RightClickProCore/*.swift
   swiftc -typecheck -I /tmp/righttool-sendable-check \
-    -strict-concurrency=complete -warnings-as-errors Sources/RightClickProFinderExtension/FinderSyncController.swift
+    -swift-version 6 -strict-concurrency=complete -warnings-as-errors Sources/RightClickProFinderExtension/FinderSyncController.swift
   swiftc -typecheck -parse-as-library -I /tmp/righttool-sendable-check \
-    -strict-concurrency=complete -warnings-as-errors Sources/RightClickProAppPreview/RightClickProAppPreview.swift
+    -swift-version 6 -strict-concurrency=complete -warnings-as-errors Sources/RightClickProAppPreview/RightClickProAppPreview.swift
   ```
 - Run `git diff --check`.
 - Run `scripts/package-macos.sh debug` after App/Finder/XPC concurrency fixes.
