@@ -293,24 +293,14 @@ public struct ConfigurationBootstrapper {
     /// the process is sandboxed. Falls back to the FileManager value when the
     /// real path cannot be determined.
     private var realUserHomeDirectory: URL {
-        if let realUserHomeDirectoryOverride {
-            return realUserHomeDirectoryOverride
-        }
-        if let home = realUserHomePath(), !home.isEmpty {
-            return URL(fileURLWithPath: home)
-        }
-        return processHomeDirectory
+        UserHomeDirectoryResolver.realUserHomeDirectory(
+            processHomeDirectory: processHomeDirectory,
+            override: realUserHomeDirectoryOverride
+        )
     }
 
     private var processHomeDirectory: URL {
         processHomeDirectoryOverride ?? fileManager.homeDirectoryForCurrentUser
-    }
-
-    private func realUserHomePath() -> String? {
-        guard let pw = getpwuid(getuid())?.pointee.pw_dir else {
-            return nil
-        }
-        return String(cString: pw)
     }
 
     public func defaultConfig(bookmarks: DirectoryBookmarkCatalog) -> RightClickProConfig {

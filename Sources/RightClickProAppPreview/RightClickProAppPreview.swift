@@ -150,6 +150,14 @@ final class SettingsViewModel: NSObject, ObservableObject {
         }
     }
 
+    enum FullDiskAccessStatus: Equatable {
+        case unchecked
+        case checking
+        case granted
+        case missing
+        case unavailable(String)
+    }
+
     @Published var selectedSection: Section = .onboarding
     @Published var config = RightClickProConfig()
     @Published var bookmarks = DirectoryBookmarkCatalog()
@@ -165,8 +173,7 @@ final class SettingsViewModel: NSObject, ObservableObject {
     @Published var isRepairingFinderMenu = false
     @Published var finderExtensionNeedsAttention = false
     @Published var finderExtensionSetupMessage = ""
-    @Published var fullDiskAccessStatusMessage = "尚未检查完全磁盘访问权限"
-    @Published var fullDiskAccessStatusTone: StatusTone = .neutral
+    @Published private(set) var fullDiskAccessStatus: FullDiskAccessStatus = .unchecked
 
     private var paths = RightClickProStoragePaths.defaultForCurrentProcess()
     private let commandSecretStore = KeychainCommandSecretStore()
@@ -182,7 +189,7 @@ final class SettingsViewModel: NSObject, ObservableObject {
         )
         NotificationCenter.default.addObserver(
             self,
-            selector: #selector(handlePendingCommandRunNotification),
+            selector: #selector(handleApplicationDidBecomeActive),
             name: NSApplication.didBecomeActiveNotification,
             object: nil
         )
@@ -197,6 +204,7 @@ final class SettingsViewModel: NSObject, ObservableObject {
         let viewModel = SettingsViewModel()
         viewModel.loadOrBootstrap()
         viewModel.scheduleFinderExtensionRegistration()
+        viewModel.scheduleFullDiskAccessCheck()
         return viewModel
     }
 
@@ -220,6 +228,42 @@ final class SettingsViewModel: NSObject, ObservableObject {
 
     var shouldShowFinderExtensionSetupBanner: Bool {
         finderExtensionNeedsAttention
+    }
+
+    var shouldShowFullDiskAccessBanner: Bool {
+        fullDiskAccessStatus != .granted
+    }
+
+    var isCheckingFullDiskAccess: Bool {
+        fullDiskAccessStatus == .checking
+    }
+
+    var fullDiskAccessStatusMessage: String {
+        switch fullDiskAccessStatus {
+        case .unchecked:
+            return "尚未检查完全磁盘访问权限"
+        case .checking:
+            return "正在通过 ActionRunner 检查完全磁盘访问权限..."
+        case .granted:
+            return "检测结果：已授予完全磁盘访问权限"
+        case .missing:
+            return "检测结果：可能尚未授予 ActionRunner 完全磁盘访问权限"
+        case .unavailable(let message):
+            return "无法通过 ActionRunner 检查权限：\(message)"
+        }
+    }
+
+    var fullDiskAccessStatusTone: StatusTone {
+        switch fullDiskAccessStatus {
+        case .unchecked, .checking:
+            return .neutral
+        case .granted:
+            return .success
+        case .missing:
+            return .warning
+        case .unavailable:
+            return .error
+        }
     }
 
     /// Section-level count shown as a sidebar badge.
@@ -326,15 +370,28 @@ final class SettingsViewModel: NSObject, ObservableObject {
         }
     }
 
-    func checkFullDiskAccess() {
-        if FullDiskAccessAdvisor.checkRepresentativeAccess() {
-            fullDiskAccessStatusMessage = "检测结果：很可能已授予完全磁盘访问权限"
-            fullDiskAccessStatusTone = .success
-            setStatus(fullDiskAccessStatusMessage, tone: .success)
-        } else {
-            fullDiskAccessStatusMessage = "检测结果：可能尚未授予完全磁盘访问权限"
-            fullDiskAccessStatusTone = .warning
-            setStatus("\(fullDiskAccessStatusMessage)。文件动作仍会尝试执行，并在失败时提示。", tone: .warning)
+    func checkFullDiskAccess(userInitiated: Bool = true) {
+        guard !isCheckingFullDiskAccess else {
+            return
+        }
+
+        let previousStatus = fullDiskAccessStatus
+        if previousStatus != .granted || userInitiated {
+            fullDiskAccessStatus = .checking
+        }
+        if userInitiated {
+            setStatus("正在检查完全磁盘访问权限...", tone: .neutral)
+        }
+
+        let request = SystemMaintenanceRequest(task: .checkFullDiskAccess)
+        actionRunnerClient.performMaintenance(request) { [weak self] response in
+            DispatchQueue.main.async {
+                self?.handleFullDiskAccessResponse(
+                    response,
+                    previousStatus: previousStatus,
+                    userInitiated: userInitiated
+                )
+            }
         }
     }
 
@@ -399,6 +456,11 @@ final class SettingsViewModel: NSObject, ObservableObject {
         DispatchQueue.main.async { [weak self] in
             self?.checkForPendingCommandRun()
         }
+    }
+
+    @objc private func handleApplicationDidBecomeActive() {
+        handlePendingCommandRunNotification()
+        checkFullDiskAccess(userInitiated: false)
     }
 
     func setActionEnabled(_ isEnabled: Bool, actionID: String) {
@@ -779,6 +841,12 @@ final class SettingsViewModel: NSObject, ObservableObject {
         }
     }
 
+    private func scheduleFullDiskAccessCheck() {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in
+            self?.checkFullDiskAccess(userInitiated: false)
+        }
+    }
+
     private func bundledFinderExtensionURL() -> URL? {
         let pluginName = "RightClickProFinderExtension.appex"
         let candidates = [
@@ -832,6 +900,40 @@ final class SettingsViewModel: NSObject, ObservableObject {
             markFinderExtensionNeedsAttention(message)
             if userInitiated {
                 setStatus("修复右键菜单失败：\(message)", tone: .error)
+            }
+        }
+    }
+
+    private func handleFullDiskAccessResponse(
+        _ response: Result<SystemMaintenanceResult, Error>,
+        previousStatus: FullDiskAccessStatus,
+        userInitiated: Bool
+    ) {
+        switch response {
+        case .success(let result):
+            guard let hasFullDiskAccess = result.hasFullDiskAccess else {
+                fullDiskAccessStatus = .unavailable("ActionRunner 未返回权限检测结果")
+                if userInitiated {
+                    setStatus(fullDiskAccessStatusMessage, tone: .error)
+                }
+                return
+            }
+
+            fullDiskAccessStatus = hasFullDiskAccess ? .granted : .missing
+            if userInitiated {
+                let tone: StatusTone = hasFullDiskAccess ? .success : .warning
+                let suffix = hasFullDiskAccess ? "" : "。文件动作仍会尝试执行，并在失败时提示。"
+                setStatus("\(fullDiskAccessStatusMessage)\(suffix)", tone: tone)
+            }
+        case .failure(let error):
+            if previousStatus == .granted && !userInitiated {
+                fullDiskAccessStatus = previousStatus
+                return
+            }
+
+            fullDiskAccessStatus = .unavailable(error.localizedDescription)
+            if userInitiated {
+                setStatus(fullDiskAccessStatusMessage, tone: .error)
             }
         }
     }
@@ -2885,7 +2987,9 @@ struct OnboardingView: View {
                 FinderExtensionSetupBanner(viewModel: viewModel)
             }
 
-            FullDiskAccessBanner(viewModel: viewModel)
+            if viewModel.shouldShowFullDiskAccessBanner {
+                FullDiskAccessBanner(viewModel: viewModel)
+            }
 
             HStack(alignment: .top, spacing: 40) {
                 VStack(alignment: .leading, spacing: 16) {
@@ -3060,11 +3164,12 @@ struct FullDiskAccessBanner: View {
                     Button {
                         viewModel.checkFullDiskAccess()
                     } label: {
-                        Label("检查权限", systemImage: "checkmark.shield")
+                        Label(viewModel.isCheckingFullDiskAccess ? "检查中..." : "检查权限", systemImage: "checkmark.shield")
                             .frame(minWidth: 104)
                     }
                     .buttonStyle(.bordered)
                     .controlSize(.large)
+                    .disabled(viewModel.isCheckingFullDiskAccess)
 
                     Button {
                         viewModel.openFullDiskAccessSettings()

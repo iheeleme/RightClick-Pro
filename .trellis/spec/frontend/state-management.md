@@ -21,6 +21,7 @@ Reference file: `Sources/RightClickProAppPreview/RightClickProAppPreview.swift`.
 - Template/action/developer edits mark unsaved changes and require the main save action.
 - `reloadRecentOperations()` reads `operation-log.jsonl` and keeps the latest 80 reversed for display.
 - Finder menu repair state lives in `SettingsViewModel.isRepairingFinderMenu`, `finderExtensionNeedsAttention`, and `finderExtensionSetupMessage`; the ViewModel sends `SystemMaintenanceRequest` through ActionRunner XPC instead of running system commands directly from SwiftUI.
+- Full Disk Access overview state lives in `SettingsViewModel.fullDiskAccessStatus`; the ViewModel checks it through `SystemMaintenanceRequest(task: .checkFullDiskAccess)` so the UI reflects ActionRunner's real execution permission, not the sandboxed app process.
 - Successful automatic Finder extension setup is keyed by the bundled `.appex` install signature in `UserDefaults`; the signature must include filesystem resource identity so same-version reinstall/overwrite triggers one fresh Finder preload, while repeated launches of the same physical extension skip Finder restarts.
 
 ## Command Rules
@@ -57,6 +58,7 @@ Use `SettingsValidationError` for user-facing save errors.
 
 - Do not mutate `config.actions` from child views without a ViewModel command.
 - Do not run `pluginkit`, `killall`, or `osascript` directly from SwiftUI views; route Finder menu repair through `SettingsViewModel` and ActionRunner XPC.
+- Do not probe Full Disk Access directly from SwiftUI views or the sandboxed app process; route the check through ActionRunner XPC and hide the overview prompt after a successful probe.
 - Do not show the Finder Extension setup banner after automatic setup succeeds; show it only when setup fails or needs manual attention.
 - Do not let an action lose all `ActionVisibility` cases.
 - Do not add config entries without back-reference actions.

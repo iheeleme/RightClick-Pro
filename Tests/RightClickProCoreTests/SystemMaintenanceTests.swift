@@ -65,6 +65,36 @@ final class SystemMaintenanceTests: XCTestCase {
             "/usr/bin/open -b com.apple.finder"
         ])
     }
+
+    func testCheckFullDiskAccessReportsGrantedStatus() {
+        let runner = RecordingCommandRunner(results: [:])
+        let service = SystemMaintenanceService(
+            commandRunner: runner,
+            fullDiskAccessChecker: { true }
+        )
+
+        let result = service.perform(SystemMaintenanceRequest(task: .checkFullDiskAccess))
+
+        XCTAssertTrue(result.isSuccess)
+        XCTAssertEqual(result.hasFullDiskAccess, true)
+        XCTAssertTrue(result.messages.first?.contains("已具备完全磁盘访问权限") == true)
+        XCTAssertTrue(runner.calls.isEmpty)
+    }
+
+    func testCheckFullDiskAccessReportsMissingStatusWithoutServiceError() {
+        let runner = RecordingCommandRunner(results: [:])
+        let service = SystemMaintenanceService(
+            commandRunner: runner,
+            fullDiskAccessChecker: { false }
+        )
+
+        let result = service.perform(SystemMaintenanceRequest(task: .checkFullDiskAccess))
+
+        XCTAssertTrue(result.isSuccess)
+        XCTAssertEqual(result.hasFullDiskAccess, false)
+        XCTAssertTrue(result.messages.first?.contains("可能尚未具备完全磁盘访问权限") == true)
+        XCTAssertTrue(runner.calls.isEmpty)
+    }
 }
 
 private final class RecordingCommandRunner: SystemCommandRunning {

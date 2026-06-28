@@ -33,11 +33,18 @@ public enum FullDiskAccessAdvisor {
             lowercased.contains("not authorized")
     }
 
-    public static func checkRepresentativeAccess(fileManager: FileManager = .default) -> Bool {
+    public static func checkRepresentativeAccess(
+        fileManager: FileManager = .default,
+        homeDirectory: URL? = nil
+    ) -> Bool {
+        let homeDirectory = homeDirectory ?? UserHomeDirectoryResolver.realUserHomeDirectory(
+            processHomeDirectory: fileManager.homeDirectoryForCurrentUser
+        )
         let protectedURLs = [
-            fileManager.homeDirectoryForCurrentUser.appendingPathComponent("Library/Mail"),
-            fileManager.homeDirectoryForCurrentUser.appendingPathComponent("Library/Messages"),
-            fileManager.homeDirectoryForCurrentUser.appendingPathComponent("Library/Safari")
+            homeDirectory.appendingPathComponent("Library/Mail"),
+            homeDirectory.appendingPathComponent("Library/Messages"),
+            homeDirectory.appendingPathComponent("Library/Safari"),
+            homeDirectory.appendingPathComponent("Library/Application Support/com.apple.TCC")
         ]
 
         return protectedURLs.contains { url in

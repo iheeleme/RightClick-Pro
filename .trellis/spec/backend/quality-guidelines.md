@@ -76,6 +76,11 @@ RightClick Pro quality checks center on SwiftPM compilation/tests, Finder extens
   ```swift
   FullDiskAccessAdvisor.userFacingMessage(for: error)
   ```
+- Runtime permission probe:
+  ```swift
+  SystemMaintenanceRequest(task: .checkFullDiskAccess)
+  SystemMaintenanceResult(hasFullDiskAccess: Bool?)
+  ```
 
 #### 3. Contracts
 
@@ -85,6 +90,9 @@ RightClick Pro quality checks center on SwiftPM compilation/tests, Finder extens
 - Finder menus are globally visible once config is loaded; individual action visibility still depends on `ActionVisibility` and invocation shape.
 - File actions attempt real file operations and let macOS permission results determine success or failure.
 - Permission-like failures must include Full Disk Access guidance.
+- Settings overview Full Disk Access status must be probed through ActionRunner XPC, because the SwiftUI app process is sandboxed while `ActionRunner.xpc` is the process that owns file actions and command execution.
+- `FullDiskAccessAdvisor.checkRepresentativeAccess()` must resolve protected probe paths under the real login user home, not the sandbox container home that `FileManager.homeDirectoryForCurrentUser` may report.
+- Overview should hide the Full Disk Access setup banner once `SystemMaintenanceResult.hasFullDiskAccess == true`; show the banner only for unchecked/checking, missing permission, or XPC-unavailable states.
 
 #### 4. Validation & Error Matrix
 
@@ -92,14 +100,19 @@ RightClick Pro quality checks center on SwiftPM compilation/tests, Finder extens
 - Old config has `monitoredDirectoryIDs` only -> do not use it for menu scope or runtime authorization.
 - File operation fails with `EPERM`, `EACCES`, or Cocoa no-permission errors -> append Full Disk Access guidance.
 - Finder context outside shortcut directories -> still build a menu when actions match the invocation.
+- ActionRunner permission probe returns `hasFullDiskAccess == true` -> overview treats permission as ready and hides the authorization prompt.
+- ActionRunner permission probe returns `hasFullDiskAccess == false` -> overview shows a warning prompt with the System Settings shortcut.
+- ActionRunner XPC probe fails or omits `hasFullDiskAccess` -> overview shows an error/unavailable state instead of claiming authorization is missing.
 
 #### 5. Good/Base/Bad Cases
 
 - Good: right-clicking `/System` still shows eligible menu items; execution may fail with Full Disk Access guidance.
 - Good: new installs default to Desktop and Downloads shortcuts only.
+- Good: after the user grants Full Disk Access and reactivates the app, SettingsViewModel probes ActionRunner XPC and the overview no longer shows the authorization prompt.
 - Base: existing custom bookmark entries stay in `bookmarks.json` during bootstrap.
 - Bad: adding a new check that hides Finder menus outside `shortcutDirectoryIDs`.
 - Bad: reintroducing `AuthorizedPathValidator` or any configured-directory allowlist as the file-action boundary.
+- Bad: probing Full Disk Access directly from the sandboxed SwiftUI app and showing a stale missing-permission prompt after ActionRunner is already authorized.
 
 #### 6. Tests Required
 
@@ -107,6 +120,8 @@ RightClick Pro quality checks center on SwiftPM compilation/tests, Finder extens
 - Finder scope: `FinderSyncScope.syncRoots()` returns `/`.
 - ActionRunner: file actions succeed in temporary directories even when `shortcutDirectoryIDs` is empty.
 - Bootstrap: default bookmarks exclude Documents and Code for new installs while preserving existing bookmarks.
+- SystemMaintenanceService: `.checkFullDiskAccess` returns true and false `hasFullDiskAccess` values without invoking shell commands.
+- Packaging smoke: installed app launches, ActionRunner XPC is available on demand, and overview hides the Full Disk Access banner when the XPC probe reports authorized.
 
 #### 7. Wrong vs Correct
 
@@ -119,6 +134,21 @@ try validator.validate(request.context.targetDirectory)
 Correct:
 ```swift
 let result = try fileService.createFile(template: template, in: request.context.targetDirectory)
+```
+
+Wrong:
+```swift
+if FullDiskAccessAdvisor.checkRepresentativeAccess() {
+    fullDiskAccessStatusMessage = "已授权"
+}
+```
+inside the sandboxed settings app.
+
+Correct:
+```swift
+actionRunnerClient.performMaintenance(SystemMaintenanceRequest(task: .checkFullDiskAccess)) { result in
+    // Render SystemMaintenanceResult.hasFullDiskAccess from ActionRunner.xpc.
+}
 ```
 
 ### Scenario: XPC-Owned Command Template Runs

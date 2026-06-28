@@ -4,6 +4,7 @@ public enum SystemMaintenanceTask: String, Codable, Equatable {
     case installFinderExtension
     case restartFinder
     case repairFinderContextMenu
+    case checkFullDiskAccess
 }
 
 public struct SystemMaintenanceRequest: Codable, Equatable {
@@ -26,6 +27,7 @@ public struct SystemMaintenanceResult: Codable, Equatable {
     public var didRegisterFinderExtension: Bool
     public var didEnableFinderExtension: Bool
     public var didRestartFinder: Bool
+    public var hasFullDiskAccess: Bool?
     public var messages: [String]
     public var errors: [String]
 
@@ -33,12 +35,14 @@ public struct SystemMaintenanceResult: Codable, Equatable {
         didRegisterFinderExtension: Bool = false,
         didEnableFinderExtension: Bool = false,
         didRestartFinder: Bool = false,
+        hasFullDiskAccess: Bool? = nil,
         messages: [String] = [],
         errors: [String] = []
     ) {
         self.didRegisterFinderExtension = didRegisterFinderExtension
         self.didEnableFinderExtension = didEnableFinderExtension
         self.didRestartFinder = didRestartFinder
+        self.hasFullDiskAccess = hasFullDiskAccess
         self.messages = messages
         self.errors = errors
     }
@@ -51,6 +55,7 @@ public struct SystemMaintenanceResult: Codable, Equatable {
         didRegisterFinderExtension = didRegisterFinderExtension || other.didRegisterFinderExtension
         didEnableFinderExtension = didEnableFinderExtension || other.didEnableFinderExtension
         didRestartFinder = didRestartFinder || other.didRestartFinder
+        hasFullDiskAccess = other.hasFullDiskAccess ?? hasFullDiskAccess
         messages.append(contentsOf: other.messages)
         errors.append(contentsOf: other.errors)
     }
@@ -123,13 +128,16 @@ public struct ProcessSystemCommandRunner: SystemCommandRunning {
 public final class SystemMaintenanceService {
     private let commandRunner: SystemCommandRunning
     private let fileExists: (String) -> Bool
+    private let fullDiskAccessChecker: () -> Bool
 
     public init(
         commandRunner: SystemCommandRunning = ProcessSystemCommandRunner(),
-        fileExists: @escaping (String) -> Bool = { FileManager.default.fileExists(atPath: $0) }
+        fileExists: @escaping (String) -> Bool = { FileManager.default.fileExists(atPath: $0) },
+        fullDiskAccessChecker: @escaping () -> Bool = { FullDiskAccessAdvisor.checkRepresentativeAccess() }
     ) {
         self.commandRunner = commandRunner
         self.fileExists = fileExists
+        self.fullDiskAccessChecker = fullDiskAccessChecker
     }
 
     public func perform(_ request: SystemMaintenanceRequest) -> SystemMaintenanceResult {
@@ -145,7 +153,21 @@ public final class SystemMaintenanceService {
             }
             result.merge(restartFinder())
             return result
+        case .checkFullDiskAccess:
+            return checkFullDiskAccess()
         }
+    }
+
+    private func checkFullDiskAccess() -> SystemMaintenanceResult {
+        let hasAccess = fullDiskAccessChecker()
+        return SystemMaintenanceResult(
+            hasFullDiskAccess: hasAccess,
+            messages: [
+                hasAccess
+                    ? "ActionRunner 已具备完全磁盘访问权限"
+                    : "ActionRunner 可能尚未具备完全磁盘访问权限"
+            ]
+        )
     }
 
     private func installFinderExtension(_ request: SystemMaintenanceRequest) -> SystemMaintenanceResult {
