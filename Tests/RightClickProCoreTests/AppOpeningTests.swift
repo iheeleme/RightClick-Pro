@@ -61,7 +61,11 @@ final class AppOpeningTests: XCTestCase {
 
         let plan = DeveloperAppOpenPlanner.plan(for: entrypoint, targetURL: fileURL, appURL: appURL)
 
-        XCTAssertEqual(plan, .application(appURL: appURL, targetURL: workspaceURL))
+        guard case .application(let plannedAppURL, let targetURL) = plan else {
+            return XCTFail("Expected Terminal to open through NSWorkspace application plan")
+        }
+        XCTAssertEqual(plannedAppURL, appURL)
+        XCTAssertEqual(targetURL.standardizedFileURL.path, workspaceURL.standardizedFileURL.path)
     }
 
     func testVSCodeFamilyAppsUseBundledEditorCLI() throws {
