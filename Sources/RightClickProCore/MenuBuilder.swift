@@ -1,6 +1,6 @@
 import Foundation
 
-public enum MenuIconDescriptor: Equatable {
+public enum MenuIconDescriptor: Equatable, Sendable {
     case systemSymbol(String)
     case appBundleIdentifier(String)
     case filePath(String)
@@ -75,7 +75,7 @@ public enum MenuIconResolver {
     }
 }
 
-public struct MenuItemPresentation: Equatable, Identifiable {
+public struct MenuItemPresentation: Equatable, Identifiable, Sendable {
     public var id: String
     public var title: String
     public var actionID: String
@@ -100,7 +100,7 @@ public struct MenuItemPresentation: Equatable, Identifiable {
     }
 }
 
-public struct MenuPresentation: Equatable {
+public struct MenuPresentation: Equatable, Sendable {
     public var rootItems: [MenuItemPresentation]
     public var groupedSubmenuItems: [MenuGroup: [MenuItemPresentation]]
 

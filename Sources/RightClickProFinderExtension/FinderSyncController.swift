@@ -6,7 +6,8 @@ import RightClickProCore
 import UniformTypeIdentifiers
 
 @objc(FinderSyncController)
-final class FinderSyncController: FIFinderSync {
+// FinderSync 由系统和 Dispatch 回调驱动；状态访问约束在主线程与专用串行队列中。
+final class FinderSyncController: FIFinderSync, @unchecked Sendable {
     private let menuBuilder = MenuBuilder()
     private let paths: RightClickProStoragePaths
     private let configProvider: RightClickProConfigProviding
@@ -113,11 +114,14 @@ final class FinderSyncController: FIFinderSync {
 
     private func repairConfigurationInBackground(paths: RightClickProStoragePaths) {
         cacheRefreshQueue.asyncAfter(deadline: .now() + backgroundRepairDelay) { [weak self] in
+            guard let controller = self else {
+                return
+            }
             do {
                 let result = try ConfigurationBootstrapper().bootstrap(paths: paths)
-                DispatchQueue.main.async {
-                    self?.applyCachedConfiguration(config: result.config, bookmarks: result.bookmarks)
-                    self?.installGlobalFinderSyncScope()
+                DispatchQueue.main.async { [weak controller] in
+                    controller?.applyCachedConfiguration(config: result.config, bookmarks: result.bookmarks)
+                    controller?.installGlobalFinderSyncScope()
                 }
             } catch {
                 NSLog("RightClick Pro Finder extension background bootstrap failed: \(error.localizedDescription)")
@@ -680,7 +684,7 @@ private final class PendingMenuAction: NSObject {
     }
 }
 
-private struct DeferredIconRequest {
+private struct DeferredIconRequest: Sendable {
     let key: String
     let icon: MenuIconDescriptor
 }

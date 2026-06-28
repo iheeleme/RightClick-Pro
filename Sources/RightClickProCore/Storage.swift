@@ -1,6 +1,6 @@
 import Foundation
 
-public struct RightClickProStoragePaths: Equatable {
+public struct RightClickProStoragePaths: Equatable, Sendable {
     public var baseURL: URL
     public var configURL: URL
     public var bookmarksURL: URL
@@ -49,7 +49,7 @@ public struct RightClickProStoragePaths: Equatable {
     }
 }
 
-public enum StorageError: Error, Equatable {
+public enum StorageError: Error, Equatable, Sendable {
     case appGroupContainerUnavailable(String)
     case missingRequiredFile(URL)
 }

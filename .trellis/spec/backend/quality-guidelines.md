@@ -47,6 +47,110 @@ RightClick Pro quality checks center on SwiftPM compilation/tests, Finder extens
 
 ---
 
+### Scenario: Swift 6 Strict Concurrency Boundaries
+
+#### 1. Scope / Trigger
+
+- Trigger: changes to shared Core Codable models, XPC request/result payloads, `DispatchQueue` callbacks, `Timer` callbacks, `Process` pipe handlers, Finder Sync controllers, or SwiftUI/AppKit view models.
+- This is a cross-process and cross-thread contract because Core payloads move through Finder extension, menu-bar app, ActionRunner XPC, JSON storage, and Foundation `@Sendable` callback boundaries.
+
+#### 2. Signatures
+
+- Shared value payloads crossing process/thread boundaries must be explicitly `Sendable`:
+  ```swift
+  public struct PendingCommandRunRequest: Codable, Equatable, Identifiable, Sendable
+  public struct CommandRunSnapshot: Codable, Equatable, Identifiable, Sendable
+  public struct SystemMaintenanceResult: Codable, Equatable, Sendable
+  ```
+- UI state owners that touch AppKit/SwiftUI state must be main-actor isolated:
+  ```swift
+  @MainActor
+  final class SettingsViewModel: NSObject, ObservableObject
+  ```
+- Services captured by Foundation `@Sendable` callbacks may use unchecked conformance only when mutable state has an explicit synchronization boundary:
+  ```swift
+  public final class CommandRunService: @unchecked Sendable
+  ```
+
+#### 3. Contracts
+
+- Core models used in XPC, JSON handoff, menu presentation, command snapshots, and maintenance responses should conform to `Sendable` when all stored properties are value-safe.
+- `Result<SomeSendableValue, Error>` must not be captured directly into a `DispatchQueue.main.async` or other `@Sendable` closure. Convert failures to a `String` or a local `Sendable` response enum before crossing the boundary.
+- AppKit/SwiftUI objects that mutate `@Published`, `NSApplication`, `NSWindow`, or settings view state should be `@MainActor`, not `@unchecked Sendable`.
+- `@unchecked Sendable` requires a short comment explaining the synchronization model. Use it for service/controller objects only when mutable state is protected by `NSLock`, a serial queue, or a main-thread-only lifecycle.
+- Direct `swiftc` target checks that import `RightClickProCore` should first rebuild a temporary Core module so dependent targets do not read stale Sendable metadata.
+
+#### 4. Validation & Error Matrix
+
+- `consider making struct ... conform to Sendable` -> add `Sendable` to the value model and recursively to its stored value types.
+- `capture of self with non-Sendable type ... in a @Sendable closure` for UI/view-model code -> prefer `@MainActor` on the owner and hop with `Task { @MainActor ... }` when the callback itself is nonisolated.
+- `capture of Result<..., Error>` in a `@Sendable` closure -> map to a Sendable response enum before dispatching to the main queue.
+- `static property shared is not concurrency-safe` for UI coordinators -> isolate the coordinator with `@MainActor` when it owns AppKit windows or UI state.
+- `@unchecked Sendable` without lock/serial-queue/main-actor ownership -> bug; redesign or add a real synchronization boundary before suppressing the compiler check.
+
+#### 5. Good/Base/Bad Cases
+
+- Good: `PendingCommandRunRequest`, `FinderContext`, `ActionResult`, `MenuPresentation`, and `SystemMaintenanceResult` are Sendable because they are pure value contracts.
+- Good: `CommandRunService` is `@unchecked Sendable` only because process dictionaries, timeout work items, and snapshots are mutated through `withLock`.
+- Good: `SettingsViewModel` and `CommandRunWindowCoordinator` are `@MainActor` because they own UI state and AppKit windows.
+- Base: a local response enum such as `CommandRunClientResponse: Sendable` carries `CommandRunSnapshot` or an error string from an XPC callback into the main actor.
+- Bad: capturing `Result<CommandRunSnapshot, Error>` directly in `DispatchQueue.main.async`.
+- Bad: adding `@unchecked Sendable` to a SwiftUI view model instead of main-actor isolating it.
+- Bad: marking a class `@unchecked Sendable` only to silence CI without documenting and verifying state synchronization.
+
+#### 6. Tests Required
+
+- Run strict concurrency type checks for changed Swift targets:
+  ```bash
+  swiftc -typecheck -strict-concurrency=complete -warnings-as-errors Sources/RightClickProCore/*.swift
+  swiftc -emit-module -parse-as-library -module-name RightClickProCore \
+    -emit-module-path /tmp/righttool-sendable-check/RightClickProCore.swiftmodule \
+    -strict-concurrency=complete -warnings-as-errors Sources/RightClickProCore/*.swift
+  swiftc -typecheck -I /tmp/righttool-sendable-check \
+    -strict-concurrency=complete -warnings-as-errors Sources/RightClickProFinderExtension/FinderSyncController.swift
+  swiftc -typecheck -parse-as-library -I /tmp/righttool-sendable-check \
+    -strict-concurrency=complete -warnings-as-errors Sources/RightClickProAppPreview/RightClickProAppPreview.swift
+  ```
+- Run `git diff --check`.
+- Run `scripts/package-macos.sh debug` after App/Finder/XPC concurrency fixes.
+
+#### 7. Wrong vs Correct
+
+Wrong:
+```swift
+actionRunnerClient.startCommandRun(request) { result in
+    DispatchQueue.main.async {
+        switch result {
+        case .failure(let error):
+            self.output = error.localizedDescription
+        }
+    }
+}
+```
+
+Correct:
+```swift
+actionRunnerClient.startCommandRun(request) { result in
+    let response = CommandRunClientResponse(result)
+    DispatchQueue.main.async { [response] in
+        // response is Sendable: success snapshot or failure string.
+    }
+}
+```
+
+Wrong:
+```swift
+final class SettingsViewModel: ObservableObject, @unchecked Sendable
+```
+
+Correct:
+```swift
+@MainActor
+final class SettingsViewModel: NSObject, ObservableObject
+```
+
+---
+
 ## Code Review Checklist
 
 - Does the change preserve process boundaries: Finder extension renders, XPC transports, ActionRunner mutates?

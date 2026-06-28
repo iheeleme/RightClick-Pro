@@ -1,13 +1,13 @@
 import Foundation
 
-public enum SystemMaintenanceTask: String, Codable, Equatable {
+public enum SystemMaintenanceTask: String, Codable, Equatable, Sendable {
     case installFinderExtension
     case restartFinder
     case repairFinderContextMenu
     case checkFullDiskAccess
 }
 
-public struct SystemMaintenanceRequest: Codable, Equatable {
+public struct SystemMaintenanceRequest: Codable, Equatable, Sendable {
     public var task: SystemMaintenanceTask
     public var finderExtensionPath: String?
     public var finderExtensionBundleIdentifier: String
@@ -23,7 +23,7 @@ public struct SystemMaintenanceRequest: Codable, Equatable {
     }
 }
 
-public struct SystemMaintenanceResult: Codable, Equatable {
+public struct SystemMaintenanceResult: Codable, Equatable, Sendable {
     public var didRegisterFinderExtension: Bool
     public var didEnableFinderExtension: Bool
     public var didRestartFinder: Bool
@@ -61,7 +61,7 @@ public struct SystemMaintenanceResult: Codable, Equatable {
     }
 }
 
-public struct SystemCommandResult: Equatable {
+public struct SystemCommandResult: Equatable, Sendable {
     public var terminationStatus: Int32
     public var standardOutput: String
     public var standardError: String
@@ -85,7 +85,7 @@ public protocol SystemCommandRunning {
     func run(_ executablePath: String, arguments: [String]) throws -> SystemCommandResult
 }
 
-public enum SystemMaintenanceError: Error, LocalizedError {
+public enum SystemMaintenanceError: Error, LocalizedError, Sendable {
     case executableMissing(String)
 
     public var errorDescription: String? {

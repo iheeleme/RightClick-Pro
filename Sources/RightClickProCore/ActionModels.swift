@@ -8,7 +8,7 @@ public enum RightClickProConstants {
     public static let defaultMaxRootMenuActions = 5
 }
 
-public enum ActionKind: String, Codable, CaseIterable, Equatable {
+public enum ActionKind: String, Codable, CaseIterable, Equatable, Sendable {
     case openDirectory
     case moveToDirectory
     case copyToDirectory
@@ -20,18 +20,18 @@ public enum ActionKind: String, Codable, CaseIterable, Equatable {
     case undoOperation
 }
 
-public enum ActionVisibility: String, Codable, CaseIterable, Hashable {
+public enum ActionVisibility: String, Codable, CaseIterable, Hashable, Sendable {
     case selection
     case container
     case toolbar
 }
 
-public enum ActionPlacement: String, Codable, Equatable {
+public enum ActionPlacement: String, Codable, Equatable, Sendable {
     case rootMenu
     case submenu
 }
 
-public enum MenuGroup: String, Codable, CaseIterable, Hashable {
+public enum MenuGroup: String, Codable, CaseIterable, Hashable, Sendable {
     case commonDirectories
     case moveToCommonDirectory
     case copyToCommonDirectory
@@ -41,7 +41,7 @@ public enum MenuGroup: String, Codable, CaseIterable, Hashable {
     case fileOperations
 }
 
-public struct ActionPayload: Codable, Equatable {
+public struct ActionPayload: Codable, Equatable, Sendable {
     public var directoryID: String?
     public var templateID: String?
     public var developerEntrypointID: String?
@@ -60,12 +60,12 @@ public struct ActionPayload: Codable, Equatable {
     }
 }
 
-public enum CommandWorkingDirectoryMode: String, Codable, CaseIterable, Equatable {
+public enum CommandWorkingDirectoryMode: String, Codable, CaseIterable, Equatable, Sendable {
     case currentDirectory
     case selectedItemDirectory
 }
 
-public struct CommandEnvironmentVariable: Codable, Equatable, Identifiable {
+public struct CommandEnvironmentVariable: Codable, Equatable, Identifiable, Sendable {
     public var id: String
     public var name: String
     public var value: String?
@@ -87,7 +87,7 @@ public struct CommandEnvironmentVariable: Codable, Equatable, Identifiable {
     }
 }
 
-public struct CommandTemplate: Codable, Equatable, Identifiable {
+public struct CommandTemplate: Codable, Equatable, Identifiable, Sendable {
     public var id: String
     public var title: String
     public var command: String
@@ -112,7 +112,7 @@ public struct CommandTemplate: Codable, Equatable, Identifiable {
     }
 }
 
-public struct RightClickProAction: Codable, Equatable, Identifiable {
+public struct RightClickProAction: Codable, Equatable, Identifiable, Sendable {
     public var id: String
     public var title: String
     public var kind: ActionKind
@@ -146,7 +146,7 @@ public struct RightClickProAction: Codable, Equatable, Identifiable {
     }
 }
 
-public struct FileTemplate: Codable, Equatable, Identifiable {
+public struct FileTemplate: Codable, Equatable, Identifiable, Sendable {
     public var id: String
     public var title: String
     public var defaultFileName: String
@@ -160,14 +160,14 @@ public struct FileTemplate: Codable, Equatable, Identifiable {
     }
 }
 
-public enum DeveloperTargetMode: String, Codable, Equatable {
+public enum DeveloperTargetMode: String, Codable, Equatable, Sendable {
     case dynamic
     case currentDirectory
     case selectedItem
     case selectedItemDirectory
 }
 
-public struct DeveloperEntrypoint: Codable, Equatable, Identifiable {
+public struct DeveloperEntrypoint: Codable, Equatable, Identifiable, Sendable {
     public var id: String
     public var title: String
     public var bundleIdentifier: String
@@ -186,7 +186,7 @@ public struct DeveloperEntrypoint: Codable, Equatable, Identifiable {
     }
 }
 
-public struct RightClickProConfig: Codable, Equatable {
+public struct RightClickProConfig: Codable, Equatable, Sendable {
     public var schemaVersion: Int
     public var maxRootMenuActions: Int
     public var shortcutDirectoryIDs: [String]

@@ -1,7 +1,7 @@
 import Foundation
 import Security
 
-public struct PendingCommandRunRequest: Codable, Equatable, Identifiable {
+public struct PendingCommandRunRequest: Codable, Equatable, Identifiable, Sendable {
     public var id: UUID
     public var actionID: String
     public var context: FinderContext
@@ -51,7 +51,7 @@ public struct PendingCommandRunRequest: Codable, Equatable, Identifiable {
     }
 }
 
-public struct PendingCommandScopedBookmark: Codable, Equatable, Identifiable {
+public struct PendingCommandScopedBookmark: Codable, Equatable, Identifiable, Sendable {
     public var id: String { path }
     public var path: String
     public var bookmarkDataBase64: String
@@ -62,7 +62,7 @@ public struct PendingCommandScopedBookmark: Codable, Equatable, Identifiable {
     }
 }
 
-public enum CommandTemplateError: Error, Equatable, LocalizedError {
+public enum CommandTemplateError: Error, Equatable, LocalizedError, Sendable {
     case missingCommandTemplate(String)
     case unauthorizedWorkingDirectory(String)
     case inaccessibleWorkingDirectory(String)

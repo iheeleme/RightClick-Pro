@@ -1,6 +1,6 @@
 import Foundation
 
-public enum FinderInvocation: String, Codable, Equatable {
+public enum FinderInvocation: String, Codable, Equatable, Sendable {
     case selection
     case container
     case toolbar
@@ -17,7 +17,7 @@ public enum FinderInvocation: String, Codable, Equatable {
     }
 }
 
-public struct FinderContext: Codable, Equatable {
+public struct FinderContext: Codable, Equatable, Sendable {
     public var invocation: FinderInvocation
     public var targetDirectory: URL
     public var selectedItems: [URL]
@@ -33,7 +33,7 @@ public struct FinderContext: Codable, Equatable {
     }
 }
 
-public struct ActionRequest: Codable, Equatable {
+public struct ActionRequest: Codable, Equatable, Sendable {
     public var id: UUID
     public var actionID: String
     public var context: FinderContext
@@ -52,13 +52,13 @@ public struct ActionRequest: Codable, Equatable {
     }
 }
 
-public enum ActionResultStatus: String, Codable, Equatable {
+public enum ActionResultStatus: String, Codable, Equatable, Sendable {
     case success
     case failure
     case cancelled
 }
 
-public struct ActionResult: Codable, Equatable {
+public struct ActionResult: Codable, Equatable, Sendable {
     public var requestID: UUID
     public var status: ActionResultStatus
     public var message: String

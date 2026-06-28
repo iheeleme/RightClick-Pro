@@ -1,6 +1,6 @@
 import Foundation
 
-public struct DirectoryBookmark: Codable, Equatable, Identifiable {
+public struct DirectoryBookmark: Codable, Equatable, Identifiable, Sendable {
     public var id: String
     public var displayName: String
     public var path: String
@@ -26,7 +26,7 @@ public struct DirectoryBookmark: Codable, Equatable, Identifiable {
     }
 }
 
-public struct DirectoryBookmarkCatalog: Codable, Equatable {
+public struct DirectoryBookmarkCatalog: Codable, Equatable, Sendable {
     public var schemaVersion: Int
     public var bookmarks: [DirectoryBookmark]
 
@@ -47,7 +47,7 @@ public struct DirectoryBookmarkCatalog: Codable, Equatable {
     }
 }
 
-public enum BookmarkError: Error, Equatable {
+public enum BookmarkError: Error, Equatable, Sendable {
     case missingBookmark(String)
     case invalidBookmarkData(String)
 }

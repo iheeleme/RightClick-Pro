@@ -4,7 +4,7 @@ import Foundation
 import Darwin
 #endif
 
-public enum CommandRunStatus: String, Codable, Equatable {
+public enum CommandRunStatus: String, Codable, Equatable, Sendable {
     case preparing
     case running
     case succeeded
@@ -23,13 +23,13 @@ public enum CommandRunStatus: String, Codable, Equatable {
     }
 }
 
-public enum CommandRunOutputStream: String, Codable, Equatable {
+public enum CommandRunOutputStream: String, Codable, Equatable, Sendable {
     case system
     case stdout
     case stderr
 }
 
-public struct CommandRunOutputChunk: Codable, Equatable, Identifiable {
+public struct CommandRunOutputChunk: Codable, Equatable, Identifiable, Sendable {
     public var id: Int
     public var stream: CommandRunOutputStream
     public var text: String
@@ -43,7 +43,7 @@ public struct CommandRunOutputChunk: Codable, Equatable, Identifiable {
     }
 }
 
-public struct CommandRunSnapshot: Codable, Equatable, Identifiable {
+public struct CommandRunSnapshot: Codable, Equatable, Identifiable, Sendable {
     public var id: UUID
     public var actionID: String
     public var title: String
@@ -93,7 +93,7 @@ public struct CommandRunSnapshot: Codable, Equatable, Identifiable {
     }
 }
 
-public enum CommandRunServiceError: Error, Equatable, LocalizedError {
+public enum CommandRunServiceError: Error, Equatable, LocalizedError, Sendable {
     case runNotFound(UUID)
 
     public var errorDescription: String? {
@@ -104,7 +104,8 @@ public enum CommandRunServiceError: Error, Equatable, LocalizedError {
     }
 }
 
-public final class CommandRunService {
+// Foundation 的进程回调会跨线程捕获服务实例；运行状态统一由 lock 保护。
+public final class CommandRunService: @unchecked Sendable {
     private let paths: RightClickProStoragePaths
     private let configProvider: RightClickProConfigProviding
     private let operationLog: OperationLogging

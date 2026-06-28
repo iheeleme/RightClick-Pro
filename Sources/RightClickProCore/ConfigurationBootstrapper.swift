@@ -1,6 +1,6 @@
 import Foundation
 
-public struct ConfigurationBootstrapResult: Equatable {
+public struct ConfigurationBootstrapResult: Equatable, Sendable {
     public var paths: RightClickProStoragePaths
     public var config: RightClickProConfig
     public var bookmarks: DirectoryBookmarkCatalog

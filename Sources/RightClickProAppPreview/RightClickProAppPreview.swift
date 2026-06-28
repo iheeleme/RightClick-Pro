@@ -24,6 +24,34 @@ private enum FinderExtensionSetupDefaults {
     static let completedSignatureKey = "RightClickPro.completedFinderExtensionSetupSignature"
 }
 
+private enum MaintenanceResponse: Sendable {
+    case success(SystemMaintenanceResult)
+    case failure(String)
+
+    init(_ response: Result<SystemMaintenanceResult, Error>) {
+        switch response {
+        case .success(let result):
+            self = .success(result)
+        case .failure(let error):
+            self = .failure(error.localizedDescription)
+        }
+    }
+}
+
+private enum CommandRunClientResponse: Sendable {
+    case success(CommandRunSnapshot)
+    case failure(String)
+
+    init(_ response: Result<CommandRunSnapshot, Error>) {
+        switch response {
+        case .success(let snapshot):
+            self = .success(snapshot)
+        case .failure(let error):
+            self = .failure(error.localizedDescription)
+        }
+    }
+}
+
 @main
 struct RightClickProAppPreview: App {
     @NSApplicationDelegateAdaptor(RightClickProAppDelegate.self) private var appDelegate
@@ -42,6 +70,7 @@ struct RightClickProAppPreview: App {
     }
 }
 
+@MainActor
 final class RightClickProAppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         applyApplicationMenuTitle()
@@ -60,6 +89,7 @@ final class RightClickProAppDelegate: NSObject, NSApplicationDelegate {
     }
 }
 
+@MainActor
 final class SettingsViewModel: NSObject, ObservableObject {
     enum Section: String, CaseIterable, Identifiable {
         case onboarding = "概览"
@@ -385,9 +415,13 @@ final class SettingsViewModel: NSObject, ObservableObject {
 
         let request = SystemMaintenanceRequest(task: .checkFullDiskAccess)
         actionRunnerClient.performMaintenance(request) { [weak self] response in
-            DispatchQueue.main.async {
-                self?.handleFullDiskAccessResponse(
-                    response,
+            guard let viewModel = self else {
+                return
+            }
+            let maintenanceResponse = MaintenanceResponse(response)
+            DispatchQueue.main.async { [weak viewModel, maintenanceResponse] in
+                viewModel?.handleFullDiskAccessResponse(
+                    maintenanceResponse,
                     previousStatus: previousStatus,
                     userInitiated: userInitiated
                 )
@@ -428,10 +462,14 @@ final class SettingsViewModel: NSObject, ObservableObject {
         let request = SystemMaintenanceRequest(task: task, finderExtensionPath: appexURL.path)
 
         actionRunnerClient.performMaintenance(request) { [weak self] response in
-            DispatchQueue.main.async {
-                self?.isRepairingFinderMenu = false
-                self?.handleFinderMaintenanceResponse(
-                    response,
+            guard let viewModel = self else {
+                return
+            }
+            let maintenanceResponse = MaintenanceResponse(response)
+            DispatchQueue.main.async { [weak viewModel, maintenanceResponse] in
+                viewModel?.isRepairingFinderMenu = false
+                viewModel?.handleFinderMaintenanceResponse(
+                    maintenanceResponse,
                     didRequestRestart: restartFinder,
                     userInitiated: userInitiated
                 )
@@ -861,7 +899,7 @@ final class SettingsViewModel: NSObject, ObservableObject {
     }
 
     private func handleFinderMaintenanceResponse(
-        _ response: Result<SystemMaintenanceResult, Error>,
+        _ response: MaintenanceResponse,
         didRequestRestart: Bool,
         userInitiated: Bool
     ) {
@@ -895,8 +933,8 @@ final class SettingsViewModel: NSObject, ObservableObject {
             } else if userInitiated {
                 setStatus("修复右键菜单失败：\(detail)", tone: .error)
             }
-        case .failure(let error):
-            let message = "ActionRunner XPC 服务不可用：\(error.localizedDescription)"
+        case .failure(let errorMessage):
+            let message = "ActionRunner XPC 服务不可用：\(errorMessage)"
             markFinderExtensionNeedsAttention(message)
             if userInitiated {
                 setStatus("修复右键菜单失败：\(message)", tone: .error)
@@ -905,7 +943,7 @@ final class SettingsViewModel: NSObject, ObservableObject {
     }
 
     private func handleFullDiskAccessResponse(
-        _ response: Result<SystemMaintenanceResult, Error>,
+        _ response: MaintenanceResponse,
         previousStatus: FullDiskAccessStatus,
         userInitiated: Bool
     ) {
@@ -925,13 +963,13 @@ final class SettingsViewModel: NSObject, ObservableObject {
                 let suffix = hasFullDiskAccess ? "" : "。文件动作仍会尝试执行，并在失败时提示。"
                 setStatus("\(fullDiskAccessStatusMessage)\(suffix)", tone: tone)
             }
-        case .failure(let error):
+        case .failure(let errorMessage):
             if previousStatus == .granted && !userInitiated {
                 fullDiskAccessStatus = previousStatus
                 return
             }
 
-            fullDiskAccessStatus = .unavailable(error.localizedDescription)
+            fullDiskAccessStatus = .unavailable(errorMessage)
             if userInitiated {
                 setStatus(fullDiskAccessStatusMessage, tone: .error)
             }
@@ -1591,6 +1629,7 @@ enum SettingsValidationError: Error, LocalizedError {
     }
 }
 
+@MainActor
 final class CommandRunViewModel: ObservableObject {
     enum RunStatus: Equatable {
         case preparing
@@ -1667,18 +1706,22 @@ final class CommandRunViewModel: ObservableObject {
 
         status = .preparing
         actionRunnerClient.startCommandRun(request) { [weak self] result in
-            DispatchQueue.main.async {
-                guard let self else { return }
-                switch result {
+            guard let viewModel = self else {
+                return
+            }
+            let response = CommandRunClientResponse(result)
+            DispatchQueue.main.async { [weak viewModel, response] in
+                guard let viewModel else { return }
+                switch response {
                 case .success(let snapshot):
-                    self.apply(snapshot: snapshot)
+                    viewModel.apply(snapshot: snapshot)
                     if !snapshot.status.isTerminal {
-                        self.scheduleStatusPolling()
+                        viewModel.scheduleStatusPolling()
                     }
-                case .failure(let error):
-                    self.status = .error(error.localizedDescription)
-                    self.output = "运行失败：\(error.localizedDescription)\n"
-                    self.notifyFinishIfNeeded()
+                case .failure(let errorMessage):
+                    viewModel.status = .error(errorMessage)
+                    viewModel.output = "运行失败：\(errorMessage)\n"
+                    viewModel.notifyFinishIfNeeded()
                 }
             }
         }
@@ -1686,15 +1729,19 @@ final class CommandRunViewModel: ObservableObject {
 
     func stop() {
         actionRunnerClient.stopCommandRun(runID: request.id) { [weak self] result in
-            DispatchQueue.main.async {
-                guard let self else { return }
-                switch result {
+            guard let viewModel = self else {
+                return
+            }
+            let response = CommandRunClientResponse(result)
+            DispatchQueue.main.async { [weak viewModel, response] in
+                guard let viewModel else { return }
+                switch response {
                 case .success(let snapshot):
-                    self.apply(snapshot: snapshot)
-                case .failure(let error):
-                    self.status = .error(error.localizedDescription)
-                    self.output += "\n停止命令失败：\(error.localizedDescription)\n"
-                    self.notifyFinishIfNeeded()
+                    viewModel.apply(snapshot: snapshot)
+                case .failure(let errorMessage):
+                    viewModel.status = .error(errorMessage)
+                    viewModel.output += "\n停止命令失败：\(errorMessage)\n"
+                    viewModel.notifyFinishIfNeeded()
                 }
             }
         }
@@ -1712,23 +1759,29 @@ final class CommandRunViewModel: ObservableObject {
     private func scheduleStatusPolling() {
         pollTimer?.invalidate()
         pollTimer = Timer.scheduledTimer(withTimeInterval: 0.3, repeats: true) { [weak self] _ in
-            self?.pollStatus()
+            Task { @MainActor [weak self] in
+                self?.pollStatus()
+            }
         }
     }
 
     private func pollStatus() {
         actionRunnerClient.commandRunStatus(runID: request.id) { [weak self] result in
-            DispatchQueue.main.async {
-                guard let self else { return }
-                switch result {
+            guard let viewModel = self else {
+                return
+            }
+            let response = CommandRunClientResponse(result)
+            DispatchQueue.main.async { [weak viewModel, response] in
+                guard let viewModel else { return }
+                switch response {
                 case .success(let snapshot):
-                    self.apply(snapshot: snapshot)
-                case .failure(let error):
-                    self.pollTimer?.invalidate()
-                    self.pollTimer = nil
-                    self.status = .error(error.localizedDescription)
-                    self.output += "\n读取命令状态失败：\(error.localizedDescription)\n"
-                    self.notifyFinishIfNeeded()
+                    viewModel.apply(snapshot: snapshot)
+                case .failure(let errorMessage):
+                    viewModel.pollTimer?.invalidate()
+                    viewModel.pollTimer = nil
+                    viewModel.status = .error(errorMessage)
+                    viewModel.output += "\n读取命令状态失败：\(errorMessage)\n"
+                    viewModel.notifyFinishIfNeeded()
                 }
             }
         }
@@ -1786,6 +1839,7 @@ final class CommandRunViewModel: ObservableObject {
 
 }
 
+@MainActor
 final class CommandRunWindowCoordinator {
     static let shared = CommandRunWindowCoordinator()
     private var windows: [UUID: NSWindow] = [:]
@@ -1817,7 +1871,9 @@ final class CommandRunWindowCoordinator {
             object: window,
             queue: .main
         ) { [weak self] _ in
-            self?.windows[request.id] = nil
+            Task { @MainActor [weak self] in
+                self?.windows[request.id] = nil
+            }
         }
 
         viewModel.start()
