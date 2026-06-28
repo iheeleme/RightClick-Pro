@@ -310,6 +310,7 @@ case .currentDirectory:
 - The preview Finder Sync `.appex` must be a Mach-O `EXECUTE` binary linked with `_NSExtensionMain`; a Swift dylib inside an `.appex` is not a valid Finder Sync extension bundle for PlugInKit discovery.
 - The preview `.appex` Info.plist must contain `NSExtensionPointIdentifier=com.apple.FinderSync`.
 - Finder Sync extension startup must not assume the menu-bar app launched first. It must run `ConfigurationBootstrapper.bootstrap(paths:)` before loading config and assigning `FIFinderSyncController.default().directoryURLs`.
+- Finder Sync extension cold-start must keep `menu(for:)` fast. It should set a fast monitored-directory fallback during `init`, serve menus from cached config/bookmark snapshots, cache rendered icons, and refresh/repair config in the background.
 - Default injected Desktop/Downloads/Documents/Code bookmarks must use the real user home directory, not the sandbox container home returned by `FileManager.homeDirectoryForCurrentUser` inside sandboxed app/extension processes.
 - Bootstrap must self-heal existing bookmark paths under the sandbox process home by remapping them to the real user home while preserving bookmark IDs, display names, bookmark data, and timestamps.
 - Bootstrap must also repair older existing configs that are missing an available default directory. Append the missing default bookmark, monitored/common directory IDs, and generated directory actions while preserving unrelated custom actions, templates, developer entries, and user ordering as much as possible.
@@ -341,6 +342,7 @@ case .currentDirectory:
 - Preview Finder Sync binary is not `EXECUTE` -> exit 65.
 - Preview Finder Sync extension point is not `com.apple.FinderSync` -> exit 65.
 - Finder extension starts before config/bookmark files exist -> bootstrap creates defaults before assigning `directoryURLs`.
+- Finder extension starts after a long idle period -> first `menu(for:)` must not synchronously run full bootstrap or repeated JSON/icon lookup work.
 - Existing bookmark path starts with the sandbox process home -> remap to the same relative path under the real user home.
 - Existing bookmark path merely shares a similar prefix with the sandbox process home -> leave unchanged.
 - Existing config/bookmark files omit an available default directory such as `~/Code` -> append that directory to bookmarks, `monitoredDirectoryIDs`, `commonDirectoryIDs`, and missing generated directory actions.
@@ -361,6 +363,7 @@ case .currentDirectory:
 - Good: tag `v1.2.3` produces `RightClick Pro-1.2.3-<arch>-preview.zip` containing `RightClickProFinderExtension.appex` as an `_NSExtensionMain` executable, or an exported Xcode archive artifact.
 - Good: `RIGHTCLICKPRO_PACKAGE_DMG=1 scripts/package-macos.sh debug` produces zip plus `RightClick Pro-<version>-<arch>-preview.dmg`, then mounts the DMG and verifies the app, Applications alias, and README.
 - Good: Finder starts the extension before the app has opened; the extension bootstraps config/bookmarks and assigns real-home Desktop/Downloads/Documents/Code URLs to `directoryURLs`.
+- Good: after Finder has unloaded the extension, the next right-click cold-start sets fallback monitored directories immediately, returns menu items from cached config once loaded, and refreshes repaired config asynchronously.
 - Good: an older install has Desktop/Downloads/Documents only and `~/Code` exists; bootstrap appends the `code` bookmark, monitors it, and adds `open-directory-code`, `move-to-code`, and `copy-to-code`.
 - Good: rebuilding/reinstalling a local preview registers the new `RightClickProFinderExtension.appex` path, then enables `com.iheeleme.rightclickpro.FinderExtension`.
 - Good: first app launch after dragging from the DMG registers `Contents/PlugIns/RightClickProFinderExtension.appex` through ActionRunner XPC and reloads Finder once, so PlugInKit can discover the right physical extension path on that machine without a slow first right-click wait.
@@ -368,6 +371,7 @@ case .currentDirectory:
 - Base: manual workflow dispatch with no Xcode env vars produces a SwiftPM preview bundle with App, app-local XPC service, extension-local XPC service, Finder extension, and shared core dylib.
 - Base: manual workflow dispatch with `package_dmg=false` uploads only zip output in a clean runner workspace.
 - Bad: bootstrap writes `~/Library/Containers/com.iheeleme.rightclickpro/Data/Desktop` as a monitored directory, so the Finder menu never appears on the user's real Desktop.
+- Bad: `FinderSyncController.menu(for:)` reads `config.json`, reads `bookmarks.json`, resolves all app icons, and runs bootstrap synchronously on every right-click.
 - Bad: the packaging script only runs `pluginkit -e use -i com.iheeleme.rightclickpro.FinderExtension`; after reinstall, PlugInKit may still know only an old or missing physical extension path.
 - Bad: the sandboxed menu-bar app directly runs `/usr/bin/killall Finder`, then reports failure even though the embedded unsandboxed XPC service could perform the repair.
 - Bad: every normal launch restarts Finder even when the same bundled extension was already repaired successfully.

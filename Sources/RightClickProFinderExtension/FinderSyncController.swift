@@ -10,6 +10,13 @@ final class FinderSyncController: FIFinderSync {
     private let paths: RightClickProStoragePaths
     private let configProvider: RightClickProConfigProviding
     private let xpcClient = RightClickProActionRunnerXPCClient()
+    private let cacheRefreshQueue = DispatchQueue(label: "com.iheeleme.rightclickpro.finder-extension.cache")
+    private var cachedConfig = RightClickProConfig(actions: [])
+    private var cachedBookmarks = DirectoryBookmarkCatalog()
+    private var hasLoadedConfiguration = false
+    private var lastCacheRefresh = Date.distantPast
+    private var isRefreshingCache = false
+    private var iconCache: [String: NSImage] = [:]
     private var pendingMenuActions: [Int: PendingMenuAction] = [:]
     private var nextMenuActionTag = 1
 
@@ -18,16 +25,22 @@ final class FinderSyncController: FIFinderSync {
         self.paths = paths
         self.configProvider = FileBackedRightClickProConfigProvider(paths: paths)
         super.init()
-        bootstrapConfiguration(paths: paths)
-        reloadMonitoredDirectories()
+        installFastMonitoredDirectoryFallback(paths: paths)
+        loadConfigurationForStartup(paths: paths)
+        reloadMonitoredDirectoriesFromCache()
+        repairConfigurationInBackground(paths: paths)
     }
 
     override func menu(for menuKind: FIMenuKind) -> NSMenu? {
         let context = finderContext(menuKind: menuKind)
-        guard let config = try? configProvider.loadConfig() else {
+        refreshConfigurationFromDiskIfNeeded()
+
+        guard hasLoadedConfiguration else {
             return nil
         }
-        let bookmarks = (try? configProvider.loadBookmarkCatalog()) ?? DirectoryBookmarkCatalog()
+
+        let config = cachedConfig
+        let bookmarks = cachedBookmarks
 
         pendingMenuActions.removeAll()
         nextMenuActionTag = 1
@@ -54,22 +67,98 @@ final class FinderSyncController: FIFinderSync {
         return menu.items.isEmpty ? nil : menu
     }
 
-    private func bootstrapConfiguration(paths: RightClickProStoragePaths) {
+    private func loadConfigurationForStartup(paths: RightClickProStoragePaths) {
+        if
+            FileManager.default.fileExists(atPath: paths.configURL.path),
+            FileManager.default.fileExists(atPath: paths.bookmarksURL.path),
+            let config = try? configProvider.loadConfig(),
+            let bookmarks = try? configProvider.loadBookmarkCatalog()
+        {
+            applyCachedConfiguration(config: config, bookmarks: bookmarks)
+            return
+        }
+
         do {
-            _ = try ConfigurationBootstrapper().bootstrap(paths: paths)
+            let result = try ConfigurationBootstrapper().bootstrap(paths: paths)
+            applyCachedConfiguration(config: result.config, bookmarks: result.bookmarks)
         } catch {
             NSLog("RightClick Pro Finder extension bootstrap failed: \(error.localizedDescription)")
         }
     }
 
-    private func reloadMonitoredDirectories() {
-        guard
-            let config = try? configProvider.loadConfig(),
+    private func installFastMonitoredDirectoryFallback(paths: RightClickProStoragePaths) {
+        if
+            FileManager.default.fileExists(atPath: paths.bookmarksURL.path),
             let bookmarks = try? configProvider.loadBookmarkCatalog()
-        else {
+        {
+            let urls = bookmarks.bookmarks.map { URL(fileURLWithPath: $0.path) }
+            if !urls.isEmpty {
+                FIFinderSyncController.default().directoryURLs = Set(urls)
+                return
+            }
+        }
+
+        let defaultURLs = ConfigurationBootstrapper()
+            .defaultBookmarks()
+            .bookmarks
+            .map { URL(fileURLWithPath: $0.path) }
+        if !defaultURLs.isEmpty {
+            FIFinderSyncController.default().directoryURLs = Set(defaultURLs)
+        }
+    }
+
+    private func repairConfigurationInBackground(paths: RightClickProStoragePaths) {
+        cacheRefreshQueue.async { [weak self] in
+            do {
+                let result = try ConfigurationBootstrapper().bootstrap(paths: paths)
+                DispatchQueue.main.async {
+                    self?.applyCachedConfiguration(config: result.config, bookmarks: result.bookmarks)
+                    self?.reloadMonitoredDirectoriesFromCache()
+                }
+            } catch {
+                NSLog("RightClick Pro Finder extension background bootstrap failed: \(error.localizedDescription)")
+            }
+        }
+    }
+
+    private func refreshConfigurationFromDiskIfNeeded() {
+        guard !isRefreshingCache, abs(lastCacheRefresh.timeIntervalSinceNow) > 2 else {
             return
         }
-        let urls = bookmarks.urls(for: config.monitoredDirectoryIDs)
+
+        isRefreshingCache = true
+        cacheRefreshQueue.async { [weak self] in
+            guard let self else { return }
+            let loadedConfig = try? self.configProvider.loadConfig()
+            let loadedBookmarks = try? self.configProvider.loadBookmarkCatalog()
+
+            DispatchQueue.main.async {
+                self.isRefreshingCache = false
+                guard let loadedConfig, let loadedBookmarks else {
+                    return
+                }
+                if loadedConfig != self.cachedConfig || loadedBookmarks != self.cachedBookmarks {
+                    self.applyCachedConfiguration(config: loadedConfig, bookmarks: loadedBookmarks)
+                    self.reloadMonitoredDirectoriesFromCache()
+                } else {
+                    self.lastCacheRefresh = Date()
+                }
+            }
+        }
+    }
+
+    private func applyCachedConfiguration(config: RightClickProConfig, bookmarks: DirectoryBookmarkCatalog) {
+        cachedConfig = config
+        cachedBookmarks = bookmarks
+        hasLoadedConfiguration = true
+        lastCacheRefresh = Date()
+    }
+
+    private func reloadMonitoredDirectoriesFromCache() {
+        guard hasLoadedConfiguration else {
+            return
+        }
+        let urls = cachedBookmarks.urls(for: cachedConfig.monitoredDirectoryIDs)
         FIFinderSyncController.default().directoryURLs = Set(urls)
     }
 
@@ -131,11 +220,8 @@ final class FinderSyncController: FIFinderSync {
     }
 
     private func routeCommandTemplateToMainApp(_ request: ActionRequest) -> Bool {
-        guard
-            let config = try? configProvider.loadConfig(),
-            let action = config.actions.first(where: { $0.id == request.actionID }),
-            action.kind == .runCommand
-        else {
+        guard let action = cachedConfig.actions.first(where: { $0.id == request.actionID }),
+              action.kind == .runCommand else {
             return false
         }
 
@@ -191,6 +277,11 @@ final class FinderSyncController: FIFinderSync {
             return nil
         }
 
+        let key = cacheKey(for: icon)
+        if let cached = iconCache[key] {
+            return cached
+        }
+
         let image: NSImage?
         switch icon {
         case .systemSymbol(let name):
@@ -216,7 +307,25 @@ final class FinderSyncController: FIFinderSync {
         }
 
         image?.size = NSSize(width: 16, height: 16)
+        if let image {
+            iconCache[key] = image
+        }
         return image
+    }
+
+    private func cacheKey(for icon: MenuIconDescriptor) -> String {
+        switch icon {
+        case .systemSymbol(let name):
+            return "symbol:\(name)"
+        case .appBundleIdentifier(let bundleIdentifier):
+            return "app:\(bundleIdentifier)"
+        case .filePath(let path):
+            return "path:\(path)"
+        case .fileExtension(let fileExtension):
+            return "extension:\(normalizedFileExtension(fileExtension))"
+        case .folder:
+            return "folder"
+        }
     }
 
     private func normalizedFileExtension(_ fileExtension: String) -> String {

@@ -43,6 +43,8 @@ The ActionRunner resolves monitored and common directory bookmarks before each r
 
 Finder Sync copies menu items through Finder before dispatching the selected command back to the extension. Do not rely on `representedObject` for action payloads there; leaf menu items use stable integer `tag` values that map back to pending actions held by `FinderSyncController`.
 
+Finder may cold-start the Finder Sync extension after a long idle period. The extension therefore sets a fast monitored-directory fallback first, loads config/bookmarks into memory, and serves `menu(for:)` from cached values instead of doing synchronous JSON/bootstrap work during the menu request. Background refresh keeps settings changes visible without blocking the first right-click menu.
+
 ## Current Build Note
 
 The current development machine has Swift Command Line Tools but no full Xcode installation selected, so SwiftPM tests cover the core module. The preview packaging script manually embeds:

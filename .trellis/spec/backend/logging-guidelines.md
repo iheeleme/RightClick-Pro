@@ -21,6 +21,7 @@ Use `NSLog` only at AppKit/Finder process boundaries:
 - Finder extension bootstrap failure.
 - Finder menu action dispatch without a pending payload tag.
 - XPC action success or failure from the Finder extension.
+- Finder extension foreground/background bootstrap failure.
 
 Reference file: `Sources/RightClickProFinderExtension/FinderSyncController.swift`.
 
