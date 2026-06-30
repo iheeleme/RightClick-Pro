@@ -11,7 +11,7 @@ Settings state is centralized in `SettingsViewModel`. It bridges Core storage mo
 | Local UI state | Individual views | filters, grouping modes, preview context, editing drafts |
 | Derived state | Computed properties/functions | enabled action count, root menu progress, sidebar badges |
 
-Reference file: `Sources/RightClickProAppPreview/RightClickProAppPreview.swift`.
+Reference files: `Sources/RightClickProAppPreview/SettingsViewModel.swift` and the section views under `Sources/RightClickProAppPreview/`.
 
 ## Persistence Rules
 

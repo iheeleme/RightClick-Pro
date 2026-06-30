@@ -30,12 +30,12 @@ Reference files: `Package.swift`, `docs/architecture.md`, `Sources/RightClickPro
 
 ## Adding New Files
 
-Add a new file only when it gives a real ownership boundary. Good candidates are new Core services, new XPC contracts, or a future split of the large SwiftUI settings file. Avoid creating generic `Utils.swift`; prefer capability-specific names such as `BookmarkModels.swift` or `Authorization.swift`.
+Add a new file only when it gives a real ownership boundary. Good candidates are new Core services, new XPC contracts, or a focused SwiftUI settings screen/helper file under `RightClickProAppPreview`. Avoid creating generic `Utils.swift`; prefer capability-specific names such as `BookmarkModels.swift` or `Authorization.swift`.
 
 When a new action kind is added, expect changes in at least:
 
 - `ActionModels.swift`
 - `ActionRunner.swift`
 - `MenuBuilder.swift`
-- `RightClickProAppPreview.swift`
+- `RightClickProAppPreview.swift` and the focused `Sources/RightClickProAppPreview/*Views.swift` / `SettingsViewModel.swift` files
 - `Tests/RightClickProCoreTests/*`

@@ -112,7 +112,7 @@ RightClick Pro quality checks center on SwiftPM compilation/tests, Finder extens
   swiftc -typecheck -I /tmp/righttool-sendable-check \
     -swift-version 6 -strict-concurrency=complete -warnings-as-errors Sources/RightClickProFinderExtension/FinderSyncController.swift
   swiftc -typecheck -parse-as-library -I /tmp/righttool-sendable-check \
-    -swift-version 6 -strict-concurrency=complete -warnings-as-errors Sources/RightClickProAppPreview/RightClickProAppPreview.swift
+    -swift-version 6 -strict-concurrency=complete -warnings-as-errors Sources/RightClickProAppPreview/*.swift
   ```
 - Run `git diff --check`.
 - Run `scripts/package-macos.sh debug` after App/Finder/XPC concurrency fixes.

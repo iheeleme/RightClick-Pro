@@ -64,7 +64,7 @@ Reference examples: `ActionListView`, `ActionManagementTable`, `TemplateListView
 
 #### 1. Scope / Trigger
 
-- Trigger: changes to `Sources/RightClickProAppPreview/RightClickProAppPreview.swift` or future SwiftUI settings screens that edit `RightClickProConfig`.
+- Trigger: changes to `Sources/RightClickProAppPreview/SettingsViewModel.swift`, `EditorSheetViews.swift`, or SwiftUI settings screens that edit `RightClickProConfig`.
 - This is a frontend contract with persistence consequences because the settings UI writes JSON config that Finder Sync and ActionRunner later consume.
 
 #### 2. Signatures
@@ -148,7 +148,7 @@ Button("保存配置") {
 
 #### 1. Scope / Trigger
 
-- Trigger: redesigning or refactoring `Sources/RightClickProAppPreview/RightClickProAppPreview.swift` presentation components, especially dashboards, tables, menu previews, and section navigation.
+- Trigger: redesigning or refactoring `Sources/RightClickProAppPreview/` presentation components, especially dashboards, tables, menu previews, and section navigation.
 
 #### 2. Signatures
 
@@ -242,7 +242,7 @@ SortStepControls(
 
 #### 1. Scope / Trigger
 
-- Trigger: changing add/edit sheets, row action buttons, sort controls, overflow menus, or other icon-only controls in `Sources/RightClickProAppPreview/RightClickProAppPreview.swift`.
+- Trigger: changing add/edit sheets, row action buttons, sort controls, overflow menus, or other icon-only controls in `Sources/RightClickProAppPreview/`.
 - This is a frontend interaction contract because icon-only controls can otherwise look clickable while lacking hover, disabled, help, or accessibility feedback.
 
 #### 2. Signatures
@@ -339,7 +339,7 @@ EditorSheetFooter(
 
 #### 1. Scope / Trigger
 
-- Trigger: changing the add/edit flow for `DeveloperEntrypoint` rows in `Sources/RightClickProAppPreview/RightClickProAppPreview.swift`.
+- Trigger: changing the add/edit flow for `DeveloperEntrypoint` rows in `Sources/RightClickProAppPreview/DeveloperSettingsViews.swift`, `EditorSheetViews.swift`, or `SettingsViewModel.swift`.
 - This is a settings UX contract because user-selected apps are persisted as `DeveloperEntrypoint.bundleIdentifier` and later rendered in Finder menus with real app icons.
 
 #### 2. Signatures
@@ -414,7 +414,7 @@ DeveloperApplicationPickerCard(draft: draft) {
 
 #### 1. Scope / Trigger
 
-- Trigger: changing the macOS app icon, `design/icon.png`, or the settings sidebar brand mark in `Sources/RightClickProAppPreview/RightClickProAppPreview.swift`.
+- Trigger: changing the macOS app icon, `design/icon.png`, or the settings sidebar brand mark in `Sources/RightClickProAppPreview/SettingsRootViews.swift`.
 - This is both a frontend and packaging contract because the settings UI reads the runtime PNG while the `.app` bundle uses the generated `.icns`.
 
 #### 2. Signatures
@@ -543,7 +543,7 @@ SettingsRootView(viewModel: viewModel)
 
 **Cause**: Using a default SwiftUI `Button` for navigation rows in a dense macOS settings sidebar can defer the action until mouseUp.
 
-**Fix**: For custom sidebar navigation in `RightClickProAppPreview.swift`, use a full-row hit target and select on mouseDown with `DragGesture(minimumDistance: 0)`. Keep accessibility traits so the row is still announced as a button. If the detail view is heavy, split selection into `visualSelection` for immediate sidebar highlight and `renderedSection` for the delayed detail rebuild.
+**Fix**: For custom sidebar navigation in `SettingsRootViews.swift`, use a full-row hit target and select on mouseDown with `DragGesture(minimumDistance: 0)`. Keep accessibility traits so the row is still announced as a button. If the detail view is heavy, split selection into `visualSelection` for immediate sidebar highlight and `renderedSection` for the delayed detail rebuild.
 
 Wrong:
 ```swift

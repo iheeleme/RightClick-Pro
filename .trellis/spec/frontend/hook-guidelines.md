@@ -12,7 +12,7 @@ Use `@State` for UI-only state that does not need to persist:
 - Sheet drafts: `TemplateDraft?`, `DeveloperEntrypointDraft?`.
 - Hover/presentation flags in compact controls.
 
-Reference file: `Sources/RightClickProAppPreview/RightClickProAppPreview.swift`.
+Reference files: `Sources/RightClickProAppPreview/SettingsRootViews.swift`, section view files, and `EditorSheetViews.swift`.
 
 ## Shared State
 

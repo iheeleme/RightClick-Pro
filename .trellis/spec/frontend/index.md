@@ -1,15 +1,15 @@
 # Frontend Development Guidelines
 
-RightClick Pro's frontend is a native macOS SwiftUI/AppKit settings surface, not a web UI. The current implementation is concentrated in `Sources/RightClickProAppPreview/RightClickProAppPreview.swift` and consumes contracts from `RightClickProCore`.
+RightClick Pro's frontend is a native macOS SwiftUI/AppKit settings surface, not a web UI. The implementation lives under `Sources/RightClickProAppPreview/` and consumes contracts from `RightClickProCore`.
 
 ## Source Boundaries
 
 | Area | Files | Responsibility |
 |------|-------|----------------|
-| App shell | `RightClickProAppPreview` | Menu bar extra, settings window, hidden title-bar chrome |
-| State and commands | `SettingsViewModel` | Bootstrap/load/save config, edit actions/templates/directories/developer entries, expose derived counts/status |
-| Settings screens | `SettingsRootView`, `SettingsSidebar`, section views | Present overview, action management, directories, templates, developer entries, operation history |
-| Shared presentation | `DesignPanel`, `PageToolbar`, `PreviewSection`, `FinderMenuPreview`, `MenuIconView`, editor sheet controls | Consistent dense macOS tool UI |
+| App shell | `RightClickProAppPreview.swift` | Menu bar extra, settings window, hidden title-bar chrome |
+| State and commands | `SettingsViewModel.swift` | Bootstrap/load/save config, edit actions/templates/directories/developer entries, expose derived counts/status |
+| Settings screens | `OverviewViews.swift`, `DirectorySettingsViews.swift`, `ActionManagementViews.swift`, `TemplateSettingsViews.swift`, `CommandTemplateSettingsViews.swift`, `DeveloperSettingsViews.swift`, `OperationHistoryViews.swift` | Present overview, action management, directories, templates, command templates, developer entries, operation history |
+| Shared presentation | `SettingsRootViews.swift`, `FinderMenuPreviewViews.swift`, `EditorSheetViews.swift`, `DisplayExtensions.swift` | Consistent dense macOS tool UI, Finder menu previews, editor sheets, display helpers |
 | Core integration | `RightClickProCore` imports | Reuse `RightClickProConfig`, `MenuBuilder`, `MenuIconResolver`, `OperationRecord`, storage stores |
 
 ## Guidelines Index

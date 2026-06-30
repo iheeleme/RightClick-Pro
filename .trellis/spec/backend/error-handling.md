@@ -14,7 +14,7 @@ Use focused `Error` enums near the owning domain:
 - `RightClickProXPCClientError` for unavailable XPC service or missing replies.
 - `SettingsValidationError` for settings UI save validation.
 
-Reference files: `Sources/RightClickProCore/Storage.swift`, `BookmarkModels.swift`, `Authorization.swift`, `FileOperations.swift`, `ActionRunner.swift`, `XPCAdapter.swift`, `Sources/RightClickProAppPreview/RightClickProAppPreview.swift`.
+Reference files: `Sources/RightClickProCore/Storage.swift`, `BookmarkModels.swift`, `Authorization.swift`, `FileOperations.swift`, `ActionRunner.swift`, `XPCAdapter.swift`, `Sources/RightClickProAppPreview/SettingsViewModel.swift`, `EditorSheetViews.swift`.
 
 ## Propagation Rules
 
@@ -32,7 +32,7 @@ Reference files: `Sources/RightClickProCore/Storage.swift`, `BookmarkModels.swif
 - Validate template and developer IDs for emptiness and duplicates before persisting.
 - Validate filenames by rejecting empty strings and `/`.
 
-Reference files: `Sources/RightClickProCore/ActionRunner.swift`, `FileOperations.swift`, `Sources/RightClickProAppPreview/RightClickProAppPreview.swift`.
+Reference files: `Sources/RightClickProCore/ActionRunner.swift`, `FileOperations.swift`, `Sources/RightClickProAppPreview/SettingsViewModel.swift`, `EditorSheetViews.swift`.
 
 ## Cancellation
 
