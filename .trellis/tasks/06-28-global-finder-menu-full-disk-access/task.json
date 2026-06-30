@@ -13,7 +13,7 @@
   "createdAt": "2026-06-28",
   "completedAt": null,
   "branch": null,
-  "base_branch": "main",
+  "base_branch": "develop",
   "worktree_path": null,
   "commit": null,
   "pr_url": null,

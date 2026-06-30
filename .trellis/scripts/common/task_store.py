@@ -54,6 +54,8 @@ from .task_utils import (
     run_task_hooks,
 )
 
+DEFAULT_DEVELOPMENT_BRANCH = "develop"
+
 
 # =============================================================================
 # Helper Functions
@@ -231,10 +233,6 @@ def cmd_create(args: argparse.Namespace) -> int:
 
     today = datetime.now().strftime("%Y-%m-%d")
 
-    # Record current branch as base_branch (PR target)
-    _, branch_out, _ = run_git(["branch", "--show-current"], cwd=repo_root)
-    current_branch = branch_out.strip() or "main"
-
     task_data = {
         "id": slug,
         "name": slug,
@@ -250,7 +248,7 @@ def cmd_create(args: argparse.Namespace) -> int:
         "createdAt": today,
         "completedAt": None,
         "branch": None,
-        "base_branch": current_branch,
+        "base_branch": DEFAULT_DEVELOPMENT_BRANCH,
         "worktree_path": None,
         "commit": None,
         "pr_url": None,

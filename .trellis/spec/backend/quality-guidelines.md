@@ -703,9 +703,10 @@ return .application(appURL: terminalURL, targetURL: selectedFileURL.deletingLast
   APP_GROUP_IDENTIFIER=group.com.iheeleme.rightclickpro
   CODE_SIGN_IDENTITY=-
   ```
-- Manual workflow input:
+- Workflow DMG artifact contract:
   ```yaml
-  package_dmg: true | false
+  RIGHTCLICKPRO_PACKAGE_DMG: "1"
+  path: dist/*.dmg
   ```
 - Preview app and Finder extension entitlements include app sandbox, App Group, user-selected read/write, and app-scope bookmarks.
 - Preview ActionRunner XPC entitlements include App Group but intentionally omit app sandbox for local smoke tests against auto-injected Desktop/Documents/Downloads/Code paths. Runtime authorization must still validate all file mutations against configured monitored/common directories.
@@ -736,8 +737,9 @@ return .application(appURL: terminalURL, targetURL: selectedFileURL.deletingLast
 - Finder restart/repair controls should also run through the ActionRunner XPC maintenance path because the menu-bar app is sandboxed; direct `killall Finder` or `pluginkit` from the app can fail.
 - When both `RIGHTCLICKPRO_XCODE_PROJECT` and `RIGHTCLICKPRO_XCODE_SCHEME` are configured, packaging must use `xcodebuild archive`.
 - If only one Xcode variable is configured, packaging must fail instead of silently falling back to SwiftPM preview output.
-- Zip artifacts are written to `dist/RightClick Pro-<version>-<arch>-preview.zip`.
-- `RIGHTCLICKPRO_PACKAGE_DMG=1` creates an additional compressed read-only `UDZO` artifact at `dist/RightClick Pro-<version>-<arch>-preview.dmg`.
+- Local zip artifacts are written to `dist/RightClick Pro-<version>-<arch>-preview.zip` when the packaging script runs directly.
+- GitHub Actions must set `RIGHTCLICKPRO_PACKAGE_DMG=1` and upload only the compressed read-only `UDZO` artifact at `dist/RightClick Pro-<version>-<arch>-preview.dmg`.
+- `package_dmg` must not be a workflow_dispatch input because CI always publishes DMG-only artifacts.
 - DMG contents must include `RightClick Pro.app`, an `/Applications` alias, and `README.txt`.
 - `README.txt` must cover drag-to-Applications installation, `xattr -cr "/Applications/RightClick Pro.app"` quarantine cleanup, the non-Developer-ID/non-notarized warning, Finder Extension enablement, and the `killall Finder` fallback.
 - `RIGHTCLICKPRO_PACKAGE_DMG=1` is supported only on the SwiftPM preview bundle path until the Xcode archive/export path has a concrete `.app` output contract.
@@ -762,21 +764,23 @@ return .application(appURL: terminalURL, targetURL: selectedFileURL.deletingLast
 - Existing bookmark path starts with the sandbox process home -> remap to the same relative path under the real user home.
 - Existing bookmark path merely shares a similar prefix with the sandbox process home -> leave unchanged.
 - Existing config/bookmark files omit an available default directory such as `~/Code` -> append that directory to bookmarks, `monitoredDirectoryIDs`, `commonDirectoryIDs`, and missing generated directory actions.
-- Preview bundle is missing app or extension-local `RightClickProActionRunner.xpc` -> packaging fails before zip upload.
+- Preview bundle is missing app or extension-local `RightClickProActionRunner.xpc` -> packaging fails before artifact upload.
 - Preview XPC service has app sandbox entitlement -> local smoke tests against auto-injected protected folders may fail.
-- Preview deep code-sign verification fails -> packaging fails before zip upload.
+- Preview deep code-sign verification fails -> packaging fails before artifact upload.
 - `pluginkit` unavailable during `RIGHTCLICKPRO_REGISTER_FINDER_EXTENSION=1` -> skip registration/enablement without failing packaging.
 - `pluginkit -a` or `pluginkit -e use` fails during opt-in local preview enablement -> do not fail packaging; the bundle validation remains the hard gate.
 - Runtime maintenance cannot find bundled `RightClickProFinderExtension.appex` -> show a user-facing error that the app should be installed from the DMG into Applications.
 - Runtime maintenance XPC is unavailable -> show a user-facing error and keep the manual System Settings fallback available.
 - Direct sandboxed app `killall Finder` fails -> bug; restart should be delegated to the unsandboxed ActionRunner XPC maintenance service.
 - Overview setup banner is visible after successful runtime setup -> UI noise; hide it until automatic setup fails or manual attention is needed.
-- No `dist/*.zip` output in GitHub Actions -> artifact upload must fail.
+- No `dist/*.dmg` output in GitHub Actions -> artifact upload must fail.
+- Workflow upload path includes `dist/*.zip` -> bug; CI artifact regresses to mixed zip/DMG contents.
+- Docs mention `package_dmg=false` for GitHub Actions -> bug; docs describe an unsupported CI path.
 - DMG smoke mount lacks `RightClick Pro.app`, `Applications`, or `README.txt` -> exit 65.
 
 #### 5. Good/Base/Bad Cases
 
-- Good: tag `v1.2.3` produces `RightClick Pro-1.2.3-<arch>-preview.zip` containing `RightClickProFinderExtension.appex` as an `_NSExtensionMain` executable, or an exported Xcode archive artifact.
+- Good: tag `v1.2.3` uploads `RightClick Pro-1.2.3-<arch>-preview.dmg` containing `RightClickProFinderExtension.appex` as an `_NSExtensionMain` executable inside the app bundle.
 - Good: `RIGHTCLICKPRO_PACKAGE_DMG=1 scripts/package-macos.sh debug` produces zip plus `RightClick Pro-<version>-<arch>-preview.dmg`, then mounts the DMG and verifies the app, Applications alias, and README.
 - Good: Finder starts the extension before the app has opened; the extension installs fallback config, assigns `/` as the sync root, and repairs config/bookmarks asynchronously.
 - Good: `~/Code` is configured as a shortcut directory; Finder Sync still registers `/` as the sync root and returns eligible menus globally.
@@ -788,7 +792,7 @@ return .application(appURL: terminalURL, targetURL: selectedFileURL.deletingLast
 - Good: reinstalling the same app version at the same `/Applications` path changes the packaged extension resource identity and triggers one fresh Finder preload instead of reusing the previous setup marker.
 - Good: clicking "重启 Finder" asks ActionRunner XPC to register/enable the extension and then restart Finder; if `killall Finder` fails, the service tries an AppleScript fallback and reports diagnostics.
 - Base: manual workflow dispatch with no Xcode env vars produces a SwiftPM preview bundle with App, app-local XPC service, extension-local XPC service, Finder extension, and shared core dylib.
-- Base: manual workflow dispatch with `package_dmg=false` uploads only zip output in a clean runner workspace.
+- Base: manual workflow dispatch always requests DMG generation and uploads only `dist/*.dmg`.
 - Bad: bootstrap writes `~/Library/Containers/com.iheeleme.rightclickpro/Data/Desktop` as a monitored directory, so the Finder menu never appears on the user's real Desktop.
 - Bad: `FIFinderSyncController.default().directoryURLs = Set([URL(fileURLWithPath: "/Users/me/Code")])` for a visible sidebar favorite, causing Finder to render the folder with the extension app icon.
 - Bad: `FinderSyncController.menu(for:)` reads `config.json`, reads `bookmarks.json`, resolves all app icons, and runs bootstrap synchronously on every right-click.
@@ -796,7 +800,7 @@ return .application(appURL: terminalURL, targetURL: selectedFileURL.deletingLast
 - Bad: the packaging script only runs `pluginkit -e use -i com.iheeleme.rightclickpro.FinderExtension`; after reinstall, PlugInKit may still know only an old or missing physical extension path.
 - Bad: the sandboxed menu-bar app directly runs `/usr/bin/killall Finder`, then reports failure even though the embedded unsandboxed XPC service could perform the repair.
 - Bad: every normal launch restarts Finder even when the same bundled extension was already repaired successfully.
-- Bad: workflow upload glob includes `.dmg` but the runner workspace contains a stale DMG from an unrelated previous build.
+- Bad: workflow upload glob includes both `.zip` and `.dmg`, so one Actions artifact contains multiple package formats.
 - Bad: `RIGHTCLICKPRO_XCODE_PROJECT` set without `RIGHTCLICKPRO_XCODE_SCHEME` silently falls back to preview bundling.
 - Bad: preview bundle contains `Contents/PlugIns/RightClickProFinderExtension.appex` but the appex executable is a `DYLIB`.
 
@@ -838,6 +842,19 @@ runs-on: macos-latest
 Correct:
 ```yaml
 runs-on: macos-26
+```
+
+Wrong:
+```yaml
+path: |
+  dist/*.zip
+  dist/*.dmg
+```
+
+Correct:
+```yaml
+RIGHTCLICKPRO_PACKAGE_DMG: "1"
+path: dist/*.dmg
 ```
 
 Wrong:

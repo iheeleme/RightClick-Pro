@@ -19,7 +19,6 @@ Use manual dispatch with:
 ```text
 version=0.1.0-test.1
 configuration=release
-package_dmg=false
 ```
 
 The uploaded artifacts will be named like:
@@ -34,7 +33,7 @@ RightClick Pro-x86_64-0.1.0-test.1
 The repository currently has a Swift Package scaffold, not a complete Xcode `.app` project. Because of that, the workflow produces a SwiftPM preview bundle:
 
 ```text
-dist/RightClick Pro-<version>-<arch>-preview.zip
+dist/RightClick Pro-<version>-<arch>-preview.dmg
 ```
 
 The preview bundle contains:
@@ -68,15 +67,21 @@ FINDER_EXTENSION_BUNDLE_IDENTIFIER=com.iheeleme.rightclickpro.FinderExtension
 APP_GROUP_IDENTIFIER=group.com.iheeleme.rightclickpro
 ```
 
-## Internal DMG
+## DMG Packaging
 
-DMG packaging is opt-in for internal/self-test distribution:
+GitHub Actions always enables DMG packaging and uploads only the generated DMG:
+
+```text
+dist/RightClick Pro-<version>-<arch>-preview.dmg
+```
+
+For local internal/self-test distribution, enable DMG packaging explicitly:
 
 ```bash
 RIGHTCLICKPRO_PACKAGE_DMG=1 scripts/package-macos.sh release
 ```
 
-The script still creates the zip and also writes:
+The local script still creates its preview zip for direct local use, and also writes:
 
 ```text
 dist/RightClick Pro-<version>-<arch>-preview.dmg

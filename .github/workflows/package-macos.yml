@@ -16,11 +16,6 @@ on:
         options:
           - release
           - debug
-      package_dmg:
-        description: Also build an internal preview DMG
-        required: true
-        type: boolean
-        default: false
   push:
     tags:
       - "v*"
@@ -56,7 +51,7 @@ jobs:
     env:
       BUILD_CONFIGURATION: ${{ inputs.configuration || 'release' }}
       RIGHTCLICKPRO_VERSION: ${{ inputs.version || '' }}
-      RIGHTCLICKPRO_PACKAGE_DMG: ${{ inputs.package_dmg && '1' || '0' }}
+      RIGHTCLICKPRO_PACKAGE_DMG: "1"
       ARTIFACT_SUFFIX: ${{ matrix.artifact_suffix }}
 
     steps:
@@ -79,8 +74,6 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: RightClick Pro-${{ env.ARTIFACT_SUFFIX }}-${{ inputs.version || github.ref_name }}
-          path: |
-            dist/*.zip
-            dist/*.dmg
+          path: dist/*.dmg
           if-no-files-found: error
           compression-level: 0

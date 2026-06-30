@@ -10,6 +10,13 @@
 4. **Incremental development** — one task at a time
 5. **Capture learnings** — after each task, review and write new knowledge back to spec
 
+## Branch Policy
+
+- `main` is the release branch. Keep it deployable and merge to it only for release-ready changes.
+- `develop` is the default development integration branch. Create feature/task branches from `develop` and target pull requests back to `develop`.
+- Do not start routine implementation work directly on `main`; switch to `develop` first, then create a task/feature branch when needed.
+- Promote `develop` to `main` only as an intentional release step after verification.
+
 ---
 
 ## Trellis System
@@ -60,7 +67,7 @@ python3 ./.trellis/scripts/task.py validate <name>
 
 # Task metadata
 python3 ./.trellis/scripts/task.py set-branch <name> <branch>
-python3 ./.trellis/scripts/task.py set-base-branch <name> <branch>    # PR target
+python3 ./.trellis/scripts/task.py set-base-branch <name> <branch>    # PR target; default development target is develop
 python3 ./.trellis/scripts/task.py set-scope <name> <scope>
 
 # Hierarchy (parent/child)
