@@ -390,10 +390,11 @@ build_preview_executables() {
     -L "$core_build_dir" \
     -lRightClickProCore \
     -framework AppKit \
+    -framework ServiceManagement \
     -framework SwiftUI \
     -Xlinker -rpath \
     -Xlinker "@executable_path/../Frameworks" \
-    Sources/RightClickProAppPreview/RightClickProAppPreview.swift \
+    Sources/RightClickProAppPreview/*.swift \
     -o "$app_executable_path"
 
   swiftc \

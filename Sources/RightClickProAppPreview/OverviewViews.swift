@@ -16,6 +16,8 @@ struct OnboardingView: View {
                 FullDiskAccessBanner(viewModel: viewModel)
             }
 
+            LaunchAtLoginPanel(viewModel: viewModel)
+
             HStack(alignment: .top, spacing: 40) {
                 VStack(alignment: .leading, spacing: 16) {
                     Text("功能总览")
@@ -112,6 +114,68 @@ struct OnboardingView: View {
             FinderMenuItem(title: "剪切 / 粘贴文件", systemImage: "scissors", tint: SettingsTheme.accent, hasSubmenu: true),
             FinderMenuItem(title: "新建文件", systemImage: "doc", tint: SettingsTheme.accent, hasSubmenu: true)
         ]
+    }
+}
+
+struct LaunchAtLoginPanel: View {
+    @ObservedObject var viewModel: SettingsViewModel
+
+    var body: some View {
+        DesignPanel {
+            HStack(alignment: .center, spacing: 16) {
+                IconBadge(systemImage: "power.circle", tint: launchAtLoginTint)
+
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("登录时自动启动")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(SettingsTheme.ink)
+                    Text("开机登录后自动启动菜单栏应用，让 Finder 右键菜单和命令窗口随时可用。\(viewModel.launchAtLoginStatusMessage)")
+                        .font(.system(size: 12))
+                        .foregroundStyle(SettingsTheme.muted)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .layoutPriority(1)
+
+                Spacer(minLength: 12)
+
+                HStack(spacing: 12) {
+                    Toggle(
+                        "",
+                        isOn: Binding(
+                            get: { viewModel.launchAtLoginToggleIsOn },
+                            set: { viewModel.setLaunchAtLoginEnabled($0) }
+                        )
+                    )
+                    .toggleStyle(.switch)
+                    .labelsHidden()
+                    .help("将 \(AppMetadata.displayName) 加入或移出 macOS 登录项")
+
+                    Button {
+                        viewModel.openLoginItemsSettings()
+                    } label: {
+                        Label("打开登录项", systemImage: "gearshape")
+                            .frame(minWidth: 112)
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.large)
+                    .help("打开系统设置中的登录项页面")
+                }
+                .fixedSize(horizontal: true, vertical: false)
+            }
+        }
+    }
+
+    private var launchAtLoginTint: Color {
+        switch viewModel.launchAtLoginStatusTone {
+        case .success:
+            return .green
+        case .warning:
+            return .orange
+        case .error:
+            return .red
+        case .neutral:
+            return SettingsTheme.accent
+        }
     }
 }
 
@@ -470,4 +534,3 @@ struct OverviewMetric: View {
         .padding(.horizontal, 14)
     }
 }
-

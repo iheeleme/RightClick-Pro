@@ -43,6 +43,7 @@ RightClick Pro quality checks center on SwiftPM compilation/tests, Finder extens
   swift test --filter ConfigurationBootstrapperTests
   ```
 - Run `bash -n scripts/ci-swift-check.sh scripts/package-macos.sh` after shell script edits.
+- If AppPreview imports a new Apple framework, update and smoke-test the direct `swiftc` fallback in `scripts/package-macos.sh` as well as the SwiftPM build path.
 - Run `ruby -e 'require "yaml"; YAML.load_file(".github/workflows/package-macos.yml")'` after workflow edits.
 - In tests, compare directory URL semantics with `standardizedFileURL.path` when trailing slash/resource identity is irrelevant; macOS and Swift toolchain versions can differ on directory URL trailing slash preservation.
 

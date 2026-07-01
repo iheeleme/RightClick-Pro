@@ -1,5 +1,6 @@
 import AppKit
 import RightClickProCore
+import ServiceManagement
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -121,6 +122,14 @@ final class SettingsViewModel: NSObject, ObservableObject {
         case unavailable(String)
     }
 
+    enum LaunchAtLoginStatus: Equatable {
+        case unchecked
+        case disabled
+        case enabled
+        case requiresApproval
+        case unavailable(String)
+    }
+
     @Published var selectedSection: Section = .onboarding
     @Published var config = RightClickProConfig()
     @Published var bookmarks = DirectoryBookmarkCatalog()
@@ -137,6 +146,7 @@ final class SettingsViewModel: NSObject, ObservableObject {
     @Published var finderExtensionNeedsAttention = false
     @Published var finderExtensionSetupMessage = ""
     @Published private(set) var fullDiskAccessStatus: FullDiskAccessStatus = .unchecked
+    @Published private(set) var launchAtLoginStatus: LaunchAtLoginStatus = .unchecked
 
     private var paths = RightClickProStoragePaths.defaultForCurrentProcess()
     private let commandSecretStore = KeychainCommandSecretStore()
@@ -166,6 +176,7 @@ final class SettingsViewModel: NSObject, ObservableObject {
     static func bootstrap() -> SettingsViewModel {
         let viewModel = SettingsViewModel()
         viewModel.loadOrBootstrap()
+        viewModel.refreshLaunchAtLoginStatus()
         viewModel.scheduleFinderExtensionRegistration()
         viewModel.scheduleFullDiskAccessCheck()
         return viewModel
@@ -223,6 +234,45 @@ final class SettingsViewModel: NSObject, ObservableObject {
         case .granted:
             return .success
         case .missing:
+            return .warning
+        case .unavailable:
+            return .error
+        }
+    }
+
+    var launchAtLoginToggleIsOn: Bool {
+        switch launchAtLoginStatus {
+        case .enabled, .requiresApproval:
+            return true
+        case .unchecked, .disabled, .unavailable:
+            return false
+        }
+    }
+
+    var launchAtLoginStatusMessage: String {
+        switch launchAtLoginStatus {
+        case .unchecked:
+            return "尚未检查登录项状态"
+        case .disabled:
+            return "当前不会在登录时自动启动"
+        case .enabled:
+            return "已加入 macOS 登录项"
+        case .requiresApproval:
+            return "已提交登录项请求，需要在系统设置中允许"
+        case .unavailable(let message):
+            return "无法读取或更新登录项：\(message)"
+        }
+    }
+
+    var launchAtLoginStatusTone: StatusTone {
+        switch launchAtLoginStatus {
+        case .unchecked:
+            return .neutral
+        case .disabled:
+            return .neutral
+        case .enabled:
+            return .success
+        case .requiresApproval:
             return .warning
         case .unavailable:
             return .error
@@ -333,6 +383,43 @@ final class SettingsViewModel: NSObject, ObservableObject {
         }
     }
 
+    func refreshLaunchAtLoginStatus() {
+        launchAtLoginStatus = mappedLaunchAtLoginStatus(SMAppService.mainApp.status)
+    }
+
+    func setLaunchAtLoginEnabled(_ isEnabled: Bool) {
+        do {
+            if isEnabled {
+                try SMAppService.mainApp.register()
+            } else {
+                try SMAppService.mainApp.unregister()
+            }
+            refreshLaunchAtLoginStatus()
+
+            let tone: StatusTone = launchAtLoginStatus == .requiresApproval ? .warning : .success
+            setStatus(
+                isEnabled ? "已请求登录时自动启动 \(AppMetadata.displayName)" : "已关闭登录时自动启动",
+                tone: tone
+            )
+        } catch {
+            refreshLaunchAtLoginStatus()
+            setStatus("更新登录项失败：\(error.localizedDescription)", tone: .error)
+        }
+    }
+
+    func openLoginItemsSettings() {
+        guard let url = URL(string: "x-apple.systempreferences:com.apple.LoginItems-Settings.extension") else {
+            setStatus("无法打开登录项设置，请手动前往系统设置 > 通用 > 登录项", tone: .error)
+            return
+        }
+
+        if NSWorkspace.shared.open(url) {
+            setStatus("已打开登录项设置，请确认 \(AppMetadata.displayName) 是否允许后台运行", tone: .neutral)
+        } else {
+            setStatus("无法打开登录项设置，请手动前往系统设置 > 通用 > 登录项", tone: .warning)
+        }
+    }
+
     func checkFullDiskAccess(userInitiated: Bool = true) {
         guard !isCheckingFullDiskAccess else {
             return
@@ -431,6 +518,7 @@ final class SettingsViewModel: NSObject, ObservableObject {
 
     @objc private func handleApplicationDidBecomeActive() {
         handlePendingCommandRunNotification()
+        refreshLaunchAtLoginStatus()
         checkFullDiskAccess(userInitiated: false)
     }
 
@@ -906,6 +994,21 @@ final class SettingsViewModel: NSObject, ObservableObject {
             if userInitiated {
                 setStatus(fullDiskAccessStatusMessage, tone: .error)
             }
+        }
+    }
+
+    private func mappedLaunchAtLoginStatus(_ status: SMAppService.Status) -> LaunchAtLoginStatus {
+        switch status {
+        case .notRegistered:
+            return .disabled
+        case .enabled:
+            return .enabled
+        case .requiresApproval:
+            return .requiresApproval
+        case .notFound:
+            return .unavailable("系统找不到当前 App 的登录项服务")
+        @unknown default:
+            return .unavailable("未知登录项状态")
         }
     }
 
@@ -1561,4 +1664,3 @@ enum SettingsValidationError: Error, LocalizedError {
         }
     }
 }
-

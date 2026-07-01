@@ -59,7 +59,84 @@ Use `SettingsValidationError` for user-facing save errors.
 - Do not mutate `config.actions` from child views without a ViewModel command.
 - Do not run `pluginkit`, `killall`, or `osascript` directly from SwiftUI views; route Finder menu repair through `SettingsViewModel` and ActionRunner XPC.
 - Do not probe Full Disk Access directly from SwiftUI views or the sandboxed app process; route the check through ActionRunner XPC and hide the overview prompt after a successful probe.
+- Do not call `SMAppService` directly from SwiftUI views; route login-item reads and writes through `SettingsViewModel`.
 - Do not show the Finder Extension setup banner after automatic setup succeeds; show it only when setup fails or needs manual attention.
 - Do not let an action lose all `ActionVisibility` cases.
 - Do not add config entries without back-reference actions.
 - Do not treat a preview-only filter/sort as persisted unless it updates `RightClickProConfig`.
+
+## Scenario: Launch at Login Setting
+
+### 1. Scope / Trigger
+
+- Trigger: adding or changing the macOS "登录时自动启动" setting in the overview/settings surface.
+- This is system state managed by macOS ServiceManagement, not durable app config.
+
+### 2. Signatures
+
+- ViewModel state and commands:
+  ```swift
+  enum LaunchAtLoginStatus: Equatable
+  var launchAtLoginToggleIsOn: Bool
+  var launchAtLoginStatusMessage: String
+  var launchAtLoginStatusTone: StatusTone
+  func refreshLaunchAtLoginStatus()
+  func setLaunchAtLoginEnabled(_ isEnabled: Bool)
+  func openLoginItemsSettings()
+  ```
+- System API:
+  ```swift
+  import ServiceManagement
+  SMAppService.mainApp.status
+  try SMAppService.mainApp.register()
+  try SMAppService.mainApp.unregister()
+  ```
+
+### 3. Contracts
+
+- `LaunchAtLoginStatus.enabled` maps to `SMAppService.Status.enabled`.
+- `LaunchAtLoginStatus.disabled` maps to `.notRegistered`.
+- `LaunchAtLoginStatus.requiresApproval` maps to `.requiresApproval`; the UI toggle should remain on because the app has requested the login item and the user must approve it in System Settings.
+- `LaunchAtLoginStatus.unavailable` covers `.notFound`, thrown register/unregister errors, and unknown future statuses.
+- `refreshLaunchAtLoginStatus()` runs during `SettingsViewModel.bootstrap()` and when the app becomes active so external System Settings changes are reflected.
+- The setting does not mark `hasUnsavedChanges` and is not saved to `config.json`.
+
+### 4. Validation & Error Matrix
+
+- `register()` throws -> refresh status and show `"更新登录项失败：..."` with `.error`.
+- `unregister()` throws -> refresh status and show `"更新登录项失败：..."` with `.error`.
+- Status is `.requiresApproval` -> show warning tone and provide an "打开登录项" action.
+- Status is `.notFound` -> show unavailable status; do not pretend the switch is enabled.
+
+### 5. Good/Base/Bad Cases
+
+- Good: user turns the switch on, `SMAppService.mainApp.register()` succeeds, status refreshes to `.enabled` or `.requiresApproval`.
+- Base: user disables the item from System Settings while the app is open; when the app becomes active, `refreshLaunchAtLoginStatus()` updates the switch.
+- Bad: writing a `launchAtLogin` flag into `RightClickProConfig` and showing it as enabled even though macOS has disabled the login item.
+- Bad: a SwiftUI row calls `SMAppService.mainApp.register()` directly and bypasses status messages.
+
+### 6. Tests Required
+
+- Run `swift build --target RightClickProAppPreview` after settings UI changes.
+- Run `scripts/ci-swift-check.sh debug`.
+- Run `scripts/package-macos.sh debug` because the preview app imports `ServiceManagement`.
+- When touching fallback compilation, manually verify direct `swiftc` compilation with `Sources/RightClickProAppPreview/*.swift` and `-framework ServiceManagement`.
+- Manual smoke test: open the settings overview, toggle login-at-startup on/off, and confirm System Settings > General > Login Items reflects the change or shows the expected approval state.
+
+### 7. Wrong vs Correct
+
+Wrong:
+```swift
+Toggle("登录时启动", isOn: $config.launchAtLogin)
+```
+
+Correct:
+```swift
+Toggle(
+    "",
+    isOn: Binding(
+        get: { viewModel.launchAtLoginToggleIsOn },
+        set: { viewModel.setLaunchAtLoginEnabled($0) }
+    )
+)
+```
