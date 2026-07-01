@@ -230,6 +230,7 @@ final class SettingsViewModel: NSObject, ObservableObject
 - Bootstrap: default bookmarks exclude Documents and Code for new installs while preserving existing bookmarks.
 - SystemMaintenanceService: `.checkFullDiskAccess` returns true and false `hasFullDiskAccess` values without invoking shell commands.
 - Packaging smoke: installed app launches, ActionRunner XPC is available on demand, and overview hides the Full Disk Access banner when the XPC probe reports authorized.
+- UI lifecycle smoke: opening the settings window or reactivating the app does not send `.checkFullDiskAccess`; only the explicit overview check button may probe protected paths.
 
 #### 7. Wrong vs Correct
 
@@ -256,6 +257,30 @@ Correct:
 ```swift
 actionRunnerClient.performMaintenance(SystemMaintenanceRequest(task: .checkFullDiskAccess)) { result in
     // Render SystemMaintenanceResult.hasFullDiskAccess from ActionRunner.xpc.
+}
+```
+
+Wrong:
+```swift
+NotificationCenter.default.addObserver(
+    self,
+    selector: #selector(handleApplicationDidBecomeActive),
+    name: NSApplication.didBecomeActiveNotification,
+    object: nil
+)
+
+@objc private func handleApplicationDidBecomeActive() {
+    checkFullDiskAccess(userInitiated: false)
+}
+```
+
+Correct:
+```swift
+func checkFullDiskAccess(userInitiated: Bool = true) {
+    guard userInitiated else { return }
+    actionRunnerClient.performMaintenance(SystemMaintenanceRequest(task: .checkFullDiskAccess)) { result in
+        // Update Full Disk Access overview state from the user-initiated probe.
+    }
 }
 ```
 

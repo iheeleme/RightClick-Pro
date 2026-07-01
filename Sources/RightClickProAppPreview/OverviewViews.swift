@@ -240,7 +240,7 @@ struct FullDiskAccessBanner: View {
                     Text("完全磁盘访问权限")
                         .font(.system(size: 15, weight: .semibold))
                         .foregroundStyle(SettingsTheme.ink)
-                    Text("Finder 菜单会全局显示；文件动作和命令模板执行时依赖 macOS 的完全磁盘访问权限。\(viewModel.fullDiskAccessStatusMessage)")
+                    Text("Finder 菜单会全局显示；文件动作和命令模板执行时依赖 macOS 的完全磁盘访问权限。请通过下方按钮统一检查或打开系统设置。\(viewModel.fullDiskAccessStatusMessage)")
                         .font(.system(size: 12))
                         .foregroundStyle(SettingsTheme.muted)
                         .fixedSize(horizontal: false, vertical: true)

@@ -178,7 +178,6 @@ final class SettingsViewModel: NSObject, ObservableObject {
         viewModel.loadOrBootstrap()
         viewModel.refreshLaunchAtLoginStatus()
         viewModel.scheduleFinderExtensionRegistration()
-        viewModel.scheduleFullDiskAccessCheck()
         return viewModel
     }
 
@@ -215,7 +214,7 @@ final class SettingsViewModel: NSObject, ObservableObject {
     var fullDiskAccessStatusMessage: String {
         switch fullDiskAccessStatus {
         case .unchecked:
-            return "尚未检查完全磁盘访问权限"
+            return "尚未检查完全磁盘访问权限；为避免重复触发系统授权提示，请在需要时手动检查。"
         case .checking:
             return "正在通过 ActionRunner 检查完全磁盘访问权限..."
         case .granted:
@@ -421,6 +420,10 @@ final class SettingsViewModel: NSObject, ObservableObject {
     }
 
     func checkFullDiskAccess(userInitiated: Bool = true) {
+        guard userInitiated else {
+            return
+        }
+
         guard !isCheckingFullDiskAccess else {
             return
         }
@@ -519,7 +522,6 @@ final class SettingsViewModel: NSObject, ObservableObject {
     @objc private func handleApplicationDidBecomeActive() {
         handlePendingCommandRunNotification()
         refreshLaunchAtLoginStatus()
-        checkFullDiskAccess(userInitiated: false)
     }
 
     func setActionEnabled(_ isEnabled: Bool, actionID: String) {
@@ -897,12 +899,6 @@ final class SettingsViewModel: NSObject, ObservableObject {
             }
 
             repairFinderContextMenu(restartFinder: true, userInitiated: false)
-        }
-    }
-
-    private func scheduleFullDiskAccessCheck() {
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in
-            self?.checkFullDiskAccess(userInitiated: false)
         }
     }
 
