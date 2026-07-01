@@ -280,3 +280,36 @@ Completed the RightClick Pro distribution task: opt-in internal DMG packaging, R
 ### Next Steps
 
 - None - task complete
+
+
+## Session 9: Unify Full Disk Access authorization check
+
+**Date**: 2026-07-01
+**Task**: Unify Full Disk Access authorization check
+**Branch**: `develop`
+
+### Summary
+
+Removed automatic Full Disk Access probes from settings bootstrap and app activation, kept the overview button as the single user-initiated permission check entry, updated local specs, verified build/test/package, and installed the refreshed app to /Applications.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `1999ac5` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
