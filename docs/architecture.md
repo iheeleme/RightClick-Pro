@@ -20,7 +20,7 @@ Finder
 ## MVP Storage
 
 ```text
-App Group Container
+~/Library/Application Support/com.iheeleme.rightclickpro
 ├── config.json
 ├── bookmarks.json
 ├── cut-clipboard.json
@@ -33,13 +33,7 @@ App Group Container
 
 Config writes use atomic file replacement via `Data.write(..., .atomic)`. Operation logs are stored as JSONL and capped to the latest 500 records by default.
 
-Unsigned/local preview builds may not have an App Group entitlement. In that case, the runtime falls back to:
-
-```text
-~/Library/Application Support/com.iheeleme.rightclickpro
-```
-
-On machines where `group.com.iheeleme.rightclickpro` is available, the app writes default preview configuration there. New installs inject existing Desktop and Downloads directories as shortcut targets. Existing bookmark entries are preserved during bootstrap and migration.
+The app, Finder extension, and ActionRunner XPC all resolve this real-user Application Support path. The packaged sandboxed app and extension include a narrow home-relative read/write entitlement for this app-owned directory, so first launch does not need to read or write `~/Library/Group Containers`. New installs inject existing Desktop and Downloads directories as shortcut targets. Existing bookmark entries are preserved during bootstrap and migration.
 
 ## Authorization Model
 
@@ -66,7 +60,7 @@ RightClick Pro.app
 
 The preview `.appex` is linked as an `_NSExtensionMain` executable so PlugInKit can discover it for local Finder Sync testing. A complete Xcode project plus Developer ID signing and notarization are still required before treating the artifact as a normal public macOS download.
 
-For local preview testing, the embedded ActionRunner XPC service is signed with the App Group entitlement but without the app sandbox entitlement. File actions and command templates rely on macOS Full Disk Access at execution time instead of a code-level configured-directory validator.
+For local preview testing, the embedded ActionRunner XPC service is signed without the app sandbox entitlement. It uses the same Application Support storage path as the app and Finder extension, while file actions and command templates rely on macOS Full Disk Access at execution time instead of a code-level configured-directory validator.
 
 On first app launch after a DMG install, the settings app asks the embedded ActionRunner XPC service to register the bundled Finder Sync extension with PlugInKit, request enablement, and reload Finder once for the current packaged extension signature. The signature includes filesystem resource identity for the `.appex`, its `Info.plist`, the extension executable, and the host app bundle, so replacing the same version at the same path still triggers one fresh preload. Successful setup is recorded in user defaults, so subsequent launches skip the repair until the physical packaged extension changes again. The same XPC maintenance path backs the manual "restart Finder" repair action, so the sandboxed app does not run `pluginkit` or signal Finder directly.
 

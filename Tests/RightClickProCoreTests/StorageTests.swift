@@ -27,6 +27,36 @@ final class StorageTests: XCTestCase {
         XCTAssertEqual(records.map(\.actionID), ["b", "c"])
     }
 
+    func testDefaultStoragePrefersApplicationSupportOverAppGroupContainer() throws {
+        let directory = try temporaryDirectory()
+        let homeDirectory = directory.appendingPathComponent("home")
+        let appGroupDirectory = directory
+            .appendingPathComponent("home")
+            .appendingPathComponent("Library")
+            .appendingPathComponent("Group Containers")
+            .appendingPathComponent(RightClickProConstants.defaultAppGroupIdentifier)
+        let fileManager = StoragePathFileManager(
+            homeDirectory: homeDirectory,
+            appGroupDirectory: appGroupDirectory
+        )
+
+        let paths = RightClickProStoragePaths.defaultForCurrentProcess(
+            fileManager: fileManager,
+            realUserHomeDirectory: homeDirectory
+        )
+
+        XCTAssertEqual(
+            paths.baseURL.path,
+            homeDirectory
+                .appendingPathComponent("Library")
+                .appendingPathComponent("Application Support")
+                .appendingPathComponent(RightClickProConstants.mainAppBundleIdentifier)
+                .path
+        )
+        XCTAssertFalse(paths.baseURL.path.contains("Group Containers"))
+        XCTAssertFalse(fileManager.didRequestAppGroupContainer)
+    }
+
     func testConfigDecodesV1JSONIntoShortcutDirectoriesAndDefaultCommandTemplates() throws {
         let json = """
         {
@@ -57,5 +87,26 @@ final class StorageTests: XCTestCase {
         XCTAssertEqual(object["shortcutDirectoryIDs"] as? [String], ["desktop"])
         XCTAssertNil(object["monitoredDirectoryIDs"])
         XCTAssertNil(object["commonDirectoryIDs"])
+    }
+}
+
+private final class StoragePathFileManager: FileManager {
+    private let providedHomeDirectory: URL
+    private let appGroupDirectory: URL
+    private(set) var didRequestAppGroupContainer = false
+
+    init(homeDirectory: URL, appGroupDirectory: URL) {
+        self.providedHomeDirectory = homeDirectory
+        self.appGroupDirectory = appGroupDirectory
+        super.init()
+    }
+
+    override var homeDirectoryForCurrentUser: URL {
+        providedHomeDirectory
+    }
+
+    override func containerURL(forSecurityApplicationGroupIdentifier groupIdentifier: String) -> URL? {
+        didRequestAppGroupContainer = true
+        return appGroupDirectory
     }
 }

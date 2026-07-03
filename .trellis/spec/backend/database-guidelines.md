@@ -1,6 +1,6 @@
 # File-Backed Storage Guidelines
 
-RightClick Pro has no database layer. Durable state is file-backed JSON/JSONL in an App Group container when available, with an Application Support fallback for unsigned/local preview builds.
+RightClick Pro has no database layer. Durable state is file-backed JSON/JSONL under `~/Library/Application Support/com.iheeleme.rightclickpro` by default so first launch does not touch `~/Library/Group Containers` and trigger macOS "access data from other apps" prompts.
 
 ## Storage Layout
 
@@ -48,10 +48,11 @@ generated from already-rasterized menu images.
 
 ## App Group and Fallback Rules
 
-- Prefer `RightClickProStoragePaths.defaultForCurrentProcess()` for production paths.
-- Use `RightClickProStoragePaths.appGroup(identifier:)` only when absence should be reported as `StorageError.appGroupContainerUnavailable`.
+- Prefer `RightClickProStoragePaths.defaultForCurrentProcess()` for production paths; it must resolve to the real-user Application Support directory, not the sandbox container home and not the App Group container.
+- Use `RightClickProStoragePaths.appGroup(identifier:)` only for explicit compatibility or diagnostics where absence should be reported as `StorageError.appGroupContainerUnavailable`.
 - Use `RIGHTCLICKPRO_STORAGE_PATH` only for the ActionRunner process/testing override in `Sources/RightClickProActionRunnerService/main.swift`.
 - Default preview configuration may be created by either the app or Finder extension; both must use the same storage path resolution.
+- Sandboxed App/Finder extension builds need a home-relative read-write entitlement only for `/Library/Application Support/com.iheeleme.rightclickpro/`.
 
 ## Config Repair Rules
 

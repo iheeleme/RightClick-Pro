@@ -6,7 +6,6 @@ APP_NAME="${APP_NAME:-RightClick Pro}"
 BUNDLE_IDENTIFIER="${BUNDLE_IDENTIFIER:-com.iheeleme.rightclickpro}"
 XPC_BUNDLE_IDENTIFIER="${XPC_BUNDLE_IDENTIFIER:-com.iheeleme.rightclickpro.ActionRunner}"
 FINDER_EXTENSION_BUNDLE_IDENTIFIER="${FINDER_EXTENSION_BUNDLE_IDENTIFIER:-com.iheeleme.rightclickpro.FinderExtension}"
-APP_GROUP_IDENTIFIER="${APP_GROUP_IDENTIFIER:-group.com.iheeleme.rightclickpro}"
 CODE_SIGN_IDENTITY="${CODE_SIGN_IDENTITY:--}"
 ARTIFACT_SUFFIX="${ARTIFACT_SUFFIX:-$(uname -m)}"
 DIST_DIR="${DIST_DIR:-dist}"
@@ -236,14 +235,14 @@ write_entitlements_plist() {
 <dict>
   <key>com.apple.security.app-sandbox</key>
   <true/>
-  <key>com.apple.security.application-groups</key>
-  <array>
-    <string>$APP_GROUP_IDENTIFIER</string>
-  </array>
   <key>com.apple.security.files.user-selected.read-write</key>
   <true/>
   <key>com.apple.security.files.bookmarks.app-scope</key>
   <true/>
+  <key>com.apple.security.temporary-exception.files.home-relative-path.read-write</key>
+  <array>
+    <string>/Library/Application Support/$BUNDLE_IDENTIFIER/</string>
+  </array>
 </dict>
 </plist>
 PLIST
@@ -256,10 +255,6 @@ write_xpc_entitlements_plist() {
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-  <key>com.apple.security.application-groups</key>
-  <array>
-    <string>$APP_GROUP_IDENTIFIER</string>
-  </array>
 </dict>
 </plist>
 PLIST
@@ -518,7 +513,7 @@ ${APP_NAME} 内测构建
 技术信息
 App Bundle ID: ${BUNDLE_IDENTIFIER}
 Finder Extension Bundle ID: ${FINDER_EXTENSION_BUNDLE_IDENTIFIER}
-App Group: ${APP_GROUP_IDENTIFIER}
+Storage: ~/Library/Application Support/${BUNDLE_IDENTIFIER}
 README
 }
 

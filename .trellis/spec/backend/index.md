@@ -7,7 +7,7 @@ RightClick Pro's "backend" layer is the Swift code that owns durable state, Find
 | Area | Files | Responsibility |
 |------|-------|----------------|
 | Core models and actions | `Sources/RightClickProCore/ActionModels.swift`, `FinderContext.swift` | Stable Codable contracts shared by app, Finder extension, XPC service, tests |
-| Storage and bootstrap | `Storage.swift`, `OperationLogStore.swift`, `CutClipboardStore.swift`, `ConfigurationBootstrapper.swift` | App Group/Application Support JSON state, JSONL operation history, default config self-healing |
+| Storage and bootstrap | `Storage.swift`, `OperationLogStore.swift`, `CutClipboardStore.swift`, `ConfigurationBootstrapper.swift` | Application Support JSON state, JSONL operation history, default config self-healing |
 | File execution | `ActionRunner.swift`, `FileOperations.swift`, `Authorization.swift`, `AppOpening.swift`, `RuntimeFactory.swift` | Resolve bookmarks, validate paths, run file/app actions, log results |
 | Menu projection | `MenuBuilder.swift` | Convert config into semantic menu presentation and icon descriptors |
 | Process adapters | `Sources/RightClickProFinderExtension/FinderSyncController.swift`, `Sources/RightClickProActionRunnerService/main.swift`, `XPCAdapter.swift` | Render Finder menus, map menu clicks to XPC requests, expose ActionRunner |
@@ -18,7 +18,7 @@ RightClick Pro's "backend" layer is the Swift code that owns durable state, Find
 | Guide | Use When |
 |-------|----------|
 | [Directory Structure](./directory-structure.md) | Adding files, deciding target ownership, separating Core/App/extension/script work |
-| [Database Guidelines](./database-guidelines.md) | Changing file-backed JSON, JSONL, cut clipboard, App Group/Application Support storage |
+| [Database Guidelines](./database-guidelines.md) | Changing file-backed JSON, JSONL, cut clipboard, Application Support storage |
 | [Error Handling](./error-handling.md) | Adding errors, XPC result mapping, validation failures, Finder extension logging |
 | [Quality Guidelines](./quality-guidelines.md) | Running tests, changing packaging, Finder extension behavior, menu presentation contracts |
 | [Logging Guidelines](./logging-guidelines.md) | Operation history, bootstrap records, Finder extension diagnostics, shell script output |

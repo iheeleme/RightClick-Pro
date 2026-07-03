@@ -107,10 +107,10 @@ Finder
 - `RightClickProActionRunnerService`：XPC 服务入口，把请求交给 Core 层 ActionRunner。
 - `RightClickProAppPreview`：菜单栏 App、设置窗口，以及命令运行窗口。
 
-运行时状态优先写入 App Group 容器；未签名或本地预览构建无法使用 App Group 时，会回退到 Application Support：
+运行时状态默认写入真实用户目录下的 Application Support。这样首次安装时不会触碰 `~/Library/Group Containers`，可避免 macOS 弹出“访问其他 App 数据”的提示：
 
 ```text
-App Group Container
+~/Library/Application Support/com.iheeleme.rightclickpro
 ├── config.json
 ├── bookmarks.json
 ├── cut-clipboard.json

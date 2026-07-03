@@ -50,7 +50,7 @@ RightClick Pro.app
 
 The Finder Sync extension is manually linked with `_NSExtensionMain` so PlugInKit can discover it during local testing. The ActionRunner XPC service is embedded in both the app and the Finder extension bundle so `NSXPCConnection(serviceName:)` can resolve it from either process. The bundle is ad-hoc signed when `codesign` is available, but it is not Developer ID signed or notarized. Downloaded builds may still require removing quarantine before local testing.
 
-The preview app and Finder Sync extension are sandboxed and include App Group, user-selected read/write, and app-scope bookmark entitlements. The preview ActionRunner XPC service is signed with the App Group entitlement but without app sandboxing so local smoke tests can exercise file actions and command templates through the Full Disk Access execution model. New installs auto-inject Desktop and Downloads as shortcut targets only; runtime authorization no longer rejects paths simply because they are outside configured shortcuts.
+The preview app and Finder Sync extension are sandboxed and include user-selected read/write, app-scope bookmark, and a narrow home-relative read/write entitlement for `~/Library/Application Support/com.iheeleme.rightclickpro`. The preview ActionRunner XPC service is signed without app sandboxing so local smoke tests can exercise file actions and command templates through the Full Disk Access execution model. New installs auto-inject Desktop and Downloads as shortcut targets only; runtime authorization no longer rejects paths simply because they are outside configured shortcuts.
 
 Packaging does not register the staging Finder Sync extension with the local PlugInKit database by default. The installed app owns runtime registration after it is copied to `/Applications`; this avoids Finder showing build-artifact app icons for local source directories such as `~/Code`. For a one-off local smoke test against the staging bundle, run:
 
@@ -64,7 +64,6 @@ Default identifiers for the current preview distribution are:
 BUNDLE_IDENTIFIER=com.iheeleme.rightclickpro
 XPC_BUNDLE_IDENTIFIER=com.iheeleme.rightclickpro.ActionRunner
 FINDER_EXTENSION_BUNDLE_IDENTIFIER=com.iheeleme.rightclickpro.FinderExtension
-APP_GROUP_IDENTIFIER=group.com.iheeleme.rightclickpro
 ```
 
 ## DMG Packaging

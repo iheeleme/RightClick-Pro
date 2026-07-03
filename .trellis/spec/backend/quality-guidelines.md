@@ -478,7 +478,7 @@ repairConfigurationInBackground(paths: paths)
 #### 1. Scope / Trigger
 
 - Trigger: changes to command template execution from Finder menus, pending command run storage, directory authorization, sandbox entitlements, or security-scoped bookmark handling.
-- This is a cross-process authorization contract because Finder extension, App Group JSON, and the menu-bar app all touch the same command run request.
+- This is a cross-process authorization contract because Finder extension, Application Support JSON, and the menu-bar app all touch the same command run request.
 
 #### 2. Signatures
 
@@ -724,7 +724,6 @@ return .application(appURL: terminalURL, targetURL: selectedFileURL.deletingLast
   BUNDLE_IDENTIFIER=com.iheeleme.rightclickpro
   XPC_BUNDLE_IDENTIFIER=com.iheeleme.rightclickpro.ActionRunner
   FINDER_EXTENSION_BUNDLE_IDENTIFIER=com.iheeleme.rightclickpro.FinderExtension
-  APP_GROUP_IDENTIFIER=group.com.iheeleme.rightclickpro
   CODE_SIGN_IDENTITY=-
   ```
 - Workflow DMG artifact contract:
@@ -732,8 +731,8 @@ return .application(appURL: terminalURL, targetURL: selectedFileURL.deletingLast
   RIGHTCLICKPRO_PACKAGE_DMG: "1"
   path: dist/*.dmg
   ```
-- Preview app and Finder extension entitlements include app sandbox, App Group, user-selected read/write, and app-scope bookmarks.
-- Preview ActionRunner XPC entitlements include App Group but intentionally omit app sandbox for local smoke tests against auto-injected Desktop/Documents/Downloads/Code paths. Runtime authorization must still validate all file mutations against configured monitored/common directories.
+- Preview app and Finder extension entitlements include app sandbox, user-selected read/write, app-scope bookmarks, and a narrow home-relative read/write exception for `/Library/Application Support/com.iheeleme.rightclickpro/`.
+- Preview ActionRunner XPC entitlements intentionally omit app sandbox for local smoke tests against user-selected paths and Application Support state. Runtime authorization must still validate all file mutations through `ActionRunner`.
 
 #### 3. Contracts
 
@@ -972,10 +971,8 @@ inside the preview ActionRunner XPC entitlement file.
 
 Correct:
 ```xml
-<key>com.apple.security.application-groups</key>
-<array>
-  <string>group.com.iheeleme.rightclickpro</string>
-</array>
+<dict>
+</dict>
 ```
 for the preview ActionRunner XPC entitlement file, with path authorization enforced in `ActionRunner`.
 

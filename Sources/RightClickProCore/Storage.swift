@@ -28,9 +28,14 @@ public struct RightClickProStoragePaths: Equatable, Sendable {
 
     public static func applicationSupport(
         fileManager: FileManager = .default,
-        bundleIdentifier: String = RightClickProConstants.mainAppBundleIdentifier
+        bundleIdentifier: String = RightClickProConstants.mainAppBundleIdentifier,
+        realUserHomeDirectory: URL? = nil
     ) -> RightClickProStoragePaths {
-        let baseURL = fileManager.homeDirectoryForCurrentUser
+        let homeDirectory = UserHomeDirectoryResolver.realUserHomeDirectory(
+            processHomeDirectory: fileManager.homeDirectoryForCurrentUser,
+            override: realUserHomeDirectory
+        )
+        let baseURL = homeDirectory
             .appendingPathComponent("Library")
             .appendingPathComponent("Application Support")
             .appendingPathComponent(bundleIdentifier)
@@ -39,13 +44,11 @@ public struct RightClickProStoragePaths: Equatable, Sendable {
 
     public static func defaultForCurrentProcess(
         appGroupIdentifier: String = RightClickProConstants.defaultAppGroupIdentifier,
-        fileManager: FileManager = .default
+        fileManager: FileManager = .default,
+        realUserHomeDirectory: URL? = nil
     ) -> RightClickProStoragePaths {
-        if let appGroupURL = fileManager.containerURL(forSecurityApplicationGroupIdentifier: appGroupIdentifier) {
-            return RightClickProStoragePaths(baseURL: appGroupURL)
-        }
-
-        return applicationSupport(fileManager: fileManager)
+        _ = appGroupIdentifier
+        return applicationSupport(fileManager: fileManager, realUserHomeDirectory: realUserHomeDirectory)
     }
 }
 
