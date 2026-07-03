@@ -214,7 +214,7 @@ final class SettingsViewModel: NSObject, ObservableObject {
     var fullDiskAccessStatusMessage: String {
         switch fullDiskAccessStatus {
         case .unchecked:
-            return "尚未检查完全磁盘访问权限；为避免重复触发系统授权提示，请在需要时手动检查。"
+            return "macOS 不提供无弹窗授权检测；RightClick Pro 不会读取邮件、信息、Safari 或 TCC 数据来判断权限。"
         case .checking:
             return "正在通过 ActionRunner 检查完全磁盘访问权限..."
         case .granted:
@@ -376,7 +376,7 @@ final class SettingsViewModel: NSObject, ObservableObject {
         }
 
         if NSWorkspace.shared.open(url) {
-            setStatus("已打开完全磁盘访问权限设置，请允许 \(AppMetadata.displayName)", tone: .neutral)
+            setStatus("已打开完全磁盘访问权限设置，请允许 \(AppMetadata.displayName)。授权后若文件动作仍被拦截，会显示具体错误。", tone: .neutral)
         } else {
             setStatus("无法打开系统设置，请手动前往隐私与安全性 > 完全磁盘访问权限", tone: .warning)
         }

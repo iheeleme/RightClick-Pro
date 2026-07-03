@@ -21,8 +21,8 @@ Reference files: `Sources/RightClickProAppPreview/SettingsViewModel.swift` and t
 - Template/action/developer edits mark unsaved changes and require the main save action.
 - `reloadRecentOperations()` reads `operation-log.jsonl` and keeps the latest 80 reversed for display.
 - Finder menu repair state lives in `SettingsViewModel.isRepairingFinderMenu`, `finderExtensionNeedsAttention`, and `finderExtensionSetupMessage`; the ViewModel sends `SystemMaintenanceRequest` through ActionRunner XPC instead of running system commands directly from SwiftUI.
-- Full Disk Access overview state lives in `SettingsViewModel.fullDiskAccessStatus`; the ViewModel checks it through `SystemMaintenanceRequest(task: .checkFullDiskAccess)` so the UI reflects ActionRunner's real execution permission, not the sandboxed app process.
-- Full Disk Access checks must be user-initiated from the overview CTA. Do not schedule the probe from app bootstrap or `NSApplication.didBecomeActiveNotification`; representative protected-path reads can trigger repeated macOS authorization prompts.
+- Full Disk Access overview state lives in `SettingsViewModel.fullDiskAccessStatus`, but the overview must not probe authorization by reading protected directories. Present the System Settings shortcut and rely on runtime file-action failures to surface `FullDiskAccessAdvisor.userFacingMessage(for:)`.
+- Full Disk Access checks must not be scheduled from app bootstrap, `NSApplication.didBecomeActiveNotification`, or overview buttons; representative protected-path reads can trigger repeated macOS "access data from other apps" prompts.
 - Successful automatic Finder extension setup is keyed by the bundled `.appex` install signature in `UserDefaults`; the signature must include filesystem resource identity so same-version reinstall/overwrite triggers one fresh Finder preload, while repeated launches of the same physical extension skip Finder restarts.
 
 ## Command Rules

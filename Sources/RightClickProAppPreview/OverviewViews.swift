@@ -240,7 +240,7 @@ struct FullDiskAccessBanner: View {
                     Text("完全磁盘访问权限")
                         .font(.system(size: 15, weight: .semibold))
                         .foregroundStyle(SettingsTheme.ink)
-                    Text("Finder 菜单会全局显示；文件动作和命令模板执行时依赖 macOS 的完全磁盘访问权限。请通过下方按钮统一检查或打开系统设置。\(viewModel.fullDiskAccessStatusMessage)")
+                    Text("Finder 菜单会全局显示；文件动作和命令模板执行时依赖 macOS 的完全磁盘访问权限。请通过下方按钮打开系统设置统一授权；实际执行被拦截时会显示具体错误。\(viewModel.fullDiskAccessStatusMessage)")
                         .font(.system(size: 12))
                         .foregroundStyle(SettingsTheme.muted)
                         .fixedSize(horizontal: false, vertical: true)
@@ -250,16 +250,6 @@ struct FullDiskAccessBanner: View {
                 Spacer(minLength: 12)
 
                 HStack(spacing: 10) {
-                    Button {
-                        viewModel.checkFullDiskAccess()
-                    } label: {
-                        Label(viewModel.isCheckingFullDiskAccess ? "检查中..." : "检查权限", systemImage: "checkmark.shield")
-                            .frame(minWidth: 104)
-                    }
-                    .buttonStyle(.bordered)
-                    .controlSize(.large)
-                    .disabled(viewModel.isCheckingFullDiskAccess)
-
                     Button {
                         viewModel.openFullDiskAccessSettings()
                     } label: {

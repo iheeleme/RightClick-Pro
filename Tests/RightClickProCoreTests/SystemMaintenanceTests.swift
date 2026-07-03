@@ -92,8 +92,20 @@ final class SystemMaintenanceTests: XCTestCase {
 
         XCTAssertTrue(result.isSuccess)
         XCTAssertEqual(result.hasFullDiskAccess, false)
-        XCTAssertTrue(result.messages.first?.contains("可能尚未具备完全磁盘访问权限") == true)
+        XCTAssertTrue(result.messages.first?.contains("已跳过完全磁盘访问权限探测") == true)
         XCTAssertTrue(runner.calls.isEmpty)
+    }
+
+    func testRepresentativeFullDiskAccessCheckDoesNotReadProtectedAppData() {
+        let fileManager = RecordingFileManager()
+
+        let hasAccess = FullDiskAccessAdvisor.checkRepresentativeAccess(
+            fileManager: fileManager,
+            homeDirectory: URL(fileURLWithPath: "/Users/tester")
+        )
+
+        XCTAssertFalse(hasAccess)
+        XCTAssertTrue(fileManager.contentsOfDirectoryCalls.isEmpty)
     }
 }
 
@@ -111,6 +123,15 @@ private final class RecordingCommandRunner: SystemCommandRunning {
         let key = ([executablePath] + arguments).joined(separator: " ")
         calls.append(key)
         return results[key] ?? .failure(status: 127, stderr: "missing fake result")
+    }
+}
+
+private final class RecordingFileManager: FileManager {
+    private(set) var contentsOfDirectoryCalls: [String] = []
+
+    override func contentsOfDirectory(atPath path: String) throws -> [String] {
+        contentsOfDirectoryCalls.append(path)
+        return []
     }
 }
 

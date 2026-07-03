@@ -189,6 +189,7 @@ final class SettingsViewModel: NSObject, ObservableObject
   SystemMaintenanceRequest(task: .checkFullDiskAccess)
   SystemMaintenanceResult(hasFullDiskAccess: Bool?)
   ```
+  The default implementation is intentionally non-invasive and must not read Mail, Messages, Safari, TCC, or other app data directories.
 
 #### 3. Contracts
 
@@ -198,9 +199,9 @@ final class SettingsViewModel: NSObject, ObservableObject
 - Finder menus are globally visible once config is loaded; individual action visibility still depends on `ActionVisibility` and invocation shape.
 - File actions attempt real file operations and let macOS permission results determine success or failure.
 - Permission-like failures must include Full Disk Access guidance.
-- Settings overview Full Disk Access status must be probed through ActionRunner XPC, because the SwiftUI app process is sandboxed while `ActionRunner.xpc` is the process that owns file actions and command execution.
-- `FullDiskAccessAdvisor.checkRepresentativeAccess()` must resolve protected probe paths under the real login user home, not the sandbox container home that `FileManager.homeDirectoryForCurrentUser` may report.
-- Overview should hide the Full Disk Access setup banner once `SystemMaintenanceResult.hasFullDiskAccess == true`; show the banner only for unchecked/checking, missing permission, or XPC-unavailable states.
+- Settings overview must not probe Full Disk Access by reading protected application data. macOS does not provide a non-invasive status API, and representative reads can trigger "access data from other apps" prompts.
+- `FullDiskAccessAdvisor.checkRepresentativeAccess()` must not call `contentsOfDirectory`, `Data(contentsOf:)`, or similar reads on Mail, Messages, Safari, TCC, `~/Library/Containers`, or `~/Library/Group Containers`.
+- Overview should present a single System Settings shortcut for Full Disk Access. Runtime file actions remain the real permission boundary and should surface `FullDiskAccessAdvisor.userFacingMessage(for:)` on permission failures.
 
 #### 4. Validation & Error Matrix
 
@@ -208,19 +209,18 @@ final class SettingsViewModel: NSObject, ObservableObject
 - Old config has `monitoredDirectoryIDs` only -> do not use it for menu scope or runtime authorization.
 - File operation fails with `EPERM`, `EACCES`, or Cocoa no-permission errors -> append Full Disk Access guidance.
 - Finder context outside shortcut directories -> still build a menu when actions match the invocation.
-- ActionRunner permission probe returns `hasFullDiskAccess == true` -> overview treats permission as ready and hides the authorization prompt.
-- ActionRunner permission probe returns `hasFullDiskAccess == false` -> overview shows a warning prompt with the System Settings shortcut.
+- ActionRunner permission probe returns `hasFullDiskAccess == false` from the default checker -> it means invasive probing was skipped, not that authorization is definitely missing.
 - ActionRunner XPC probe fails or omits `hasFullDiskAccess` -> overview shows an error/unavailable state instead of claiming authorization is missing.
 
 #### 5. Good/Base/Bad Cases
 
 - Good: right-clicking `/System` still shows eligible menu items; execution may fail with Full Disk Access guidance.
 - Good: new installs default to Desktop and Downloads shortcuts only.
-- Good: after the user grants Full Disk Access and reactivates the app, SettingsViewModel probes ActionRunner XPC and the overview no longer shows the authorization prompt.
+- Good: opening settings does not touch Mail, Messages, Safari, TCC, or other app containers; the overview only links to System Settings.
 - Base: existing custom bookmark entries stay in `bookmarks.json` during bootstrap.
 - Bad: adding a new check that hides Finder menus outside `shortcutDirectoryIDs`.
 - Bad: reintroducing `AuthorizedPathValidator` or any configured-directory allowlist as the file-action boundary.
-- Bad: probing Full Disk Access directly from the sandboxed SwiftUI app and showing a stale missing-permission prompt after ActionRunner is already authorized.
+- Bad: probing Full Disk Access by reading `~/Library/Mail`, `~/Library/Messages`, `~/Library/Safari`, `~/Library/Application Support/com.apple.TCC`, app containers, or group containers.
 
 #### 6. Tests Required
 
@@ -229,8 +229,9 @@ final class SettingsViewModel: NSObject, ObservableObject
 - ActionRunner: file actions succeed in temporary directories even when `shortcutDirectoryIDs` is empty.
 - Bootstrap: default bookmarks exclude Documents and Code for new installs while preserving existing bookmarks.
 - SystemMaintenanceService: `.checkFullDiskAccess` returns true and false `hasFullDiskAccess` values without invoking shell commands.
-- Packaging smoke: installed app launches, ActionRunner XPC is available on demand, and overview hides the Full Disk Access banner when the XPC probe reports authorized.
-- UI lifecycle smoke: opening the settings window or reactivating the app does not send `.checkFullDiskAccess`; only the explicit overview check button may probe protected paths.
+- `FullDiskAccessAdvisor.checkRepresentativeAccess()` does not call `contentsOfDirectory` or otherwise read protected app data.
+- Packaging smoke: installed app launches and the overview opens System Settings without causing an "access data from other apps" prompt.
+- UI lifecycle smoke: opening the settings window or reactivating the app does not send `.checkFullDiskAccess`.
 
 #### 7. Wrong vs Correct
 
@@ -255,32 +256,29 @@ inside the sandboxed settings app.
 
 Correct:
 ```swift
-actionRunnerClient.performMaintenance(SystemMaintenanceRequest(task: .checkFullDiskAccess)) { result in
-    // Render SystemMaintenanceResult.hasFullDiskAccess from ActionRunner.xpc.
-}
+openFullDiskAccessSettings()
+// Runtime actions surface FullDiskAccessAdvisor.userFacingMessage(for:) only
+// when macOS actually denies the file operation.
 ```
 
 Wrong:
 ```swift
-NotificationCenter.default.addObserver(
-    self,
-    selector: #selector(handleApplicationDidBecomeActive),
-    name: NSApplication.didBecomeActiveNotification,
-    object: nil
-)
-
-@objc private func handleApplicationDidBecomeActive() {
-    checkFullDiskAccess(userInitiated: false)
+let protectedURLs = [
+    home.appendingPathComponent("Library/Mail"),
+    home.appendingPathComponent("Library/Messages"),
+    home.appendingPathComponent("Library/Safari"),
+    home.appendingPathComponent("Library/Application Support/com.apple.TCC")
+]
+let hasAccess = protectedURLs.contains {
+    (try? FileManager.default.contentsOfDirectory(atPath: $0.path)) != nil
 }
 ```
 
 Correct:
 ```swift
-func checkFullDiskAccess(userInitiated: Bool = true) {
-    guard userInitiated else { return }
-    actionRunnerClient.performMaintenance(SystemMaintenanceRequest(task: .checkFullDiskAccess)) { result in
-        // Update Full Disk Access overview state from the user-initiated probe.
-    }
+public static func checkRepresentativeAccess(...) -> Bool {
+    // No non-invasive status API exists; do not read other app data to infer it.
+    false
 }
 ```
 

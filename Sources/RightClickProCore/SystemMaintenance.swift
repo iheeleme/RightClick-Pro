@@ -165,7 +165,7 @@ public final class SystemMaintenanceService {
             messages: [
                 hasAccess
                     ? "ActionRunner 已具备完全磁盘访问权限"
-                    : "ActionRunner 可能尚未具备完全磁盘访问权限"
+                    : "已跳过完全磁盘访问权限探测，避免触发访问其他 App 数据的系统提示"
             ]
         )
     }

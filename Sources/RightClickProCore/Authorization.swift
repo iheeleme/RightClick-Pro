@@ -37,23 +37,11 @@ public enum FullDiskAccessAdvisor {
         fileManager: FileManager = .default,
         homeDirectory: URL? = nil
     ) -> Bool {
-        let homeDirectory = homeDirectory ?? UserHomeDirectoryResolver.realUserHomeDirectory(
-            processHomeDirectory: fileManager.homeDirectoryForCurrentUser
-        )
-        let protectedURLs = [
-            homeDirectory.appendingPathComponent("Library/Mail"),
-            homeDirectory.appendingPathComponent("Library/Messages"),
-            homeDirectory.appendingPathComponent("Library/Safari"),
-            homeDirectory.appendingPathComponent("Library/Application Support/com.apple.TCC")
-        ]
-
-        return protectedURLs.contains { url in
-            do {
-                _ = try fileManager.contentsOfDirectory(atPath: url.path)
-                return true
-            } catch {
-                return false
-            }
-        }
+        _ = fileManager
+        _ = homeDirectory
+        // macOS does not expose a non-invasive Full Disk Access status API.
+        // Reading Mail, Messages, Safari, or TCC directories just to infer the
+        // status can itself trigger "access data from other apps" prompts.
+        return false
     }
 }
