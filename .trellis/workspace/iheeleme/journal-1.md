@@ -346,3 +346,36 @@ Stopped Full Disk Access representative checks from reading Mail, Messages, Safa
 ### Next Steps
 
 - None - task complete
+
+
+## Session 11: Avoid first-launch other app data prompts
+
+**Date**: 2026-07-03
+**Task**: Avoid first-launch other app data prompts
+**Branch**: `develop`
+
+### Summary
+
+Changed default runtime storage from App Group / Group Containers to the real-user Application Support directory, removed App Group entitlements from packaged app, extension, and XPC, added a narrow Application Support sandbox exception for app-owned state, documented the new storage model, verified tests and packaging, and installed the refreshed app to /Applications.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `628ca6f` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

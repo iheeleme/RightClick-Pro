@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 10
+- **Total Sessions**: 11
 - **Last Active**: 2026-07-03
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~348 | Active |
+| `journal-1.md` | ~381 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 11 | 2026-07-03 | Avoid first-launch other app data prompts | `628ca6f` | `develop` |
 | 10 | 2026-07-03 | Avoid other app data permission prompts | `bd419af` | `develop` |
 | 9 | 2026-07-01 | Unify Full Disk Access authorization check | `1999ac5` | `develop` |
 | 8 | 2026-06-28 | RightClick Pro DMG distribution engineering | `80160b7`, `25b0a65`, `3065cdf`, `8251709`, `718c7f0`, `2aef346`, `1c3a4f8`, `604c100`, `292406f` | `main` |
