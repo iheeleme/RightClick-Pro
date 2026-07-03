@@ -313,3 +313,36 @@ Removed automatic Full Disk Access probes from settings bootstrap and app activa
 ### Next Steps
 
 - None - task complete
+
+
+## Session 10: Avoid other app data permission prompts
+
+**Date**: 2026-07-03
+**Task**: Avoid other app data permission prompts
+**Branch**: `develop`
+
+### Summary
+
+Stopped Full Disk Access representative checks from reading Mail, Messages, Safari, TCC, app containers, or group containers; removed the overview permission check button; kept System Settings as the single authorization entry; added a regression test that the representative check performs no directory reads; verified build, tests, packaging, and installed the refreshed app to /Applications.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `bd419af` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
