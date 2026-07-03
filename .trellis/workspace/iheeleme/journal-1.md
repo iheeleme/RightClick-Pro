@@ -379,3 +379,36 @@ Changed default runtime storage from App Group / Group Containers to the real-us
 ### Next Steps
 
 - None - task complete
+
+
+## Session 12: Rewrite open source README
+
+**Date**: 2026-07-03
+**Task**: Rewrite open source README
+**Branch**: `develop`
+
+### Summary
+
+Rewrote the Chinese README in the style of jlcodes99/cockpit-tools with overview, feature sections, install, troubleshooting, build, architecture, contribution, acknowledgements, license, and disclaimer; added a LICENSE file referencing CC BY-NC-SA 4.0 and non-commercial authorization terms.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `4474fcc` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
