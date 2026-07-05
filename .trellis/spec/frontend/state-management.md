@@ -141,3 +141,108 @@ Toggle(
     )
 )
 ```
+
+## Scenario: GitHub Release Update Check
+
+### 1. Scope / Trigger
+
+- Trigger: adding or changing the settings Overview version/update check, GitHub release endpoint usage, `AppMetadata` version metadata, or `ReleaseVersionComparator`.
+- This is a frontend state contract with a small Core comparison helper: the settings app owns network/UI state, while Core owns reusable version comparison logic.
+
+### 2. Signatures
+
+- App metadata:
+  ```swift
+  AppMetadata.currentVersion
+  AppMetadata.releasesPageURL
+  AppMetadata.latestReleaseAPIURL
+  ```
+- ViewModel state and commands:
+  ```swift
+  enum UpdateCheckStatus: Equatable
+  var updateCheckStatus: UpdateCheckStatus
+  var isCheckingForUpdates: Bool
+  func checkForUpdates()
+  func openUpdateReleasePage()
+  ```
+- Core comparison:
+  ```swift
+  ReleaseVersionComparator.compare(currentVersion:latestTag:) -> ReleaseVersionComparison
+  ```
+
+### 3. Contracts
+
+- Update checks are manual/user-initiated from the Overview UI unless a future task explicitly adds background polling.
+- The source of truth is GitHub's latest published full release endpoint:
+  ```text
+  GET https://api.github.com/repos/iheeleme/RightClick-Pro/releases/latest
+  ```
+- Latest means a public full release. Drafts and prereleases are out of scope for this flow.
+- `CFBundleShortVersionString` is the installed app version. `CFBundleVersion` is display/build metadata and must not drive update comparisons.
+- GitHub `tag_name` may have a leading `v`; comparison strips that prefix and ignores local suffix/build metadata such as `-dev` or `+build`.
+- Convert network responses into a local `Sendable` response value before hopping back to `@MainActor` state mutation. Do not capture Foundation response/error objects directly in main-actor UI updates.
+- SwiftUI views render `updateCheckStatus` and call `SettingsViewModel` commands; they must not perform `URLSession` requests directly.
+
+### 4. Validation & Error Matrix
+
+- User taps "检查更新" while already checking -> no-op; keep duplicate requests disabled.
+- HTTP 200 with valid release payload -> compare `tag_name` with `AppMetadata.currentVersion`.
+- Newer latest release -> `.updateAvailable` with release URL and optional `published_at`.
+- Equal or older latest release -> `.upToDate`.
+- Malformed local or remote version -> `.unavailable` with a user-readable comparison warning.
+- HTTP 404 -> `.unavailable("GitHub 暂无公开正式版本")`; this is a normal pre-release-project state, not a crash.
+- HTTP 403 -> user-readable rate-limit/refusal message; do not ask for GitHub tokens in the app.
+- Network or decode failure -> retryable `.unavailable` message.
+- Opening the release page fails -> show a warning status message.
+
+### 5. Good/Base/Bad Cases
+
+- Good: a packaged `1.2.3` app sees GitHub `v1.3.0` and shows "发现新版本" with a "查看版本" button.
+- Good: a local `1.2.3-dev` build sees GitHub `v1.2.3` and treats it as up to date for the numeric release line.
+- Good: GitHub has no full release yet and the Overview panel explains that no public formal version is available.
+- Base: user opens the Releases page without checking first; the app opens the repository releases list.
+- Bad: the Overview view starts its own `URLSession` request in `body`.
+- Bad: a 404 from `/releases/latest` is displayed as a fatal GitHub error.
+- Bad: prerelease list filtering is added while the product requirement is still "formal latest release only".
+
+### 6. Tests Required
+
+- Unit-test `ReleaseVersionComparator` for newer, equal, older, leading `v`, short-version padding, local suffixes, trailing zero components, and malformed tags.
+- Run `swift build --target RightClickProAppPreview` when SwiftPM manifest loading works locally.
+- Run strict direct type checks for Core and AppPreview when SwiftPM is blocked by local toolchain issues.
+- Run `scripts/package-macos.sh debug` because the Overview UI ships in the preview app bundle.
+- Run `git diff --check`.
+- Manual smoke test when safe: open the settings Overview, trigger "检查更新", verify checking/up-to-date/update/unavailable states, and verify release-page opening.
+
+### 7. Wrong vs Correct
+
+Wrong:
+```swift
+struct UpdateCheckPanel: View {
+    var body: some View {
+        Button("检查更新") {
+            URLSession.shared.dataTask(with: url) { _, _, _ in }
+        }
+    }
+}
+```
+
+Correct:
+```swift
+Button {
+    viewModel.checkForUpdates()
+} label: {
+    Label("检查更新", systemImage: "arrow.clockwise")
+}
+```
+
+Wrong:
+```swift
+let latest = releases.first(where: { $0.prerelease })
+```
+when the requirement is formal latest release only.
+
+Correct:
+```swift
+let response = await GitHubReleaseClient.fetchLatestRelease(from: AppMetadata.latestReleaseAPIURL)
+```
