@@ -17,6 +17,7 @@ struct OnboardingView: View {
             }
 
             LaunchAtLoginPanel(viewModel: viewModel)
+            UpdateCheckPanel(viewModel: viewModel)
 
             HStack(alignment: .top, spacing: 40) {
                 VStack(alignment: .leading, spacing: 16) {
@@ -115,6 +116,109 @@ struct OnboardingView: View {
             FinderMenuItem(title: "新建文件", systemImage: "doc", tint: SettingsTheme.accent, hasSubmenu: true)
         ]
     }
+}
+
+struct UpdateCheckPanel: View {
+    @ObservedObject var viewModel: SettingsViewModel
+
+    var body: some View {
+        DesignPanel {
+            HStack(alignment: .center, spacing: 16) {
+                IconBadge(systemImage: panelState.systemImage, tint: panelState.tint)
+
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(panelState.title)
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(SettingsTheme.ink)
+                    Text(panelState.message)
+                        .font(.system(size: 12))
+                        .foregroundStyle(SettingsTheme.muted)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .layoutPriority(1)
+
+                Spacer(minLength: 12)
+
+                HStack(spacing: 10) {
+                    Button {
+                        viewModel.openUpdateReleasePage()
+                    } label: {
+                        Label(panelState.releaseButtonTitle, systemImage: "safari")
+                            .frame(minWidth: 108)
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.large)
+                    .help("打开 GitHub Releases 页面")
+
+                    Button {
+                        viewModel.checkForUpdates()
+                    } label: {
+                        Label(viewModel.isCheckingForUpdates ? "检查中..." : "检查更新", systemImage: "arrow.clockwise")
+                            .frame(minWidth: 112)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
+                    .disabled(viewModel.isCheckingForUpdates)
+                    .help("从 GitHub 获取最新正式版本")
+                }
+                .fixedSize(horizontal: true, vertical: false)
+            }
+        }
+    }
+
+    private var panelState: UpdateCheckPanelState {
+        switch viewModel.updateCheckStatus {
+        case .unchecked:
+            return UpdateCheckPanelState(
+                title: "版本更新",
+                message: "当前 \(AppMetadata.versionText)。手动检查 GitHub 最新正式版本；预发布版本不会计入更新提醒。",
+                systemImage: "arrow.down.circle",
+                tint: SettingsTheme.accent,
+                releaseButtonTitle: "发布页"
+            )
+        case .checking:
+            return UpdateCheckPanelState(
+                title: "正在检查更新",
+                message: "正在连接 GitHub Releases，获取最新公开正式版本。",
+                systemImage: "arrow.triangle.2.circlepath",
+                tint: SettingsTheme.accent,
+                releaseButtonTitle: "发布页"
+            )
+        case .upToDate(let currentVersion, let latestTag):
+            return UpdateCheckPanelState(
+                title: "当前已是最新版本",
+                message: "当前版本 \(currentVersion)，GitHub 最新正式版本 \(latestTag)。",
+                systemImage: "checkmark.seal",
+                tint: .green,
+                releaseButtonTitle: "发布页"
+            )
+        case .updateAvailable(let currentVersion, let latestTag, _, let publishedAt):
+            let publishedText = publishedAt.map { "，发布时间 \(operationDateFormatter.string(from: $0))" } ?? ""
+            return UpdateCheckPanelState(
+                title: "发现新版本 \(latestTag)",
+                message: "当前版本 \(currentVersion)，GitHub 已发布 \(latestTag)\(publishedText)。",
+                systemImage: "sparkles",
+                tint: .orange,
+                releaseButtonTitle: "查看版本"
+            )
+        case .unavailable(let message):
+            return UpdateCheckPanelState(
+                title: "暂时无法确认更新",
+                message: "\(message)。当前 \(AppMetadata.versionText)。",
+                systemImage: "exclamationmark.triangle",
+                tint: .orange,
+                releaseButtonTitle: "发布页"
+            )
+        }
+    }
+}
+
+private struct UpdateCheckPanelState {
+    var title: String
+    var message: String
+    var systemImage: String
+    var tint: Color
+    var releaseButtonTitle: String
 }
 
 struct LaunchAtLoginPanel: View {

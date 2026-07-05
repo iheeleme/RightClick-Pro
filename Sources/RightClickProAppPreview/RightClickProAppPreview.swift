@@ -5,11 +5,18 @@ import UniformTypeIdentifiers
 
 enum AppMetadata {
     static let displayName = "RightClick Pro"
+    static let releasesPageURL = URL(string: "https://github.com/iheeleme/RightClick-Pro/releases")!
+    static let latestReleaseAPIURL = URL(string: "https://api.github.com/repos/iheeleme/RightClick-Pro/releases/latest")!
+
+    static var currentVersion: String {
+        let info = Bundle.main.infoDictionary ?? [:]
+        return (info["CFBundleShortVersionString"] as? String)
+            .flatMap { $0.isEmpty ? nil : $0 } ?? "0.0.0-dev"
+    }
 
     static var versionText: String {
         let info = Bundle.main.infoDictionary ?? [:]
-        let version = (info["CFBundleShortVersionString"] as? String)
-            .flatMap { $0.isEmpty ? nil : $0 } ?? "0.0.0-dev"
+        let version = currentVersion
         let build = (info["CFBundleVersion"] as? String)
             .flatMap { $0.isEmpty ? nil : $0 }
 

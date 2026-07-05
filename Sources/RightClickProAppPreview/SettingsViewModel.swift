@@ -22,6 +22,76 @@ private enum MaintenanceResponse: Sendable {
     }
 }
 
+private struct GitHubLatestRelease: Equatable, Sendable {
+    var tagName: String
+    var htmlURL: URL
+    var publishedAt: Date?
+}
+
+private enum GitHubReleaseCheckResponse: Sendable {
+    case success(GitHubLatestRelease)
+    case noPublicRelease
+    case failure(String)
+}
+
+private enum GitHubReleaseClient {
+    static func fetchLatestRelease(from url: URL) async -> GitHubReleaseCheckResponse {
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 15
+        request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+        request.setValue("2026-03-10", forHTTPHeaderField: "X-GitHub-Api-Version")
+
+        do {
+            let (data, response) = try await URLSession.shared.data(for: request)
+            guard let httpResponse = response as? HTTPURLResponse else {
+                return .failure("GitHub 返回了无法识别的响应")
+            }
+
+            switch httpResponse.statusCode {
+            case 200:
+                return decodeLatestRelease(data)
+            case 404:
+                return .noPublicRelease
+            case 403:
+                return .failure("GitHub 暂时拒绝了请求，可能触发了匿名访问频率限制")
+            default:
+                return .failure("GitHub 请求失败：HTTP \(httpResponse.statusCode)")
+            }
+        } catch {
+            return .failure("无法连接 GitHub：\(error.localizedDescription)")
+        }
+    }
+
+    private static func decodeLatestRelease(_ data: Data) -> GitHubReleaseCheckResponse {
+        do {
+            let decoder = JSONDecoder()
+            decoder.dateDecodingStrategy = .iso8601
+            let payload = try decoder.decode(GitHubLatestReleasePayload.self, from: data)
+            return .success(
+                GitHubLatestRelease(
+                    tagName: payload.tagName,
+                    htmlURL: payload.htmlURL,
+                    publishedAt: payload.publishedAt
+                )
+            )
+        } catch {
+            return .failure("GitHub 最新版本信息格式无法解析")
+        }
+    }
+}
+
+private struct GitHubLatestReleasePayload: Decodable {
+    var tagName: String
+    var htmlURL: URL
+    var publishedAt: Date?
+
+    enum CodingKeys: String, CodingKey {
+        case tagName = "tag_name"
+        case htmlURL = "html_url"
+        case publishedAt = "published_at"
+    }
+}
+
 
 @MainActor
 final class SettingsViewModel: NSObject, ObservableObject {
@@ -130,6 +200,14 @@ final class SettingsViewModel: NSObject, ObservableObject {
         case unavailable(String)
     }
 
+    enum UpdateCheckStatus: Equatable {
+        case unchecked
+        case checking
+        case upToDate(currentVersion: String, latestTag: String)
+        case updateAvailable(currentVersion: String, latestTag: String, releaseURL: URL, publishedAt: Date?)
+        case unavailable(String)
+    }
+
     @Published var selectedSection: Section = .onboarding
     @Published var config = RightClickProConfig()
     @Published var bookmarks = DirectoryBookmarkCatalog()
@@ -147,6 +225,7 @@ final class SettingsViewModel: NSObject, ObservableObject {
     @Published var finderExtensionSetupMessage = ""
     @Published private(set) var fullDiskAccessStatus: FullDiskAccessStatus = .unchecked
     @Published private(set) var launchAtLoginStatus: LaunchAtLoginStatus = .unchecked
+    @Published private(set) var updateCheckStatus: UpdateCheckStatus = .unchecked
 
     private var paths = RightClickProStoragePaths.defaultForCurrentProcess()
     private let commandSecretStore = KeychainCommandSecretStore()
@@ -276,6 +355,10 @@ final class SettingsViewModel: NSObject, ObservableObject {
         case .unavailable:
             return .error
         }
+    }
+
+    var isCheckingForUpdates: Bool {
+        updateCheckStatus == .checking
     }
 
     /// Section-level count shown as a sidebar badge.
@@ -416,6 +499,39 @@ final class SettingsViewModel: NSObject, ObservableObject {
             setStatus("已打开登录项设置，请确认 \(AppMetadata.displayName) 是否允许后台运行", tone: .neutral)
         } else {
             setStatus("无法打开登录项设置，请手动前往系统设置 > 通用 > 登录项", tone: .warning)
+        }
+    }
+
+    func checkForUpdates() {
+        guard !isCheckingForUpdates else {
+            return
+        }
+
+        let currentVersion = AppMetadata.currentVersion
+        updateCheckStatus = .checking
+        setStatus("正在检查 GitHub 最新正式版本...", tone: .neutral)
+
+        Task { [weak self, currentVersion] in
+            let response = await GitHubReleaseClient.fetchLatestRelease(from: AppMetadata.latestReleaseAPIURL)
+            await MainActor.run { [weak self, response, currentVersion] in
+                self?.handleUpdateCheckResponse(response, currentVersion: currentVersion)
+            }
+        }
+    }
+
+    func openUpdateReleasePage() {
+        let url: URL
+        switch updateCheckStatus {
+        case .updateAvailable(_, _, let releaseURL, _):
+            url = releaseURL
+        case .unchecked, .checking, .upToDate, .unavailable:
+            url = AppMetadata.releasesPageURL
+        }
+
+        if NSWorkspace.shared.open(url) {
+            setStatus("已打开 GitHub Releases 页面", tone: .neutral)
+        } else {
+            setStatus("无法打开 GitHub Releases 页面", tone: .warning)
         }
     }
 
@@ -990,6 +1106,36 @@ final class SettingsViewModel: NSObject, ObservableObject {
             if userInitiated {
                 setStatus(fullDiskAccessStatusMessage, tone: .error)
             }
+        }
+    }
+
+    private func handleUpdateCheckResponse(_ response: GitHubReleaseCheckResponse, currentVersion: String) {
+        switch response {
+        case .success(let release):
+            switch ReleaseVersionComparator.compare(currentVersion: currentVersion, latestTag: release.tagName) {
+            case .updateAvailable:
+                updateCheckStatus = .updateAvailable(
+                    currentVersion: currentVersion,
+                    latestTag: release.tagName,
+                    releaseURL: release.htmlURL,
+                    publishedAt: release.publishedAt
+                )
+                setStatus("发现新版本：\(release.tagName)", tone: .success)
+            case .upToDate:
+                updateCheckStatus = .upToDate(currentVersion: currentVersion, latestTag: release.tagName)
+                setStatus("当前已是最新正式版本", tone: .success)
+            case .unknown:
+                let message = "已获取 GitHub 最新版本 \(release.tagName)，但无法与当前版本 \(currentVersion) 比较"
+                updateCheckStatus = .unavailable(message)
+                setStatus(message, tone: .warning)
+            }
+        case .noPublicRelease:
+            let message = "GitHub 暂无公开正式版本"
+            updateCheckStatus = .unavailable(message)
+            setStatus(message, tone: .warning)
+        case .failure(let message):
+            updateCheckStatus = .unavailable(message)
+            setStatus(message, tone: .error)
         }
     }
 
