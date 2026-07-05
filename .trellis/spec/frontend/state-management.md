@@ -177,6 +177,7 @@ Toggle(
   ```text
   GET https://api.github.com/repos/iheeleme/RightClick-Pro/releases/latest
   ```
+- The packaged settings app must include `com.apple.security.network.client`; otherwise the sandbox blocks `URLSession` before the GitHub response can be decoded.
 - Latest means a public full release. Drafts and prereleases are out of scope for this flow.
 - `CFBundleShortVersionString` is the installed app version. `CFBundleVersion` is display/build metadata and must not drive update comparisons.
 - GitHub `tag_name` may have a leading `v`; comparison strips that prefix and ignores local suffix/build metadata such as `-dev` or `+build`.
@@ -193,6 +194,7 @@ Toggle(
 - HTTP 404 -> `.unavailable("GitHub 暂无公开正式版本")`; this is a normal pre-release-project state, not a crash.
 - HTTP 403 -> user-readable rate-limit/refusal message; do not ask for GitHub tokens in the app.
 - Network or decode failure -> retryable `.unavailable` message.
+- Sandbox network-denied failures in a packaged app -> packaging entitlement bug; fix the app entitlements and rebuild instead of changing the GitHub client.
 - Opening the release page fails -> show a warning status message.
 
 ### 5. Good/Base/Bad Cases

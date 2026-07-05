@@ -226,8 +226,10 @@ write_finder_extension_info_plist() {
 PLIST
 }
 
-write_entitlements_plist() {
+write_sandbox_entitlements_plist() {
   local plist_path="$1"
+  local include_network_client="$2"
+
   cat > "$plist_path" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -235,6 +237,16 @@ write_entitlements_plist() {
 <dict>
   <key>com.apple.security.app-sandbox</key>
   <true/>
+PLIST
+
+  if [[ "$include_network_client" == "1" ]]; then
+    cat >> "$plist_path" <<PLIST
+  <key>com.apple.security.network.client</key>
+  <true/>
+PLIST
+  fi
+
+  cat >> "$plist_path" <<PLIST
   <key>com.apple.security.files.user-selected.read-write</key>
   <true/>
   <key>com.apple.security.files.bookmarks.app-scope</key>
@@ -405,12 +417,13 @@ build_preview_executables() {
 }
 
 codesign_if_available() {
-  local entitlements_path="$1"
-  local xpc_entitlements_path="$2"
-  local app_path="$3"
-  local xpc_path="$4"
-  local appex_path="$5"
-  local appex_xpc_path="$6"
+  local app_entitlements_path="$1"
+  local finder_entitlements_path="$2"
+  local xpc_entitlements_path="$3"
+  local app_path="$4"
+  local xpc_path="$5"
+  local appex_path="$6"
+  local appex_xpc_path="$7"
 
   if ! command -v codesign >/dev/null 2>&1; then
     echo "codesign not found; leaving preview bundle unsigned." >&2
@@ -423,8 +436,8 @@ codesign_if_available() {
   codesign --force --sign "$CODE_SIGN_IDENTITY" "$appex_xpc_path/Contents/Frameworks/libRightClickProCore.dylib"
   codesign --force --sign "$CODE_SIGN_IDENTITY" --entitlements "$xpc_entitlements_path" "$xpc_path"
   codesign --force --sign "$CODE_SIGN_IDENTITY" --entitlements "$xpc_entitlements_path" "$appex_xpc_path"
-  codesign --force --sign "$CODE_SIGN_IDENTITY" --entitlements "$entitlements_path" "$appex_path"
-  codesign --force --sign "$CODE_SIGN_IDENTITY" --entitlements "$entitlements_path" "$app_path"
+  codesign --force --sign "$CODE_SIGN_IDENTITY" --entitlements "$finder_entitlements_path" "$appex_path"
+  codesign --force --sign "$CODE_SIGN_IDENTITY" --entitlements "$app_entitlements_path" "$app_path"
 }
 
 validate_preview_bundle() {
@@ -466,6 +479,15 @@ validate_preview_bundle() {
 
   if command -v codesign >/dev/null 2>&1; then
     local entitlements_dump
+    entitlements_dump="$(mktemp)"
+    codesign -d --entitlements :- "$app_path" >"$entitlements_dump" 2>/dev/null || true
+    if [[ "$(/usr/libexec/PlistBuddy -c "Print :com.apple.security.network.client" "$entitlements_dump" 2>/dev/null || true)" != "true" ]]; then
+      echo "Preview app must include com.apple.security.network.client for update checks." >&2
+      rm -f "$entitlements_dump"
+      exit 65
+    fi
+    rm -f "$entitlements_dump"
+
     entitlements_dump="$(mktemp)"
     codesign -d --entitlements :- "$appex_xpc_path" >"$entitlements_dump" 2>/dev/null || true
     if /usr/libexec/PlistBuddy -c "Print :com.apple.security.app-sandbox" "$entitlements_dump" >/dev/null 2>&1; then
@@ -582,7 +604,8 @@ package_swiftpm_preview_bundle() {
   local appex_path="$app_path/Contents/PlugIns/RightClickProFinderExtension.appex"
   local appex_xpc_path="$appex_path/Contents/XPCServices/RightClickProActionRunner.xpc"
   local manual_build_dir="$PWD/$DIST_DIR/manual-build"
-  local entitlements_path="$manual_build_dir/RightClickPro.entitlements"
+  local app_entitlements_path="$manual_build_dir/RightClickProApp.entitlements"
+  local finder_entitlements_path="$manual_build_dir/RightClickProFinderExtension.entitlements"
   local xpc_entitlements_path="$manual_build_dir/RightClickProActionRunner.entitlements"
 
   rm -rf "$staging" "$manual_build_dir"
@@ -619,9 +642,10 @@ local testing. It is ad-hoc signed when codesign is available, but it is not
 Developer ID signed or notarized.
 NOTES
 
-  write_entitlements_plist "$entitlements_path"
+  write_sandbox_entitlements_plist "$app_entitlements_path" 1
+  write_sandbox_entitlements_plist "$finder_entitlements_path" 0
   write_xpc_entitlements_plist "$xpc_entitlements_path"
-  codesign_if_available "$entitlements_path" "$xpc_entitlements_path" "$app_path" "$xpc_path" "$appex_path" "$appex_xpc_path"
+  codesign_if_available "$app_entitlements_path" "$finder_entitlements_path" "$xpc_entitlements_path" "$app_path" "$xpc_path" "$appex_path" "$appex_xpc_path"
   validate_preview_bundle "$app_path" "$xpc_path" "$appex_path" "$appex_xpc_path"
 
   mkdir -p "$DIST_DIR"

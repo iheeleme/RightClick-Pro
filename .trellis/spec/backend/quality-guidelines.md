@@ -732,6 +732,7 @@ return .application(appURL: terminalURL, targetURL: selectedFileURL.deletingLast
   path: dist/*.dmg
   ```
 - Preview app and Finder extension entitlements include app sandbox, user-selected read/write, app-scope bookmarks, and a narrow home-relative read/write exception for `/Library/Application Support/com.iheeleme.rightclickpro/`.
+- Preview app entitlements must include `com.apple.security.network.client` so the settings Overview can reach GitHub's latest-release API from the sandboxed app. Do not grant this network entitlement to the Finder extension unless a concrete Finder-side network feature is added.
 - Preview ActionRunner XPC entitlements intentionally omit app sandbox for local smoke tests against user-selected paths and Application Support state. Runtime authorization must still validate all file mutations through `ActionRunner`.
 
 #### 3. Contracts
@@ -790,6 +791,7 @@ return .application(appURL: terminalURL, targetURL: selectedFileURL.deletingLast
 - Existing config/bookmark files omit an available default directory such as `~/Code` -> append that directory to bookmarks, `monitoredDirectoryIDs`, `commonDirectoryIDs`, and missing generated directory actions.
 - Preview bundle is missing app or extension-local `RightClickProActionRunner.xpc` -> packaging fails before artifact upload.
 - Preview XPC service has app sandbox entitlement -> local smoke tests against auto-injected protected folders may fail.
+- Preview app lacks `com.apple.security.network.client` -> update checks fail in-app even though terminal `curl` succeeds; packaging validation must fail.
 - Preview deep code-sign verification fails -> packaging fails before artifact upload.
 - `pluginkit` unavailable during `RIGHTCLICKPRO_REGISTER_FINDER_EXTENSION=1` -> skip registration/enablement without failing packaging.
 - `pluginkit -a` or `pluginkit -e use` fails during opt-in local preview enablement -> do not fail packaging; the bundle validation remains the hard gate.
@@ -801,6 +803,7 @@ return .application(appURL: terminalURL, targetURL: selectedFileURL.deletingLast
 - Workflow upload path includes `dist/*.zip` -> bug; CI artifact regresses to mixed zip/DMG contents.
 - GitHub Release assets are uploaded from a local developer machine while the tag workflow can build them -> release process bug; prefer the Actions-built DMGs.
 - Docs mention `package_dmg=false` for GitHub Actions -> bug; docs describe an unsupported CI path.
+- Docs or generated entitlements imply the Finder extension needs GitHub network access for update checks -> bug; the update check runs in the settings app.
 - DMG smoke mount lacks `RightClick Pro.app`, `Applications`, or `README.txt` -> exit 65.
 
 #### 5. Good/Base/Bad Cases
@@ -850,6 +853,7 @@ return .application(appURL: terminalURL, targetURL: selectedFileURL.deletingLast
   scripts/package-macos.sh debug
   RIGHTCLICKPRO_PACKAGE_DMG=1 scripts/package-macos.sh debug
   codesign --verify --deep --strict --verbose=2 "dist/staging/RightClick Pro.app"
+  codesign -d --entitlements :- "dist/staging/RightClick Pro.app"
   otool -hv "dist/staging/RightClick Pro.app/Contents/PlugIns/RightClickProFinderExtension.appex/Contents/MacOS/RightClickProFinderExtension"
   test -x "dist/staging/RightClick Pro.app/Contents/XPCServices/RightClickProActionRunner.xpc/Contents/MacOS/RightClickProActionRunner"
   test -x "dist/staging/RightClick Pro.app/Contents/PlugIns/RightClickProFinderExtension.appex/Contents/XPCServices/RightClickProActionRunner.xpc/Contents/MacOS/RightClickProActionRunner"
