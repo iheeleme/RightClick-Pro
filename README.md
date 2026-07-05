@@ -281,6 +281,8 @@ scripts/package-macos.sh debug
 
 ## 致谢
 
+感谢[LinuxDo](https://linux.do/)社区，真诚、友善、团结、专业，共建你我引以为荣之社区。
+
 感谢 macOS Finder Sync、SwiftUI、Swift Package Manager 生态，以及所有为开发者效率工具提供思路的开源项目。
 
 ---
