@@ -10,7 +10,7 @@ The workflow runs on:
 * version tags matching `v*`;
 * pull requests that touch build, source, test, script, or docs files.
 
-It uses GitHub-hosted macOS runners and uploads packaged artifacts with `actions/upload-artifact`.
+It uses GitHub-hosted macOS runners, uploads packaged artifacts with `actions/upload-artifact`, and publishes GitHub Release assets from those workflow-built DMGs when a version tag is pushed.
 
 ## First Test Package
 
@@ -73,6 +73,8 @@ GitHub Actions always enables DMG packaging and uploads only the generated DMG:
 ```text
 dist/RightClick Pro-<version>-<arch>-preview.dmg
 ```
+
+When the workflow is triggered by a version tag such as `v0.1.1`, the `release` job downloads the matrix-built DMG artifacts and creates or updates the matching GitHub Release. Release assets should come from this Actions path first; locally generated DMGs are for internal smoke tests and fallback diagnostics, not the preferred public release artifact source.
 
 For local internal/self-test distribution, enable DMG packaging explicitly:
 

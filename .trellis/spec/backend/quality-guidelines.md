@@ -762,6 +762,7 @@ return .application(appURL: terminalURL, targetURL: selectedFileURL.deletingLast
 - If only one Xcode variable is configured, packaging must fail instead of silently falling back to SwiftPM preview output.
 - Local zip artifacts are written to `dist/RightClick Pro-<version>-<arch>-preview.zip` when the packaging script runs directly.
 - GitHub Actions must set `RIGHTCLICKPRO_PACKAGE_DMG=1` and upload only the compressed read-only `UDZO` artifact at `dist/RightClick Pro-<version>-<arch>-preview.dmg`.
+- Version-tag GitHub Releases must publish DMG assets built by the GitHub Actions packaging workflow. Local DMGs are acceptable for smoke tests and diagnostics, but they are not the preferred public release artifact source.
 - `package_dmg` must not be a workflow_dispatch input because CI always publishes DMG-only artifacts.
 - DMG contents must include `RightClick Pro.app`, an `/Applications` alias, and `README.txt`.
 - `README.txt` must cover drag-to-Applications installation, `xattr -cr "/Applications/RightClick Pro.app"` quarantine cleanup, the non-Developer-ID/non-notarized warning, Finder Extension enablement, and the `killall Finder` fallback.
@@ -798,6 +799,7 @@ return .application(appURL: terminalURL, targetURL: selectedFileURL.deletingLast
 - Overview setup banner is visible after successful runtime setup -> UI noise; hide it until automatic setup fails or manual attention is needed.
 - No `dist/*.dmg` output in GitHub Actions -> artifact upload must fail.
 - Workflow upload path includes `dist/*.zip` -> bug; CI artifact regresses to mixed zip/DMG contents.
+- GitHub Release assets are uploaded from a local developer machine while the tag workflow can build them -> release process bug; prefer the Actions-built DMGs.
 - Docs mention `package_dmg=false` for GitHub Actions -> bug; docs describe an unsupported CI path.
 - DMG smoke mount lacks `RightClick Pro.app`, `Applications`, or `README.txt` -> exit 65.
 
@@ -816,6 +818,7 @@ return .application(appURL: terminalURL, targetURL: selectedFileURL.deletingLast
 - Good: clicking "重启 Finder" asks ActionRunner XPC to register/enable the extension and then restart Finder; if `killall Finder` fails, the service tries an AppleScript fallback and reports diagnostics.
 - Base: manual workflow dispatch with no Xcode env vars produces a SwiftPM preview bundle with App, app-local XPC service, extension-local XPC service, Finder extension, and shared core dylib.
 - Base: manual workflow dispatch always requests DMG generation and uploads only `dist/*.dmg`.
+- Base: pushing tag `v0.1.1` runs the macOS matrix, downloads the matrix DMGs in a release job, and creates or updates the GitHub Release with those DMGs.
 - Bad: bootstrap writes `~/Library/Containers/com.iheeleme.rightclickpro/Data/Desktop` as a monitored directory, so the Finder menu never appears on the user's real Desktop.
 - Bad: `FIFinderSyncController.default().directoryURLs = Set([URL(fileURLWithPath: "/Users/me/Code")])` for a visible sidebar favorite, causing Finder to render the folder with the extension app icon.
 - Bad: `FinderSyncController.menu(for:)` reads `config.json`, reads `bookmarks.json`, resolves all app icons, and runs bootstrap synchronously on every right-click.
@@ -824,6 +827,7 @@ return .application(appURL: terminalURL, targetURL: selectedFileURL.deletingLast
 - Bad: the sandboxed menu-bar app directly runs `/usr/bin/killall Finder`, then reports failure even though the embedded unsandboxed XPC service could perform the repair.
 - Bad: every normal launch restarts Finder even when the same bundled extension was already repaired successfully.
 - Bad: workflow upload glob includes both `.zip` and `.dmg`, so one Actions artifact contains multiple package formats.
+- Bad: developer uploads `dist/RightClick Pro-0.1.1-arm64-preview.dmg` from a local machine as the primary GitHub Release asset when Actions can build the tag.
 - Bad: `RIGHTCLICKPRO_XCODE_PROJECT` set without `RIGHTCLICKPRO_XCODE_SCHEME` silently falls back to preview bundling.
 - Bad: preview bundle contains `Contents/PlugIns/RightClickProFinderExtension.appex` but the appex executable is a `DYLIB`.
 

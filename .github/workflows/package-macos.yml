@@ -77,3 +77,53 @@ jobs:
           path: dist/*.dmg
           if-no-files-found: error
           compression-level: 0
+
+  release:
+    name: Publish GitHub Release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: package
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download packaged artifacts
+        uses: actions/download-artifact@v7
+        with:
+          path: release-assets
+          merge-multiple: true
+
+      - name: List release assets
+        run: find release-assets -maxdepth 1 -type f -print
+
+      - name: Publish release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          shopt -s nullglob
+          assets=(release-assets/*.dmg)
+          if (( ${#assets[@]} == 0 )); then
+            echo "No DMG assets downloaded from package jobs." >&2
+            exit 66
+          fi
+
+          version="${GITHUB_REF_NAME#v}"
+          notes_file="$(mktemp)"
+          {
+            printf 'RightClick Pro %s preview build.\n\n' "$version"
+            printf 'Release DMG assets are built by GitHub Actions from tag %s.\n' "$GITHUB_REF_NAME"
+          } > "$notes_file"
+
+          if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" "${assets[@]}" \
+              --repo "$GITHUB_REPOSITORY" \
+              --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" "${assets[@]}" \
+              --repo "$GITHUB_REPOSITORY" \
+              --verify-tag \
+              --title "RightClick Pro ${version}" \
+              --notes-file "$notes_file"
+          fi
