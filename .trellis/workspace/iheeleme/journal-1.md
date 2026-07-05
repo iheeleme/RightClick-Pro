@@ -412,3 +412,36 @@ Rewrote the Chinese README in the style of jlcodes99/cockpit-tools with overview
 ### Next Steps
 
 - None - task complete
+
+
+## Session 13: Add README project screenshot
+
+**Date**: 2026-07-05
+**Task**: Add README project screenshot
+**Branch**: `main`
+
+### Summary
+
+Added a Computer Use-captured RightClick Pro settings screenshot to README and stored the image under docs/assets.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `dd4cb63` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
