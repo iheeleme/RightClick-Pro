@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 13
+- **Total Sessions**: 14
 - **Last Active**: 2026-08-13
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~448 | Active |
+| `journal-1.md` | ~481 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 14 | 2026-08-13 | Consolidate macOS packaging branches | `acde16b` | `develop` |
 | 13 | 2026-08-13 | Ship macOS 15 packaging fix | `f78fbf3`, `d12f72a` | `codex/ship-macos15-packaging-fix` |
 | 12 | 2026-07-03 | Rewrite open source README | `4474fcc` | `develop` |
 | 11 | 2026-07-03 | Avoid first-launch other app data prompts | `628ca6f` | `develop` |

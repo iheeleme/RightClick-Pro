@@ -446,3 +446,36 @@ Integrated the macOS 14 deployment-target guard onto current develop, diagnosed 
 ### Next Steps
 
 - None - task complete
+
+
+## Session 14: Consolidate macOS packaging branches
+
+**Date**: 2026-08-13
+**Task**: Consolidate macOS packaging branches
+**Branch**: `develop`
+
+### Summary
+
+Fast-forwarded develop with completed packaging task records, verified v0.1.4 remained immutable, and removed superseded local and remote macOS packaging fix branches.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `acde16b` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
