@@ -14,6 +14,8 @@ APP_ICON_SOURCE="${APP_ICON_SOURCE:-design/icon.png}"
 APP_ICON_NAME="${APP_ICON_NAME:-RightClickProIcon}"
 RIGHTCLICKPRO_PACKAGE_DMG="${RIGHTCLICKPRO_PACKAGE_DMG:-0}"
 RIGHTCLICKPRO_REGISTER_FINDER_EXTENSION="${RIGHTCLICKPRO_REGISTER_FINDER_EXTENSION:-0}"
+RIGHTCLICKPRO_MACOS_DEPLOYMENT_TARGET="${RIGHTCLICKPRO_MACOS_DEPLOYMENT_TARGET:-${MACOSX_DEPLOYMENT_TARGET:-14.0}}"
+export MACOSX_DEPLOYMENT_TARGET="$RIGHTCLICKPRO_MACOS_DEPLOYMENT_TARGET"
 PACKAGED_FINDER_EXTENSION_PATH=""
 
 case "$CONFIGURATION" in
@@ -39,6 +41,25 @@ case "$RIGHTCLICKPRO_REGISTER_FINDER_EXTENSION" in
     exit 64
     ;;
 esac
+
+if [[ ! "$RIGHTCLICKPRO_MACOS_DEPLOYMENT_TARGET" =~ ^[0-9]+(\.[0-9]+){1,2}$ ]]; then
+  echo "Unsupported RIGHTCLICKPRO_MACOS_DEPLOYMENT_TARGET value: $RIGHTCLICKPRO_MACOS_DEPLOYMENT_TARGET" >&2
+  exit 64
+fi
+
+swift_target_triple() {
+  local arch
+  arch="$(uname -m)"
+  case "$arch" in
+    arm64|x86_64)
+      printf "%s-apple-macosx%s" "$arch" "$RIGHTCLICKPRO_MACOS_DEPLOYMENT_TARGET"
+      ;;
+    *)
+      echo "Unsupported macOS build architecture: $arch" >&2
+      exit 64
+      ;;
+  esac
+}
 
 version_name() {
   if [[ -n "${RIGHTCLICKPRO_VERSION:-}" ]]; then
@@ -97,7 +118,8 @@ package_xcode_archive_if_configured() {
     -configuration "$(tr '[:lower:]' '[:upper:]' <<< "${CONFIGURATION:0:1}")${CONFIGURATION:1}" \
     -archivePath "$archive_path" \
     -derivedDataPath "$DERIVED_DATA_PATH" \
-    CODE_SIGNING_ALLOWED="${CODE_SIGNING_ALLOWED:-NO}"
+    CODE_SIGNING_ALLOWED="${CODE_SIGNING_ALLOWED:-NO}" \
+    MACOSX_DEPLOYMENT_TARGET="$RIGHTCLICKPRO_MACOS_DEPLOYMENT_TARGET"
 
   if [[ -n "${RIGHTCLICKPRO_EXPORT_OPTIONS_PLIST:-}" && -f "$RIGHTCLICKPRO_EXPORT_OPTIONS_PLIST" ]]; then
     xcodebuild -exportArchive \
@@ -138,7 +160,7 @@ write_app_info_plist() {
   <key>CFBundleVersion</key>
   <string>$(build_number)</string>
   <key>LSMinimumSystemVersion</key>
-  <string>14.0</string>
+  <string>$RIGHTCLICKPRO_MACOS_DEPLOYMENT_TARGET</string>
   <key>LSUIElement</key>
   <true/>
   <key>NSHighResolutionCapable</key>
@@ -171,6 +193,8 @@ write_xpc_info_plist() {
   <string>$(version_name)</string>
   <key>CFBundleVersion</key>
   <string>$(build_number)</string>
+  <key>LSMinimumSystemVersion</key>
+  <string>$RIGHTCLICKPRO_MACOS_DEPLOYMENT_TARGET</string>
   <key>XPCService</key>
   <dict>
     <key>ServiceType</key>
@@ -211,7 +235,7 @@ write_finder_extension_info_plist() {
     <string>MacOSX</string>
   </array>
   <key>LSMinimumSystemVersion</key>
-  <string>14.0</string>
+  <string>$RIGHTCLICKPRO_MACOS_DEPLOYMENT_TARGET</string>
   <key>NSExtension</key>
   <dict>
     <key>NSExtensionAttributes</key>
@@ -307,6 +331,8 @@ copy_app_icon_resources() {
 
 build_rightclickpro_core_dylib() {
   local build_dir="$1"
+  local target_triple
+  target_triple="$(swift_target_triple)"
   mkdir -p "$build_dir"
 
   local swift_flags=()
@@ -318,6 +344,7 @@ build_rightclickpro_core_dylib() {
 
   swiftc \
     "${swift_flags[@]}" \
+    -target "$target_triple" \
     -emit-library \
     -emit-module \
     -module-name RightClickProCore \
@@ -332,6 +359,8 @@ build_finder_extension_bundle() {
   local core_build_dir="$1"
   local appex_path="$2"
   local executable_path="$appex_path/Contents/MacOS/RightClickProFinderExtension"
+  local target_triple
+  target_triple="$(swift_target_triple)"
 
   mkdir -p \
     "$appex_path/Contents/MacOS" \
@@ -347,6 +376,7 @@ build_finder_extension_bundle() {
 
   swiftc \
     "${swift_flags[@]}" \
+    -target "$target_triple" \
     -parse-as-library \
     -module-name RightClickProFinderExtension \
     -I "$core_build_dir" \
@@ -371,10 +401,12 @@ build_preview_executables() {
   local xpc_executable_path="$3"
   local bin_path
   local swiftpm_log="$DIST_DIR/swiftpm-build.log"
+  local target_triple
+  target_triple="$(swift_target_triple)"
 
-  if swift build -c "$CONFIGURATION" --product rightclickpro-app-preview >"$swiftpm_log" 2>&1 \
-    && swift build -c "$CONFIGURATION" --product rightclickpro-action-runner >>"$swiftpm_log" 2>&1 \
-    && bin_path="$(swift build -c "$CONFIGURATION" --show-bin-path 2>>"$swiftpm_log")"; then
+  if swift build -c "$CONFIGURATION" --triple "$target_triple" --product rightclickpro-app-preview >"$swiftpm_log" 2>&1 \
+    && swift build -c "$CONFIGURATION" --triple "$target_triple" --product rightclickpro-action-runner >>"$swiftpm_log" 2>&1 \
+    && bin_path="$(swift build -c "$CONFIGURATION" --triple "$target_triple" --show-bin-path 2>>"$swiftpm_log")"; then
     cp "$bin_path/rightclickpro-app-preview" "$app_executable_path"
     cp "$bin_path/rightclickpro-action-runner" "$xpc_executable_path"
     return
@@ -391,6 +423,7 @@ build_preview_executables() {
 
   swiftc \
     "${swift_flags[@]}" \
+    -target "$target_triple" \
     -parse-as-library \
     -module-name RightClickPro \
     -I "$core_build_dir" \
@@ -406,6 +439,7 @@ build_preview_executables() {
 
   swiftc \
     "${swift_flags[@]}" \
+    -target "$target_triple" \
     -module-name RightClickProActionRunner \
     -I "$core_build_dir" \
     -L "$core_build_dir" \
@@ -438,6 +472,32 @@ codesign_if_available() {
   codesign --force --sign "$CODE_SIGN_IDENTITY" --entitlements "$xpc_entitlements_path" "$appex_xpc_path"
   codesign --force --sign "$CODE_SIGN_IDENTITY" --entitlements "$finder_entitlements_path" "$appex_path"
   codesign --force --sign "$CODE_SIGN_IDENTITY" --entitlements "$app_entitlements_path" "$app_path"
+}
+
+macho_deployment_target() {
+  local binary_path="$1"
+  otool -l "$binary_path" | awk '
+    $1 == "cmd" && $2 == "LC_BUILD_VERSION" { in_build_version = 1; next }
+    in_build_version && $1 == "minos" { print $2; exit }
+    $1 == "cmd" && $2 == "LC_VERSION_MIN_MACOSX" { in_legacy_version = 1; next }
+    in_legacy_version && $1 == "version" { print $2; exit }
+  '
+}
+
+validate_macho_deployment_target() {
+  local binary_path="$1"
+  local actual_target
+  actual_target="$(macho_deployment_target "$binary_path")"
+
+  if [[ -z "$actual_target" ]]; then
+    echo "Could not read macOS deployment target from $binary_path" >&2
+    exit 65
+  fi
+
+  if [[ "$actual_target" != "$RIGHTCLICKPRO_MACOS_DEPLOYMENT_TARGET" ]]; then
+    echo "Invalid macOS deployment target for $binary_path: $actual_target, expected $RIGHTCLICKPRO_MACOS_DEPLOYMENT_TARGET" >&2
+    exit 65
+  fi
 }
 
 validate_preview_bundle() {
@@ -476,6 +536,19 @@ validate_preview_bundle() {
     echo "Finder extension executable is not a Mach-O EXECUTE binary." >&2
     exit 65
   fi
+
+  local macho_binary
+  for macho_binary in \
+    "$app_path/Contents/MacOS/$APP_NAME" \
+    "$xpc_path/Contents/MacOS/RightClickProActionRunner" \
+    "$appex_xpc_path/Contents/MacOS/RightClickProActionRunner" \
+    "$appex_executable" \
+    "$app_path/Contents/Frameworks/libRightClickProCore.dylib" \
+    "$xpc_path/Contents/Frameworks/libRightClickProCore.dylib" \
+    "$appex_path/Contents/Frameworks/libRightClickProCore.dylib" \
+    "$appex_xpc_path/Contents/Frameworks/libRightClickProCore.dylib"; do
+    validate_macho_deployment_target "$macho_binary"
+  done
 
   if command -v codesign >/dev/null 2>&1; then
     local entitlements_dump
@@ -535,6 +608,7 @@ ${APP_NAME} 内测构建
 技术信息
 App Bundle ID: ${BUNDLE_IDENTIFIER}
 Finder Extension Bundle ID: ${FINDER_EXTENSION_BUNDLE_IDENTIFIER}
+Minimum macOS: ${RIGHTCLICKPRO_MACOS_DEPLOYMENT_TARGET}
 Storage: ~/Library/Application Support/${BUNDLE_IDENTIFIER}
 README
 }
@@ -640,6 +714,7 @@ This artifact is useful for validating the menu-bar app scaffold and embedded
 ActionRunner binary. It includes a manually packaged Finder Sync .appex for
 local testing. It is ad-hoc signed when codesign is available, but it is not
 Developer ID signed or notarized.
+Minimum macOS: ${RIGHTCLICKPRO_MACOS_DEPLOYMENT_TARGET}
 NOTES
 
   write_sandbox_entitlements_plist "$app_entitlements_path" 1
@@ -675,6 +750,8 @@ if [[ "$RIGHTCLICKPRO_PACKAGE_DMG" == "1" && -n "${RIGHTCLICKPRO_XCODE_PROJECT:-
   echo "RIGHTCLICKPRO_PACKAGE_DMG=1 is only supported for the SwiftPM preview bundle path." >&2
   exit 64
 fi
+
+echo "Building $APP_NAME for macOS deployment target $RIGHTCLICKPRO_MACOS_DEPLOYMENT_TARGET ($(swift_target_triple))."
 
 if ! package_xcode_archive_if_configured; then
   package_swiftpm_preview_bundle

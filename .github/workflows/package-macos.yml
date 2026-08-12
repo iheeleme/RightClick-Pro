@@ -43,15 +43,17 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - runner: macos-26
+          - runner: macos-15
             artifact_suffix: arm64
-          - runner: macos-26-intel
+          - runner: macos-15-intel
             artifact_suffix: x86_64
 
     env:
       BUILD_CONFIGURATION: ${{ inputs.configuration || 'release' }}
       RIGHTCLICKPRO_VERSION: ${{ inputs.version || '' }}
       RIGHTCLICKPRO_PACKAGE_DMG: "1"
+      RIGHTCLICKPRO_MACOS_DEPLOYMENT_TARGET: "14.0"
+      MACOSX_DEPLOYMENT_TARGET: "14.0"
       ARTIFACT_SUFFIX: ${{ matrix.artifact_suffix }}
 
     steps:
