@@ -6,8 +6,15 @@ Settings UI quality is measured by compile safety, persistence correctness, Find
 
 - Run `swift build --target RightClickProAppPreview` for settings-only changes.
 - Run `scripts/ci-swift-check.sh debug` before committing Swift changes.
+- Run `scripts/ci-swift-check.sh release` when changing AppKit-backed shared presentation or packaging code; macOS runner toolchains can enforce stricter concurrency checks in optimized builds.
 - Run `scripts/package-macos.sh debug` after settings changes that may affect preview bundle compilation or assets.
 - Run `git diff --check`.
+
+## AppKit Concurrency Safety
+
+- Main-actor isolate shared UI helpers that store AppKit reference types such as `NSImage`, `NSColor`, or `NSWindow` in static properties.
+- Prefer `@MainActor` on the owning helper type when all of its state and methods are UI-only. Do not use `@unchecked Sendable` to silence diagnostics for AppKit objects.
+- A static icon cache such as `static let image: NSImage?` without actor isolation is invalid under Swift 6 strict concurrency and can fail the macOS 15 release build even when a newer local toolchain compiles it.
 
 ## Manual Smoke Test
 
