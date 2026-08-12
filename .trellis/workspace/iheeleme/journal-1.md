@@ -412,3 +412,37 @@ Rewrote the Chinese README in the style of jlcodes99/cockpit-tools with overview
 ### Next Steps
 
 - None - task complete
+
+
+## Session 13: Ship macOS 15 packaging fix
+
+**Date**: 2026-08-13
+**Task**: Ship macOS 15 packaging fix
+**Branch**: `codex/ship-macos15-packaging-fix`
+
+### Summary
+
+Integrated the macOS 14 deployment-target guard onto current develop, diagnosed the macOS 15 release compiler failure with gh, main-actor isolated the AppKit icon cache, and published verified arm64/x86_64 v0.1.4 DMGs.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `f78fbf3` | (see git log) |
+| `d12f72a` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
