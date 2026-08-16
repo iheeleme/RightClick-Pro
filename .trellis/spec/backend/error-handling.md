@@ -24,6 +24,10 @@ Reference files: `Sources/RightClickProCore/Storage.swift`, `BookmarkModels.swif
 - Finder extension should log failures with `NSLog` and avoid crashing Finder.
 - Settings UI should catch persistence/validation errors and surface them via `statusMessage` and `statusTone`.
 
+### ActionRunner Authorization Scope
+
+`ActionRunner.run(_:)` must resolve only the security-scoped bookmarks required by the selected action. Directory actions (`openDirectory`, `moveToDirectory`, and `copyToDirectory`) resolve their `payload.directoryID`; `cut`, `paste`, `createFile`, `openInApp`, `runCommand`, and `undoOperation` must not eagerly resolve the entire bookmark catalog. An invalid unrelated bookmark must not turn an otherwise independent action into a failure before execution. Add a regression test whenever a new action kind starts depending on directory authorization.
+
 ## Validation Patterns
 
 - Validate authorized paths before file mutations in `ActionRunner`.

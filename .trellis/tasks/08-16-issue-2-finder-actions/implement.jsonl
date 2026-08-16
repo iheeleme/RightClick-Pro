@@ -1,0 +1,5 @@
+{"file":".trellis/spec/backend/index.md","reason":"确认 Core、Finder extension、XPC 和测试的后端边界及必跑检查。"}
+{"file":".trellis/spec/backend/error-handling.md","reason":"遵循 ActionRunner fault boundary、bookmark 错误传播和 Finder 日志契约。"}
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"覆盖跨进程执行边界、ActionRunner 回归测试和 Swift 检查要求。"}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"复核 Finder → XPC → ActionRunner → bookmark resolver 的数据流与边界。"}
+{"file":".trellis/spec/guides/code-reuse-thinking-guide.md","reason":"优先复用 AuthorizedBookmarkAccess 与现有 ActionRunner 测试替身。"}

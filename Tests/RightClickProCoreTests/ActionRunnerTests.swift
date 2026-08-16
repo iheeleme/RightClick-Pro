@@ -146,6 +146,147 @@ final class ActionRunnerTests: XCTestCase {
         XCTAssertNil(try clipboard.load())
     }
 
+    func testCutSucceedsWhenCatalogContainsInvalidUnrelatedBookmark() throws {
+        let directory = try temporaryDirectory()
+        let file = directory.appendingPathComponent("draft.txt")
+        try "draft".write(to: file, atomically: true, encoding: .utf8)
+
+        let invalidBookmark = DirectoryBookmark(
+            id: "broken",
+            displayName: "Broken",
+            path: directory.appendingPathComponent("broken").path,
+            bookmarkDataBase64: "not-valid-base64"
+        )
+        let action = RightClickProAction(
+            id: "cut",
+            title: "Cut",
+            kind: .cut,
+            visibility: [.selection],
+            placement: .submenu,
+            group: .fileOperations,
+            order: 1
+        )
+        let config = RightClickProConfig(shortcutDirectoryIDs: ["broken"], actions: [action])
+        let clipboard = InMemoryCutClipboardStore()
+        let log = InMemoryOperationLog()
+        let runner = ActionRunner(
+            configProvider: StaticRightClickProConfigProvider(
+                config: config,
+                bookmarkCatalog: DirectoryBookmarkCatalog(bookmarks: [invalidBookmark])
+            ),
+            operationLog: log,
+            cutClipboard: clipboard,
+            urlOpener: RecordingURLOpener(),
+            developerAppOpener: RecordingURLOpener()
+        )
+
+        let result = runner.run(
+            ActionRequest(
+                actionID: action.id,
+                context: FinderContext(
+                    invocation: .selection,
+                    targetDirectory: directory,
+                    selectedItems: [file]
+                )
+            )
+        )
+
+        XCTAssertEqual(result.status, .success)
+        XCTAssertEqual(try clipboard.load()?.sourceURLs, [file])
+        let record = try XCTUnwrap(log.loadRecent().first)
+        XCTAssertEqual(record.kind, .cut)
+        XCTAssertEqual(record.status, .success)
+    }
+
+    func testDirectoryActionMissingPayloadWinsOverInvalidUnrelatedBookmark() throws {
+        let directory = try temporaryDirectory()
+        let invalidBookmark = DirectoryBookmark(
+            id: "broken",
+            displayName: "Broken",
+            path: directory.appendingPathComponent("broken").path,
+            bookmarkDataBase64: "not-valid-base64"
+        )
+        let action = RightClickProAction(
+            id: "open-directory",
+            title: "Open Directory",
+            kind: .openDirectory,
+            visibility: [.container],
+            placement: .submenu,
+            group: .commonDirectories,
+            order: 1
+        )
+        let log = InMemoryOperationLog()
+        let runner = ActionRunner(
+            configProvider: StaticRightClickProConfigProvider(
+                config: RightClickProConfig(actions: [action]),
+                bookmarkCatalog: DirectoryBookmarkCatalog(bookmarks: [invalidBookmark])
+            ),
+            operationLog: log,
+            cutClipboard: InMemoryCutClipboardStore(),
+            urlOpener: RecordingURLOpener(),
+            developerAppOpener: RecordingURLOpener()
+        )
+
+        let result = runner.run(
+            ActionRequest(
+                actionID: action.id,
+                context: FinderContext(invocation: .container, targetDirectory: directory)
+            )
+        )
+
+        XCTAssertEqual(result.status, .failure)
+        XCTAssertEqual(result.message, ActionRunnerError.missingPayload("directoryID").localizedDescription)
+        let record = try XCTUnwrap(log.loadRecent().first)
+        XCTAssertEqual(record.status, .failure)
+        XCTAssertEqual(record.message, result.message)
+    }
+
+    func testDirectoryActionInvalidBookmarkPreservesFailureOperationLog() throws {
+        let directory = try temporaryDirectory()
+        let invalidBookmark = DirectoryBookmark(
+            id: "broken",
+            displayName: "Broken",
+            path: directory.appendingPathComponent("broken").path,
+            bookmarkDataBase64: "not-valid-base64"
+        )
+        let action = RightClickProAction(
+            id: "open-directory",
+            title: "Open Directory",
+            kind: .openDirectory,
+            visibility: [.container],
+            placement: .submenu,
+            group: .commonDirectories,
+            order: 1,
+            payload: ActionPayload(directoryID: invalidBookmark.id)
+        )
+        let log = InMemoryOperationLog()
+        let opener = RecordingURLOpener()
+        let runner = ActionRunner(
+            configProvider: StaticRightClickProConfigProvider(
+                config: RightClickProConfig(actions: [action]),
+                bookmarkCatalog: DirectoryBookmarkCatalog(bookmarks: [invalidBookmark])
+            ),
+            operationLog: log,
+            cutClipboard: InMemoryCutClipboardStore(),
+            urlOpener: opener,
+            developerAppOpener: RecordingURLOpener()
+        )
+
+        let result = runner.run(
+            ActionRequest(
+                actionID: action.id,
+                context: FinderContext(invocation: .container, targetDirectory: directory)
+            )
+        )
+
+        XCTAssertEqual(result.status, .failure)
+        XCTAssertEqual(result.message, BookmarkError.invalidBookmarkData(invalidBookmark.id).localizedDescription)
+        XCTAssertTrue(opener.openedURLs.isEmpty)
+        let record = try XCTUnwrap(log.loadRecent().first)
+        XCTAssertEqual(record.status, .failure)
+        XCTAssertEqual(record.message, result.message)
+    }
+
     func testOpenDirectoryUsesResolvedBookmarkURL() throws {
         let resolvedDirectory = try temporaryDirectory()
         let staleFallbackDirectory = URL(fileURLWithPath: "/RightClickProTests/stale")

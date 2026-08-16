@@ -1,0 +1,4 @@
+{"file":".trellis/spec/backend/index.md","reason":"检查后端任务的边界和质量门禁。"}
+{"file":".trellis/spec/backend/error-handling.md","reason":"复核目录 action 失败、无效 bookmark 与 ActionResult/日志传播。"}
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"验证 Finder/XPC/Core 边界未被破坏，并执行 targeted XCTest。"}
+{"file":".trellis/spec/guides/index.md","reason":"确认跨层与复用检查触发条件。"}

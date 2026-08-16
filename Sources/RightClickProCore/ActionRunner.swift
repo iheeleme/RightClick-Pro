@@ -66,7 +66,7 @@ public final class ActionRunner {
 
             let bookmarkAccess = try AuthorizedBookmarkAccess(
                 catalog: bookmarks,
-                ids: bookmarks.bookmarks.map(\.id),
+                ids: try bookmarkIDs(for: action),
                 resolver: bookmarkResolver
             )
             let result = try execute(
@@ -94,6 +94,18 @@ public final class ActionRunner {
                 )
             )
             return result
+        }
+    }
+
+    private func bookmarkIDs(for action: RightClickProAction) throws -> [String] {
+        switch action.kind {
+        case .openDirectory, .moveToDirectory, .copyToDirectory:
+            guard let directoryID = action.payload.directoryID else {
+                throw ActionRunnerError.missingPayload("directoryID")
+            }
+            return [directoryID]
+        case .cut, .paste, .createFile, .openInApp, .runCommand, .undoOperation:
+            return []
         }
     }
 
