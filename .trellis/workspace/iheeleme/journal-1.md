@@ -412,3 +412,36 @@ Rewrote the Chinese README in the style of jlcodes99/cockpit-tools with overview
 ### Next Steps
 
 - None - task complete
+
+
+## Session 13: 修复 Finder 菜单点击无响应
+
+**Date**: 2026-08-16
+**Task**: 修复 Finder 菜单点击无响应
+**Branch**: `codex/issue-2-finder-actions`
+
+### Summary
+
+按需解析 ActionRunner 目录 bookmark，避免无关坏 bookmark 阻断剪切等动作；新增三条回归测试，Core/Finder 严格 typecheck 与基线 harness 通过，SwiftPM manifest 受本机 CommandLineTools 链接错误阻塞。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `11705e0` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
