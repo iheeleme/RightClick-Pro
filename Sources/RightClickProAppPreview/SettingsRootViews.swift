@@ -119,21 +119,23 @@ private enum SettingsChromeMetrics {
 }
 
 private struct SettingsWindowChromeConfigurator: NSViewRepresentable {
+    @Environment(\.colorScheme) private var colorScheme
+
     func makeNSView(context: Context) -> NSView {
         let view = NSView(frame: .zero)
         DispatchQueue.main.async {
-            configure(window: view.window)
+            configure(window: view.window, colorScheme: colorScheme)
         }
         return view
     }
 
     func updateNSView(_ nsView: NSView, context: Context) {
         DispatchQueue.main.async {
-            configure(window: nsView.window)
+            configure(window: nsView.window, colorScheme: colorScheme)
         }
     }
 
-    private func configure(window: NSWindow?) {
+    private func configure(window: NSWindow?, colorScheme: ColorScheme) {
         guard let window else { return }
 
         window.titleVisibility = .hidden
@@ -141,6 +143,7 @@ private struct SettingsWindowChromeConfigurator: NSViewRepresentable {
         window.styleMask.insert(.fullSizeContentView)
         window.isMovableByWindowBackground = true
         window.isOpaque = true
+        window.appearance = NSAppearance(named: colorScheme == .dark ? .darkAqua : .aqua)
         window.backgroundColor = SettingsTheme.windowBackgroundColor
     }
 }

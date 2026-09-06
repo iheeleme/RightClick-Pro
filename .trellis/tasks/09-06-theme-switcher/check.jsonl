@@ -1,0 +1,2 @@
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "验证主题切换的编译、原生亮暗色显示和持久化行为"}
+{"file": ".trellis/spec/frontend/hook-guidelines.md", "reason": "检查 SwiftUI 环境状态和 AppStorage 生命周期使用方式"}

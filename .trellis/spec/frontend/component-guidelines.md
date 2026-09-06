@@ -47,6 +47,7 @@ Reference examples: `ActionListView`, `ActionManagementTable`, `TemplateListView
 - `SettingsButtonStyle(isPrimary: true)` 用于新增、保存等主操作；`SettingsButtonStyle()` 用于次要操作。两者保持 36pt 高度、8pt 圆角，并区分悬停、按下和禁用状态。
 - 页面标题使用 18pt semibold，侧栏使用 13pt 文字与 38pt 行高；按 `SettingsViewModel.SidebarGroup` 分组。
 - 搜索框、编辑输入框通过 `@FocusState` 显示蓝色焦点边框；清除搜索按钮保留固定占位，避免输入时布局跳动。
+- 主题选择使用 `AppThemePreference` 和 `@AppStorage`，提供“跟随系统 / 浅色 / 深色”三种模式；根窗口通过 `preferredColorScheme` 和 AppKit appearance 同步更新，不写入配置 JSON。
 - 概览统计必须读取真实配置数量；导航入口使用按钮，不使用 `.constant` 绑定的展示开关。概览菜单预览复用 `FinderContextMenuMock` 的 `MenuBuilder` 数据。
 - 状态文本保留 `SettingsViewModel.statusMessage`，未保存状态不能遮掉错误详情；错误与警告使用各自的语义图标。
 

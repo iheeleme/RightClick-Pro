@@ -1,0 +1,2 @@
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "主题切换控件应沿用 SettingsTheme、原生 SwiftUI 组件和现有布局约定"}
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "主题偏好属于应用界面状态，需与持久化配置和 ViewModel 边界区分"}

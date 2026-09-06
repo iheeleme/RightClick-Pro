@@ -66,6 +66,8 @@ struct OnboardingView: View {
                     .foregroundStyle(SettingsTheme.ink)
                     .padding(.vertical, 14)
 
+                ThemeSettingsPanel()
+                Divider()
                 LaunchAtLoginPanel(viewModel: viewModel)
                 Divider()
                 UpdateCheckPanel(viewModel: viewModel)
@@ -109,6 +111,41 @@ struct OnboardingView: View {
         }.count
     }
 
+}
+
+struct ThemeSettingsPanel: View {
+    @AppStorage(AppThemePreference.storageKey) private var themeRawValue = AppThemePreference.system.rawValue
+
+    var body: some View {
+        DesignPanel {
+            HStack(alignment: .center, spacing: 16) {
+                IconBadge(systemImage: "circle.lefthalf.filled", tint: SettingsTheme.accent)
+
+                VStack(alignment: .leading, spacing: 5) {
+                    Text("主题外观")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(SettingsTheme.ink)
+                    Text("选择设置窗口的颜色主题，跟随系统会根据 macOS 外观自动切换。")
+                        .font(.system(size: 12))
+                        .foregroundStyle(SettingsTheme.muted)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .layoutPriority(1)
+
+                Spacer(minLength: 12)
+
+                Picker("主题", selection: $themeRawValue) {
+                    ForEach(AppThemePreference.allCases) { preference in
+                        Label(preference.title, systemImage: preference.systemImage)
+                            .tag(preference.rawValue)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .frame(width: 286)
+                .accessibilityLabel("主题")
+            }
+        }
+    }
 }
 
 struct UpdateCheckPanel: View {
