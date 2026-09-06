@@ -478,3 +478,36 @@ Rewrote the Chinese README in the style of jlcodes99/cockpit-tools with overview
 ### Next Steps
 
 - None - task complete
+
+
+## Session 15: 增加设置主题切换
+
+**Date**: 2026-09-06
+**Task**: 增加设置主题切换
+**Branch**: `task/settings-visual-unify`
+
+### Summary
+
+在设置概览页增加跟随系统、浅色、深色三段式主题切换。主题偏好通过 UserDefaults 持久化，SwiftUI preferredColorScheme 与 AppKit 窗口外观同步更新。严格 Swift 6 直接类型检查、macOS 14 备用预览打包、签名校验和亮暗色原生交互验证通过；SwiftPM 标准构建仍受本机 PackageDescription 链接错误阻塞。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `94c3065` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
