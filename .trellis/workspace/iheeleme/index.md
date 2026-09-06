@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 13
-- **Last Active**: 2026-08-16
+- **Total Sessions**: 14
+- **Last Active**: 2026-09-06
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~447 | Active |
+| `journal-1.md` | ~480 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 14 | 2026-09-06 | Kimi 风格设置界面优化 | `2449b90` | `task/settings-visual-unify` |
 | 13 | 2026-08-16 | 修复 Finder 菜单点击无响应 | `11705e0` | `codex/issue-2-finder-actions` |
 | 12 | 2026-07-03 | Rewrite open source README | `4474fcc` | `develop` |
 | 11 | 2026-07-03 | Avoid first-launch other app data prompts | `628ca6f` | `develop` |
