@@ -137,32 +137,20 @@ struct DeveloperFilterTabs: View {
     @Binding var selectedFilter: DeveloperEntrypointFilter
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: 8) {
             ForEach(DeveloperEntrypointFilter.allCases) { filter in
-                Button {
+                FilterTabButton(
+                    title: filter.rawValue,
+                    isSelected: selectedFilter == filter
+                ) {
                     selectedFilter = filter
-                } label: {
-                    Text(filter.rawValue)
-                        .font(.system(size: 13, weight: selectedFilter == filter ? .semibold : .regular))
-                        .foregroundStyle(selectedFilter == filter ? .white : SettingsTheme.ink)
-                        .frame(minWidth: filter == .all ? 42 : 48)
-                        .frame(height: 32)
-                        .background(
-                            selectedFilter == filter ? SettingsTheme.accent : SettingsTheme.controlBackgroundHover,
-                            in: RoundedRectangle(cornerRadius: 7)
-                        )
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 7)
-                                .stroke(selectedFilter == filter ? Color.clear : SettingsTheme.hairline)
-                        )
                 }
-                .buttonStyle(.plain)
             }
 
             Spacer(minLength: 0)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 11)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
@@ -170,18 +158,14 @@ struct DeveloperFilterTabs: View {
 struct DeveloperTableHeader: View {
     var body: some View {
         HStack(spacing: 10) {
-            Text("排序").frame(width: 56, alignment: .center)
-            Text("名称").frame(width: 136, alignment: .leading)
+            Text("排序").frame(width: 58, alignment: .center)
+            Text("名称").frame(width: 200, alignment: .leading)
             Text("目标方式").frame(maxWidth: .infinity, alignment: .leading)
             Text("快捷键").frame(width: 64, alignment: .leading)
             Text("启用").frame(width: 60, alignment: .center)
             Text("操作").frame(width: 76, alignment: .center)
         }
-        .font(.caption.weight(.semibold))
-        .foregroundStyle(SettingsTheme.muted)
-        .padding(.horizontal, 12)
-        .frame(height: 38)
-        .background(SettingsTheme.subtleFill)
+        .settingsTableHeaderStyle()
     }
 }
 
@@ -208,7 +192,7 @@ struct DeveloperTableRow: View {
                 onMoveUp: onMoveUp,
                 onMoveDown: onMoveDown
             )
-            .frame(width: 56)
+            .frame(width: 58)
 
             Button(action: onEdit) {
                 HStack(spacing: 10) {
@@ -221,7 +205,8 @@ struct DeveloperTableRow: View {
                 }
             }
             .buttonStyle(.plain)
-            .frame(width: 136, alignment: .leading)
+            .frame(width: 200, alignment: .leading)
+            .help(entrypoint.title)
 
             Text(entrypoint.targetMode.displayName)
                 .font(.system(size: 12))
@@ -269,8 +254,9 @@ struct DeveloperTableRow: View {
             }
             .frame(width: 76)
         }
-        .padding(.horizontal, 12)
-        .frame(height: 48)
+        .padding(.horizontal, 18)
+        .frame(height: 52)
+        .hoverRowBackground()
         .opacity((matchingAction?.isEnabled ?? true) ? 1 : 0.52)
     }
 }
@@ -330,28 +316,11 @@ struct DeveloperMenuPreviewCard: View {
 
 struct DeveloperHintBanner: View {
     var body: some View {
-        HStack(alignment: .center, spacing: 12) {
-            Image(systemName: "lightbulb")
-                .font(.system(size: 18, weight: .regular))
-                .foregroundStyle(SettingsTheme.accent)
-                .frame(width: 24)
-
-            Text("提示：")
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(SettingsTheme.accent)
-
-            Text("在 Finder 中右键任意位置，选择「开发者工具」即可看到以上快捷入口。")
-                .font(.system(size: 13))
-                .foregroundStyle(SettingsTheme.accent)
-                .lineLimit(1)
-                .minimumScaleFactor(0.85)
-
-            Spacer(minLength: 0)
-        }
-        .padding(.horizontal, 16)
-        .frame(maxWidth: .infinity, minHeight: 48)
-        .background(SettingsTheme.accent.opacity(0.055), in: RoundedRectangle(cornerRadius: 8))
-        .overlay(RoundedRectangle(cornerRadius: 8).stroke(SettingsTheme.accent.opacity(0.18)))
+        SettingsHintBanner(
+            icon: "lightbulb",
+            title: "提示：",
+            message: "在 Finder 中右键任意位置，选择「开发者工具」即可看到以上快捷入口。"
+        )
     }
 }
 
@@ -378,4 +347,3 @@ private func developerEntryHotkey(for entrypoint: DeveloperEntrypoint) -> String
     if value.contains("config") { return "⌥⌘ E" }
     return "⌥⌘ \(entrypoint.title.prefix(1).uppercased())"
 }
-

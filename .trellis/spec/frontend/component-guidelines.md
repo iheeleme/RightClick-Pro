@@ -35,11 +35,20 @@ Reference examples: `ActionListView`, `ActionManagementTable`, `TemplateListView
 ## Styling Patterns
 
 - Use `SettingsTheme` colors and existing primitives before adding new styling.
-- Use `DesignPanel` for repeated framed groups; avoid nesting panels inside panels.
+- Use `DesignPanel` for consistent section padding and flat surfaces; it does not add a floating card or border. Repeated items, sheets, and Finder menu previews may have their own frame.
 - Use compact row heights and table headers for operational pages.
 - Use `RowIconButton` / `RowIconControlLabel` for icon-only edit, delete, and reorder controls.
 - Use `MenuIconResolver` and `MenuIconView` for action/template/developer/directory icons.
 - Prefer explicit fixed row/control dimensions for tables and preview menus.
+
+### Kimi 风格设置主题
+
+- 颜色统一从 `SettingsTheme` 获取。亮色使用白色内容区、浅灰侧栏；暗色使用中性灰。品牌强调色为 `#1783FF`，不再使用紫蓝渐变作为窗口背景。
+- `SettingsButtonStyle(isPrimary: true)` 用于新增、保存等主操作；`SettingsButtonStyle()` 用于次要操作。两者保持 36pt 高度、8pt 圆角，并区分悬停、按下和禁用状态。
+- 页面标题使用 18pt semibold，侧栏使用 13pt 文字与 38pt 行高；按 `SettingsViewModel.SidebarGroup` 分组。
+- 搜索框、编辑输入框通过 `@FocusState` 显示蓝色焦点边框；清除搜索按钮保留固定占位，避免输入时布局跳动。
+- 概览统计必须读取真实配置数量；导航入口使用按钮，不使用 `.constant` 绑定的展示开关。概览菜单预览复用 `FinderContextMenuMock` 的 `MenuBuilder` 数据。
+- 状态文本保留 `SettingsViewModel.statusMessage`，未保存状态不能遮掉错误详情；错误与警告使用各自的语义图标。
 
 ---
 

@@ -30,9 +30,9 @@ struct DirectoryListView: View {
         let rows = filteredBookmarks
         let visibleBookmarkIDs = rows.map(\.id)
 
-        DirectoryPageScroll {
+        DesignPageScroll {
             SearchField(placeholder: "搜索目录名称或路径", text: $searchText)
-                .frame(width: 360, alignment: .leading)
+                .frame(width: 270, alignment: .leading)
 
             DesignPanel(padding: 0) {
                 LazyVStack(spacing: 0) {
@@ -119,27 +119,11 @@ struct DirectoryMenuPreviewPanel: View {
 
 struct DirectoryHintBanner: View {
     var body: some View {
-        HStack(alignment: .center, spacing: 12) {
-            Image(systemName: "lightbulb")
-                .font(.system(size: 18, weight: .regular))
-                .foregroundStyle(SettingsTheme.accent)
-                .frame(width: 24)
-
-            Text("提示：")
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(SettingsTheme.accent)
-
-            Text("将最常用的目录放在前面位置，访问更高效。")
-                .font(.system(size: 13))
-                .foregroundStyle(SettingsTheme.muted)
-                .lineLimit(1)
-
-            Spacer(minLength: 0)
-        }
-        .padding(.horizontal, 16)
-        .frame(maxWidth: .infinity, minHeight: 46)
-        .background(SettingsTheme.accent.opacity(0.055), in: RoundedRectangle(cornerRadius: 8))
-        .overlay(RoundedRectangle(cornerRadius: 8).stroke(SettingsTheme.accent.opacity(0.18)))
+        SettingsHintBanner(
+            icon: "lightbulb",
+            title: "提示：",
+            message: "将最常用的目录放在前面位置，访问更高效。"
+        )
     }
 }
 
@@ -152,11 +136,7 @@ struct DirectoryTableHeader: View {
             Text("启用").frame(width: 90, alignment: .center)
             Text("操作").frame(width: 104, alignment: .center)
         }
-        .font(.system(size: 13, weight: .semibold))
-        .foregroundStyle(SettingsTheme.ink)
-        .padding(.horizontal, 18)
-        .frame(height: 38)
-        .background(SettingsTheme.pageOverlay)
+        .settingsTableHeaderStyle()
     }
 }
 
@@ -215,7 +195,7 @@ struct DirectoryTableRow: View {
                 .labelsHidden()
                 .frame(width: 90)
 
-            HStack(spacing: 10) {
+            HStack(spacing: 8) {
                 RowIconButton(
                     systemImage: "pencil",
                     accessibilityLabel: "编辑 \(bookmark.displayName)",
@@ -236,7 +216,8 @@ struct DirectoryTableRow: View {
             .frame(width: 104)
         }
         .padding(.horizontal, 18)
-        .frame(height: 46)
+        .frame(height: 52)
+        .hoverRowBackground()
     }
 
     private var tint: Color {

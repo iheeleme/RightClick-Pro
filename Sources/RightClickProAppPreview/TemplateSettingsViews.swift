@@ -41,13 +41,9 @@ struct TemplateListView: View {
                 }
             }
 
-            HStack(alignment: .top, spacing: 20) {
-                TemplateMenuPreviewPanel(items: templatePreviewItems)
-                    .frame(maxWidth: .infinity, alignment: .topLeading)
+            TemplateMenuPreviewPanel(items: templatePreviewItems)
 
-                TemplateHintCard()
-                    .frame(width: 240)
-            }
+            TemplateHintBanner()
         }
         .sheet(item: $editingDraft) { draft in
             TemplateEditorSheet(draft: draft) { savedDraft in
@@ -88,17 +84,13 @@ struct TemplateListView: View {
 struct TemplateTableHeader: View {
     var body: some View {
         HStack(spacing: 16) {
+            Text("排序").frame(width: 58, alignment: .center)
             Text("模板名称").frame(maxWidth: .infinity, alignment: .leading)
             Text("扩展名").frame(width: 150, alignment: .leading)
             Text("启用").frame(width: 84, alignment: .center)
-            Text("排序").frame(width: 120, alignment: .center)
             Text("操作").frame(width: 72, alignment: .center)
         }
-        .font(.system(size: 13, weight: .semibold))
-        .foregroundStyle(SettingsTheme.muted)
-        .padding(.horizontal, 18)
-        .frame(height: 38)
-        .background(SettingsTheme.pageOverlay)
+        .settingsTableHeaderStyle()
     }
 }
 
@@ -119,6 +111,14 @@ struct TemplateTableRow: View {
 
     var body: some View {
         HStack(spacing: 16) {
+            SortStepControls(
+                canMoveUp: canMoveUp,
+                canMoveDown: canMoveDown,
+                onMoveUp: onMoveUp,
+                onMoveDown: onMoveDown
+            )
+            .frame(width: 58, alignment: .center)
+
             Button(action: onEdit) {
                 HStack(spacing: 12) {
                     TemplateIconTile(template: template)
@@ -148,14 +148,6 @@ struct TemplateTableRow: View {
             .disabled(matchingAction == nil)
             .frame(width: 84)
 
-            SortStepControls(
-                canMoveUp: canMoveUp,
-                canMoveDown: canMoveDown,
-                onMoveUp: onMoveUp,
-                onMoveDown: onMoveDown
-            )
-            .frame(width: 120)
-
             HStack(spacing: 8) {
                 RowIconButton(
                     systemImage: "pencil",
@@ -178,6 +170,7 @@ struct TemplateTableRow: View {
         }
         .padding(.horizontal, 18)
         .frame(height: 52)
+        .hoverRowBackground()
         .opacity((matchingAction?.isEnabled ?? true) ? 1 : 0.55)
     }
 
@@ -239,30 +232,13 @@ struct TemplateMenuPreviewPanel: View {
     }
 }
 
-struct TemplateHintCard: View {
+struct TemplateHintBanner: View {
     var body: some View {
-        DesignPanel(padding: 0) {
-            HStack(alignment: .top, spacing: 14) {
-                Image(systemName: "lightbulb")
-                    .font(.system(size: 22, weight: .regular))
-                    .foregroundStyle(SettingsTheme.accent)
-                    .frame(width: 30)
-
-                VStack(alignment: .leading, spacing: 12) {
-                    Text("提示")
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(SettingsTheme.accent)
-                    Text("可通过箭头调整顺序，右键菜单将按此顺序显示。")
-                        .font(.system(size: 13))
-                        .foregroundStyle(SettingsTheme.muted)
-                        .lineSpacing(5)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
-            .padding(18)
-            .frame(maxWidth: .infinity, minHeight: 124, alignment: .topLeading)
-            .background(SettingsTheme.accent.opacity(0.04), in: RoundedRectangle(cornerRadius: 8))
-        }
+        SettingsHintBanner(
+            icon: "lightbulb",
+            title: "提示：",
+            message: "可通过箭头调整顺序，右键菜单将按此顺序显示。"
+        )
     }
 }
 

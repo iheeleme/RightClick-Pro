@@ -36,7 +36,7 @@ struct OperationHistoryView: View {
                 } label: {
                     Label("刷新", systemImage: "arrow.clockwise")
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(SettingsButtonStyle())
             }
 
             DesignPanel(padding: 0) {
@@ -105,13 +105,8 @@ struct ClipboardHistoryHeader: View {
             Text("来源路径").frame(maxWidth: .infinity, alignment: .leading)
             Text("状态").frame(width: 80, alignment: .leading)
             Text("时间").frame(width: 130, alignment: .leading)
-            Text("操作").frame(width: 130, alignment: .center)
         }
-        .font(.caption.weight(.semibold))
-        .foregroundStyle(SettingsTheme.muted)
-        .padding(.horizontal, 18)
-        .frame(height: 44)
-        .background(SettingsTheme.subtleFill)
+        .settingsTableHeaderStyle()
     }
 }
 
@@ -152,18 +147,10 @@ struct ClipboardHistoryRow: View {
                 .font(.caption)
                 .foregroundStyle(SettingsTheme.muted)
                 .frame(width: 130, alignment: .leading)
-
-            HStack(spacing: 18) {
-                Image(systemName: "scissors")
-                Image(systemName: "doc.on.doc")
-                Image(systemName: "doc.on.clipboard")
-                Image(systemName: "ellipsis")
-            }
-            .foregroundStyle(SettingsTheme.muted)
-            .frame(width: 130)
         }
         .padding(.horizontal, 18)
-        .frame(height: 58)
+        .frame(height: 52)
+        .hoverRowBackground()
     }
 
     private var title: String {
@@ -254,4 +241,3 @@ struct EmptyStateRow: View {
         .frame(height: 140)
     }
 }
-

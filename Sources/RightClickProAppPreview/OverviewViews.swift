@@ -5,9 +5,12 @@ import UniformTypeIdentifiers
 
 struct OnboardingView: View {
     @ObservedObject var viewModel: SettingsViewModel
+    @State private var isPreviewExpanded = false
 
     var body: some View {
-        OverviewPageScroll {
+        DesignPageScroll {
+            OverviewMetricStrip(viewModel: viewModel)
+
             if viewModel.shouldShowFinderExtensionSetupBanner {
                 FinderExtensionSetupBanner(viewModel: viewModel)
             }
@@ -16,68 +19,75 @@ struct OnboardingView: View {
                 FullDiskAccessBanner(viewModel: viewModel)
             }
 
-            LaunchAtLoginPanel(viewModel: viewModel)
-            UpdateCheckPanel(viewModel: viewModel)
+            VStack(alignment: .leading, spacing: 14) {
+                Text("快捷入口")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(SettingsTheme.ink)
 
-            HStack(alignment: .top, spacing: 40) {
-                VStack(alignment: .leading, spacing: 16) {
-                    Text("功能总览")
-                        .font(.system(size: 18, weight: .semibold))
-                        .foregroundStyle(SettingsTheme.ink)
-
-                    VStack(spacing: 14) {
-                        OverviewFeatureRow(
-                            systemImage: "folder",
-                            title: "常用目录快捷直达",
-                            detail: "在右键菜单中快速打开常用目录和文件夹",
-                            meta: "已启用 \(viewModel.bookmarks.bookmarks.count) 个目录",
-                            isOn: !viewModel.bookmarks.bookmarks.isEmpty
-                        ) {
-                            viewModel.selectedSection = .directories
-                        }
-
-                        OverviewFeatureRow(
-                            systemImage: "chevron.left.forwardslash.chevron.right",
-                            title: "开发者快捷入口",
-                            detail: "快速打开常用开发工具和项目",
-                            meta: "已启用 \(enabledDeveloperCount) 个入口",
-                            isOn: enabledDeveloperCount > 0
-                        ) {
-                            viewModel.selectedSection = .developer
-                        }
-
-                        OverviewFeatureRow(
-                            systemImage: "scissors",
-                            title: "剪切 / 粘贴文件",
-                            detail: "增强版剪切、粘贴与历史记录",
-                            meta: "剪贴板中有 \(fileOperationActionCount) 项内容",
-                            isOn: fileOperationActionCount > 0
-                        ) {
-                            viewModel.selectedSection = .history
-                        }
-
-                        OverviewFeatureRow(
-                            systemImage: "doc.badge.plus",
-                            title: "右键新建文件",
-                            detail: "在右键菜单中新建常用文件类型",
-                            meta: "已启用 \(enabledTemplateCount) 个模板",
-                            isOn: enabledTemplateCount > 0
-                        ) {
-                            viewModel.selectedSection = .templates
-                        }
+                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
+                    OverviewFeatureRow(
+                        systemImage: "folder",
+                        title: "常用目录",
+                        meta: "\(viewModel.bookmarks.bookmarks.count) 个目录"
+                    ) {
+                        viewModel.selectedSection = .directories
                     }
 
-                    OverviewHintBanner()
-                        .padding(.top, 2)
-                }
-                .padding(.top, 8)
-                .frame(maxWidth: .infinity, alignment: .leading)
+                    OverviewFeatureRow(
+                        systemImage: "chevron.left.forwardslash.chevron.right",
+                        title: "开发者快捷入口",
+                        meta: "\(enabledDeveloperCount) 个已启用入口"
+                    ) {
+                        viewModel.selectedSection = .developer
+                    }
 
-                OverviewFinderMenuCallout(items: overviewSubmenuItems)
-                    .frame(width: 262)
+                    OverviewFeatureRow(
+                        systemImage: "scissors",
+                        title: "文件操作",
+                        meta: "\(fileOperationActionCount) 个已启用操作"
+                    ) {
+                        viewModel.selectedSection = .history
+                    }
+
+                    OverviewFeatureRow(
+                        systemImage: "doc.badge.plus",
+                        title: "新建文件",
+                        meta: "\(enabledTemplateCount) 个已启用模板"
+                    ) {
+                        viewModel.selectedSection = .templates
+                    }
+                }
+            }
+            .padding(.vertical, 8)
+
+            VStack(alignment: .leading, spacing: 0) {
+                Text("应用设置")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(SettingsTheme.ink)
+                    .padding(.vertical, 14)
+
+                LaunchAtLoginPanel(viewModel: viewModel)
+                Divider()
+                UpdateCheckPanel(viewModel: viewModel)
             }
 
-            OverviewMetricStrip(viewModel: viewModel)
+            Divider()
+
+            DisclosureGroup(isExpanded: $isPreviewExpanded) {
+                FinderContextMenuMock(
+                    selectedContext: .desktop,
+                    actions: viewModel.config.actions,
+                    config: viewModel.config,
+                    bookmarks: viewModel.bookmarks
+                )
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.vertical, 20)
+            } label: {
+                Label("Finder 菜单预览", systemImage: "contextualmenu.and.cursorarrow")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(SettingsTheme.ink)
+            }
+            .tint(SettingsTheme.muted)
         }
     }
 
@@ -99,23 +109,6 @@ struct OnboardingView: View {
         }.count
     }
 
-    private var overviewRootMenuItems: [FinderMenuItem] {
-        [
-            FinderMenuItem(title: "新建文件夹", systemImage: nil, hasSubmenu: true),
-            FinderMenuItem(title: "显示简介", systemImage: nil),
-            FinderMenuItem(title: "排序方式", systemImage: nil, hasSubmenu: true),
-            FinderMenuItem(title: "整理方式", systemImage: nil, hasSubmenu: true)
-        ]
-    }
-
-    private var overviewSubmenuItems: [FinderMenuItem] {
-        [
-            FinderMenuItem(title: "常用目录", systemImage: "folder", tint: .blue, hasSubmenu: true),
-            FinderMenuItem(title: "开发者入口", systemImage: "chevron.left.forwardslash.chevron.right", tint: SettingsTheme.accent, hasSubmenu: true),
-            FinderMenuItem(title: "剪切 / 粘贴文件", systemImage: "scissors", tint: SettingsTheme.accent, hasSubmenu: true),
-            FinderMenuItem(title: "新建文件", systemImage: "doc", tint: SettingsTheme.accent, hasSubmenu: true)
-        ]
-    }
 }
 
 struct UpdateCheckPanel: View {
@@ -146,7 +139,7 @@ struct UpdateCheckPanel: View {
                         Label(panelState.releaseButtonTitle, systemImage: "safari")
                             .frame(minWidth: 108)
                     }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(SettingsButtonStyle())
                     .controlSize(.large)
                     .help("打开 GitHub Releases 页面")
 
@@ -156,7 +149,7 @@ struct UpdateCheckPanel: View {
                         Label(viewModel.isCheckingForUpdates ? "检查中..." : "检查更新", systemImage: "arrow.clockwise")
                             .frame(minWidth: 112)
                     }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(SettingsButtonStyle(isPrimary: true))
                     .controlSize(.large)
                     .disabled(viewModel.isCheckingForUpdates)
                     .help("从 GitHub 获取最新正式版本")
@@ -260,7 +253,7 @@ struct LaunchAtLoginPanel: View {
                         Label("打开登录项", systemImage: "gearshape")
                             .frame(minWidth: 112)
                     }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(SettingsButtonStyle())
                     .controlSize(.large)
                     .help("打开系统设置中的登录项页面")
                 }
@@ -311,7 +304,7 @@ struct FinderExtensionSetupBanner: View {
                         Label("打开扩展设置", systemImage: "gearshape")
                             .frame(minWidth: 112)
                     }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(SettingsButtonStyle(isPrimary: true))
                     .controlSize(.large)
                     .help("打开系统设置中的 Finder 扩展页面")
 
@@ -321,7 +314,7 @@ struct FinderExtensionSetupBanner: View {
                         Label(viewModel.isRepairingFinderMenu ? "修复中..." : "修复并重启 Finder", systemImage: "arrow.clockwise")
                             .frame(minWidth: 136)
                     }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(SettingsButtonStyle())
                     .controlSize(.large)
                     .disabled(viewModel.isRepairingFinderMenu)
                     .help("会短暂关闭并重新打开 Finder 窗口")
@@ -360,7 +353,7 @@ struct FullDiskAccessBanner: View {
                         Label("打开权限设置", systemImage: "gearshape")
                             .frame(minWidth: 124)
                     }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(SettingsButtonStyle(isPrimary: true))
                     .controlSize(.large)
                 }
                 .fixedSize(horizontal: true, vertical: false)
@@ -385,194 +378,46 @@ struct FullDiskAccessBanner: View {
 struct OverviewFeatureRow: View {
     let systemImage: String
     let title: String
-    let detail: String
     let meta: String
-    let isOn: Bool
     let onOpen: () -> Void
+    @State private var isHovered = false
 
     var body: some View {
         Button(action: onOpen) {
-            HStack(alignment: .center, spacing: 16) {
+            HStack(alignment: .center, spacing: 12) {
                 IconBadge(systemImage: systemImage)
 
-                VStack(alignment: .leading, spacing: 6) {
+                VStack(alignment: .leading, spacing: 4) {
                     Text(title)
-                        .font(.system(size: 15, weight: .semibold))
+                        .font(.system(size: 14, weight: .medium))
                         .foregroundStyle(SettingsTheme.ink)
                         .lineLimit(1)
-                    Text(detail)
+                    Text(meta)
                         .font(.system(size: 12))
                         .foregroundStyle(SettingsTheme.muted)
                         .lineLimit(1)
-                        .minimumScaleFactor(0.9)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .layoutPriority(1)
-
-                Text(meta)
-                    .font(.system(size: 12))
-                    .foregroundStyle(SettingsTheme.muted)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.9)
-                    .frame(width: 112, alignment: .trailing)
 
                 Image(systemName: "chevron.right")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(SettingsTheme.muted)
                     .frame(width: 14)
 
-                Toggle("", isOn: .constant(isOn))
-                    .toggleStyle(.switch)
-                    .labelsHidden()
-                    .allowsHitTesting(false)
             }
             .padding(.horizontal, 16)
-            .frame(maxWidth: .infinity, minHeight: 68, alignment: .leading)
-            .background(SettingsTheme.surface, in: RoundedRectangle(cornerRadius: 8))
-            .overlay(RoundedRectangle(cornerRadius: 8).stroke(SettingsTheme.hairline))
+            .frame(maxWidth: .infinity, minHeight: 72, alignment: .leading)
+            .background(
+                isHovered ? SettingsTheme.controlBackgroundHover : SettingsTheme.surfaceSoft,
+                in: RoundedRectangle(cornerRadius: 8)
+            )
+            .contentShape(RoundedRectangle(cornerRadius: 8))
         }
         .buttonStyle(.plain)
-    }
-}
-
-struct OverviewHintBanner: View {
-    var body: some View {
-        HStack(alignment: .center, spacing: 16) {
-            Image(systemName: "lightbulb")
-                .font(.system(size: 22, weight: .regular))
-                .foregroundStyle(SettingsTheme.accent)
-                .frame(width: 32)
-
-            Text("提示")
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(SettingsTheme.accent)
-
-            Text("所有功能均可在右键菜单中使用，支持箭头排序与自定义设置。")
-                .font(.system(size: 12))
-                .foregroundStyle(SettingsTheme.muted)
-                .lineLimit(1)
-                .minimumScaleFactor(0.9)
-
-            Spacer(minLength: 0)
-        }
-        .padding(.horizontal, 18)
-        .frame(maxWidth: .infinity, minHeight: 58)
-        .background(SettingsTheme.accent.opacity(0.055), in: RoundedRectangle(cornerRadius: 8))
-        .overlay(RoundedRectangle(cornerRadius: 8).stroke(SettingsTheme.accent.opacity(0.18)))
-    }
-}
-
-struct OverviewFinderMenuCallout: View {
-    let items: [FinderMenuItem]
-
-    var body: some View {
-        VStack(alignment: .trailing, spacing: 8) {
-            OverviewContextMenu(items: items)
-
-            HStack(alignment: .top, spacing: 6) {
-                ZStack(alignment: .topTrailing) {
-                    OverviewCalloutArrow()
-                        .stroke(
-                            SettingsTheme.accent,
-                            style: StrokeStyle(lineWidth: 1.35, lineCap: .round, dash: [5, 5])
-                        )
-                    Image(systemName: "arrow.up")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(SettingsTheme.accent)
-                        .rotationEffect(.degrees(28))
-                        .offset(x: 4, y: -3)
-                }
-                .frame(width: 40, height: 52)
-                .padding(.top, 0)
-
-                Text("在 Finder 右键菜单中\n快速访问常用功能")
-                    .font(.system(size: 15, weight: .semibold, design: .rounded))
-                    .foregroundStyle(SettingsTheme.accent)
-                    .lineSpacing(5)
-                    .rotationEffect(.degrees(-2))
-                    .padding(.top, 28)
-            }
-            .padding(.trailing, 0)
-        }
-        .frame(maxWidth: .infinity, alignment: .trailing)
-    }
-}
-
-struct OverviewCalloutArrow: Shape {
-    func path(in rect: CGRect) -> Path {
-        var path = Path()
-        path.move(to: CGPoint(x: rect.maxX - 6, y: rect.minY + 4))
-        path.addCurve(
-            to: CGPoint(x: rect.minX + 8, y: rect.maxY - 8),
-            control1: CGPoint(x: rect.midX + 4, y: rect.midY - 6),
-            control2: CGPoint(x: rect.minX + 2, y: rect.midY + 22)
-        )
-        return path
-    }
-}
-
-struct OverviewContextMenu: View {
-    let items: [FinderMenuItem]
-
-    var body: some View {
-        VStack(spacing: 0) {
-            OverviewContextMenuRow(item: FinderMenuItem(title: "新建文件夹", hasSubmenu: true))
-            Divider().padding(.horizontal, 12)
-            OverviewContextMenuRow(item: FinderMenuItem(title: "显示简介"))
-            OverviewContextMenuRow(item: FinderMenuItem(title: "更改桌面背景..."))
-            Divider().padding(.horizontal, 12)
-            OverviewContextMenuRow(item: FinderMenuItem(title: "使用叠放"))
-            OverviewContextMenuRow(item: FinderMenuItem(title: "排序方式", hasSubmenu: true))
-            OverviewContextMenuRow(item: FinderMenuItem(title: "整理"))
-            OverviewContextMenuRow(item: FinderMenuItem(title: "整理方式", hasSubmenu: true))
-            OverviewContextMenuRow(item: FinderMenuItem(title: "查看显示选项"))
-            Divider().padding(.horizontal, 12)
-
-            ForEach(items) { item in
-                OverviewContextMenuRow(item: item)
-            }
-
-            Divider().padding(.horizontal, 12)
-            OverviewContextMenuRow(item: FinderMenuItem(title: "服务", hasSubmenu: true))
-        }
-        .padding(.vertical, 8)
-        .frame(width: 228)
-        .background(SettingsTheme.menuBackground, in: RoundedRectangle(cornerRadius: 9))
-        .overlay(RoundedRectangle(cornerRadius: 9).stroke(SettingsTheme.hairline))
-        .shadow(color: SettingsTheme.menuShadow, radius: 18, x: 0, y: 12)
-    }
-}
-
-struct OverviewContextMenuRow: View {
-    let item: FinderMenuItem
-
-    var body: some View {
-        HStack(spacing: 10) {
-            if let icon = item.icon {
-                MenuIconView(
-                    icon: icon,
-                    tint: item.tint,
-                    isHighlighted: item.isHighlighted,
-                    size: 17,
-                    font: .system(size: 13, weight: .medium)
-                )
-            }
-
-            Text(item.title)
-                .font(.system(size: 13))
-                .foregroundStyle(SettingsTheme.ink)
-                .lineLimit(1)
-
-            Spacer(minLength: 8)
-
-            if item.hasSubmenu {
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(SettingsTheme.muted)
-            }
-        }
-        .padding(.horizontal, 14)
-        .frame(height: 26)
+        .onHover { isHovered = $0 }
+        .animation(.easeInOut(duration: 0.15), value: isHovered)
+        .accessibilityElement(children: .combine)
     }
 }
 
@@ -580,51 +425,44 @@ struct OverviewMetricStrip: View {
     @ObservedObject var viewModel: SettingsViewModel
 
     var body: some View {
-        DesignPanel(padding: 0) {
-            HStack(spacing: 0) {
-                OverviewMetric(systemImage: "clock", title: "高效便捷", subtitle: "常用功能一步直达")
-                metricDivider
-                OverviewMetric(systemImage: "shield.checkered", title: "安全可靠", subtitle: "本地运行，保护隐私")
-                metricDivider
-                OverviewMetric(systemImage: "bolt", title: "轻量稳定", subtitle: "占用资源少，运行流畅")
-                metricDivider
-                OverviewMetric(systemImage: "slider.horizontal.3", title: "高度可自定义", subtitle: "按需启用，自由配置")
-            }
-            .frame(height: 70)
+        HStack(spacing: 0) {
+            OverviewMetric(title: "已启用菜单", value: viewModel.enabledActionCount)
+            metricDivider
+            OverviewMetric(title: "常用目录", value: viewModel.bookmarks.bookmarks.count)
+            metricDivider
+            OverviewMetric(title: "文件模板", value: viewModel.config.fileTemplates.count)
+            metricDivider
+            OverviewMetric(title: "命令模板", value: viewModel.config.commandTemplates.count)
+        }
+        .padding(.vertical, 12)
+        .padding(.bottom, 12)
+        .overlay(alignment: .bottom) {
+            Rectangle().fill(SettingsTheme.hairline).frame(height: 0.5)
         }
     }
 
     private var metricDivider: some View {
         Rectangle()
             .fill(SettingsTheme.hairline)
-            .frame(width: 1, height: 38)
+            .frame(width: 0.5, height: 34)
     }
 }
 
 struct OverviewMetric: View {
-    let systemImage: String
     let title: String
-    let subtitle: String
+    let value: Int
 
     var body: some View {
-        HStack(spacing: 12) {
-            Image(systemName: systemImage)
-                .font(.system(size: 24, weight: .regular))
-                .foregroundStyle(SettingsTheme.accent)
-                .frame(width: 38)
-            VStack(alignment: .leading, spacing: 3) {
-                Text(title)
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(SettingsTheme.ink)
-                Text(subtitle)
-                    .font(.system(size: 11))
-                    .foregroundStyle(SettingsTheme.muted)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.82)
-            }
-            .layoutPriority(1)
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title)
+                .font(.system(size: 12))
+                .foregroundStyle(SettingsTheme.muted)
+            Text(value, format: .number)
+                .font(.system(size: 24, weight: .medium))
+                .foregroundStyle(SettingsTheme.ink)
+                .monospacedDigit()
         }
-        .frame(maxWidth: .infinity, alignment: .center)
-        .padding(.horizontal, 14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 18)
     }
 }

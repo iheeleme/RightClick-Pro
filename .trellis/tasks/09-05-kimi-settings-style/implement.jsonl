@@ -1,0 +1,2 @@
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "Kimi 风格设置组件、表格、预览和编辑控件的实现约定"}
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "设置界面必须通过 SettingsViewModel 保持配置和关联动作一致"}

@@ -44,7 +44,7 @@ struct SettingsRootView: View {
                 badges: sidebarBadges,
                 onSelect: selectSection
             )
-                .frame(width: 280)
+                .frame(width: 248)
 
             SettingsDetailShell(section: renderedSection, viewModel: viewModel) {
                 switch renderedSection {
@@ -68,6 +68,7 @@ struct SettingsRootView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(SettingsTheme.windowBackground)
+        .accentColor(SettingsTheme.accent)
         .background(SettingsWindowChromeConfigurator())
         .ignoresSafeArea(.container, edges: .top)
         .transaction { transaction in
@@ -113,7 +114,7 @@ struct SettingsRootView: View {
 }
 
 private enum SettingsChromeMetrics {
-    static let sidebarTopPadding: CGFloat = 64
+    static let sidebarTopPadding: CGFloat = 56
     static let sidebarBottomPadding: CGFloat = 24
 }
 
@@ -145,115 +146,65 @@ private struct SettingsWindowChromeConfigurator: NSViewRepresentable {
 }
 
 enum SettingsTheme {
-    static let accent = adaptiveColor(
-        light: NSColor(calibratedRed: 0.24, green: 0.32, blue: 0.98, alpha: 1.0),
-        dark: NSColor(calibratedRed: 0.54, green: 0.62, blue: 1.0, alpha: 1.0)
-    )
-    static let accentSoft = adaptiveColor(
-        light: NSColor(calibratedRed: 0.93, green: 0.92, blue: 1.0, alpha: 1.0),
-        dark: NSColor(calibratedRed: 0.17, green: 0.19, blue: 0.34, alpha: 1.0)
-    )
-    static let ink = Color(nsColor: .labelColor)
-    static let muted = Color(nsColor: .secondaryLabelColor)
+    // Kimi 的中性表面与语义蓝共用一套亮暗色令牌。
+    static let accent = color(0x1783FF, dark: 0x469DFF)
+    static let ink = color(0x1A1A1A, dark: 0xE8E8E8)
+    static let muted = color(0x666666, dark: 0xA3A3A3)
+    static let tertiary = color(0x8C8C8C, dark: 0x858585)
+    static let selectionFill = color(0xE9E9E9, dark: 0x303030)
+    static let primaryAction = color(0x1A1A1A, dark: 0xE8E8E8)
+    static let primaryActionHover = color(0x303030, dark: 0xFFFFFF)
+    static let primaryActionPressed = color(0x000000, dark: 0xCBCBCB)
+    static let primaryActionLabel = color(0xFFFFFF, dark: 0x171717)
     static let hairline = adaptiveColor(
-        light: NSColor(calibratedWhite: 0.0, alpha: 0.08),
+        light: NSColor(calibratedWhite: 0.0, alpha: 0.13),
         dark: NSColor(calibratedWhite: 1.0, alpha: 0.13)
     )
     static let windowBackgroundColor = adaptiveNSColor(
-        light: NSColor(calibratedRed: 0.96, green: 0.97, blue: 1.0, alpha: 1.0),
-        dark: NSColor(calibratedRed: 0.055, green: 0.065, blue: 0.09, alpha: 1.0)
+        light: nsColor(0xFFFFFF),
+        dark: nsColor(0x141414)
     )
-    static let sidebarBackground = adaptiveColor(
-        light: NSColor(calibratedWhite: 1.0, alpha: 0.58),
-        dark: NSColor(calibratedRed: 0.075, green: 0.085, blue: 0.12, alpha: 0.92)
-    )
-    static let headerBackground = adaptiveColor(
-        light: NSColor(calibratedWhite: 1.0, alpha: 0.72),
-        dark: NSColor(calibratedRed: 0.085, green: 0.095, blue: 0.13, alpha: 0.96)
-    )
-    static let pageOverlay = adaptiveColor(
-        light: NSColor(calibratedWhite: 1.0, alpha: 0.34),
-        dark: NSColor(calibratedWhite: 1.0, alpha: 0.035)
-    )
-    static let surface = adaptiveColor(
-        light: NSColor(calibratedWhite: 1.0, alpha: 0.90),
-        dark: NSColor(calibratedRed: 0.115, green: 0.13, blue: 0.17, alpha: 0.96)
-    )
-    static let surfaceSoft = adaptiveColor(
-        light: NSColor(calibratedWhite: 1.0, alpha: 0.62),
-        dark: NSColor(calibratedWhite: 1.0, alpha: 0.055)
-    )
-    static let surfaceElevated = adaptiveColor(
-        light: NSColor(calibratedWhite: 1.0, alpha: 1.0),
-        dark: NSColor(calibratedRed: 0.14, green: 0.155, blue: 0.20, alpha: 1.0)
-    )
-    static let controlBackground = adaptiveColor(
-        light: NSColor(calibratedWhite: 1.0, alpha: 0.62),
-        dark: NSColor(calibratedWhite: 1.0, alpha: 0.07)
-    )
-    static let controlBackgroundHover = adaptiveColor(
-        light: NSColor(calibratedWhite: 1.0, alpha: 0.72),
-        dark: NSColor(calibratedWhite: 1.0, alpha: 0.11)
-    )
+    static let windowBackground = Color(nsColor: windowBackgroundColor)
+    static let sidebarBackground = color(0xF5F5F5, dark: 0x1A1A1A)
+    static let headerBackground = windowBackground
+    static let pageOverlay = windowBackground
+    static let surface = windowBackground
+    static let surfaceSoft = color(0xF5F5F5, dark: 0x202020)
+    static let surfaceElevated = color(0xFFFFFF, dark: 0x262626)
+    static let controlBackground = color(0xF5F5F5, dark: 0x262626)
+    static let controlBackgroundHover = color(0xEBEBEB, dark: 0x323232)
     static let subtleFill = adaptiveColor(
-        light: NSColor(calibratedWhite: 0.0, alpha: 0.035),
-        dark: NSColor(calibratedWhite: 1.0, alpha: 0.065)
+        light: NSColor(calibratedWhite: 0.0, alpha: 0.03),
+        dark: NSColor(calibratedWhite: 1.0, alpha: 0.045)
     )
     static let menuShadow = adaptiveColor(
         light: NSColor(calibratedWhite: 0.0, alpha: 0.16),
         dark: NSColor(calibratedWhite: 0.0, alpha: 0.45)
     )
-    static let commandOutputText = adaptiveColor(
-        light: NSColor(calibratedRed: 0.12, green: 0.15, blue: 0.18, alpha: 1.0),
-        dark: NSColor(calibratedRed: 0.84, green: 0.88, blue: 0.93, alpha: 1.0)
-    )
-    static let commandOutputBackground = adaptiveColor(
-        light: NSColor(calibratedRed: 0.965, green: 0.972, blue: 0.985, alpha: 1.0),
-        dark: NSColor(calibratedRed: 0.065, green: 0.075, blue: 0.10, alpha: 1.0)
-    )
-
-    static var windowBackground: LinearGradient {
-        LinearGradient(
-            colors: [
-                adaptiveColor(
-                    light: NSColor(calibratedRed: 0.96, green: 0.97, blue: 1.0, alpha: 1.0),
-                    dark: NSColor(calibratedRed: 0.055, green: 0.065, blue: 0.09, alpha: 1.0)
-                ),
-                adaptiveColor(
-                    light: NSColor(calibratedWhite: 1.0, alpha: 1.0),
-                    dark: NSColor(calibratedRed: 0.09, green: 0.105, blue: 0.14, alpha: 1.0)
-                )
-            ],
-            startPoint: .topLeading,
-            endPoint: .bottomTrailing
-        )
-    }
+    static let commandOutputText = ink
+    static let commandOutputBackground = color(0xF5F5F5, dark: 0x1A1A1A)
 
     static var menuBackground: LinearGradient {
         LinearGradient(
             colors: [
-                adaptiveColor(
-                    light: NSColor(calibratedWhite: 1.0, alpha: 0.96),
-                    dark: NSColor(calibratedRed: 0.13, green: 0.145, blue: 0.18, alpha: 0.98)
-                ),
-                adaptiveColor(
-                    light: NSColor(calibratedRed: 0.95, green: 0.96, blue: 0.98, alpha: 1.0),
-                    dark: NSColor(calibratedRed: 0.09, green: 0.105, blue: 0.14, alpha: 1.0)
-                )
+                color(0xFFFFFF, dark: 0x2B2B2B),
+                color(0xF5F5F5, dark: 0x252525)
             ],
             startPoint: .topLeading,
             endPoint: .bottomTrailing
         )
     }
 
-    static var brandGradient: LinearGradient {
-        LinearGradient(
-            colors: [
-                Color(red: 0.45, green: 0.55, blue: 1.0),
-                Color(red: 0.31, green: 0.22, blue: 0.95)
-            ],
-            startPoint: .topLeading,
-            endPoint: .bottomTrailing
+    private static func color(_ light: UInt32, dark: UInt32) -> Color {
+        adaptiveColor(light: nsColor(light), dark: nsColor(dark))
+    }
+
+    private static func nsColor(_ hex: UInt32) -> NSColor {
+        NSColor(
+            srgbRed: CGFloat((hex >> 16) & 0xFF) / 255,
+            green: CGFloat((hex >> 8) & 0xFF) / 255,
+            blue: CGFloat(hex & 0xFF) / 255,
+            alpha: 1
         )
     }
 
@@ -325,7 +276,7 @@ struct RightClickProBrandIcon: View {
     private var fallbackIcon: some View {
         ZStack {
             RoundedRectangle(cornerRadius: 8)
-                .fill(SettingsTheme.brandGradient)
+                .fill(SettingsTheme.accent)
             Image(systemName: "cursorarrow")
                 .font(.title2.weight(.bold))
                 .foregroundStyle(.white)
@@ -339,79 +290,63 @@ struct SettingsSidebar: View {
     let badges: [SettingsViewModel.Section: String]
     let onSelect: (SettingsViewModel.Section) -> Void
 
-    private let sections = SettingsViewModel.SidebarGroup.allCases.flatMap { $0.sections }
-
     var body: some View {
-        VStack(alignment: .leading, spacing: 26) {
-            HStack(spacing: 12) {
-                RightClickProBrandIcon(size: 44)
-                    .shadow(color: SettingsTheme.accent.opacity(0.18), radius: 14, x: 0, y: 8)
+        VStack(alignment: .leading, spacing: 30) {
+            HStack(spacing: 10) {
+                RightClickProBrandIcon(size: 36)
 
                 VStack(alignment: .leading, spacing: 3) {
                     Text(AppMetadata.displayName)
-                        .font(.system(size: 15, weight: .bold))
+                        .font(.system(size: 16, weight: .semibold))
                         .foregroundStyle(SettingsTheme.ink)
-                    Text("Mac 右键效率工具")
-                        .font(.system(size: 12))
-                        .foregroundStyle(SettingsTheme.muted)
-                    Text(AppMetadata.versionText)
+                    Text("Finder")
                         .font(.system(size: 11))
-                        .foregroundStyle(SettingsTheme.muted.opacity(0.82))
-                        .monospacedDigit()
+                        .foregroundStyle(SettingsTheme.tertiary)
                 }
             }
+            .padding(.horizontal, 8)
 
-            VStack(spacing: 8) {
-                ForEach(sections) { section in
-                    SidebarNavigationRow(
-                        section: section,
-                        badge: badges[section],
-                        isSelected: selectedSection == section
-                    ) {
-                        onSelect(section)
+            VStack(alignment: .leading, spacing: 22) {
+                ForEach(SettingsViewModel.SidebarGroup.allCases) { group in
+                    VStack(alignment: .leading, spacing: 4) {
+                        if group != .guided {
+                            Text(group.rawValue)
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundStyle(SettingsTheme.tertiary)
+                                .padding(.horizontal, 12)
+                                .padding(.bottom, 4)
+                        }
+
+                        ForEach(group.sections) { section in
+                            SidebarNavigationRow(
+                                section: section,
+                                badge: badges[section],
+                                isSelected: selectedSection == section
+                            ) {
+                                onSelect(section)
+                            }
+                        }
                     }
                 }
             }
 
             Spacer(minLength: 16)
 
-            SidebarHintCard()
+            Text(AppMetadata.versionText)
+                .font(.system(size: 11))
+                .foregroundStyle(SettingsTheme.tertiary)
+                .monospacedDigit()
+                .padding(.horizontal, 12)
         }
-        .padding(.horizontal, 24)
+        .padding(.horizontal, 16)
         .padding(.top, SettingsChromeMetrics.sidebarTopPadding)
         .padding(.bottom, SettingsChromeMetrics.sidebarBottomPadding)
         .background(SettingsTheme.sidebarBackground)
         .overlay(alignment: .trailing) {
             Rectangle()
                 .fill(SettingsTheme.hairline)
-                .frame(width: 1)
+                .frame(width: 0.5)
         }
-    }
-}
-
-struct SidebarHintCard: View {
-    var body: some View {
-        HStack(alignment: .top, spacing: 12) {
-            Image(systemName: "lightbulb")
-                .font(.system(size: 19, weight: .regular))
-                .foregroundStyle(SettingsTheme.muted)
-                .frame(width: 24, alignment: .center)
-
-            VStack(alignment: .leading, spacing: 4) {
-                Text("小提示")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(SettingsTheme.ink)
-                Text("使用排序箭头调整顺序，启用/禁用快速定制你的右键菜单。")
-                    .font(.system(size: 11))
-                    .foregroundStyle(SettingsTheme.muted)
-                    .lineLimit(3)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-        }
-        .padding(14)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(SettingsTheme.surfaceSoft, in: RoundedRectangle(cornerRadius: 8))
-        .overlay(RoundedRectangle(cornerRadius: 8).stroke(SettingsTheme.hairline))
     }
 }
 
@@ -421,39 +356,40 @@ struct SidebarNavigationRow: View {
     let isSelected: Bool
     let onSelect: () -> Void
     @State private var didSelectDuringPress = false
+    @State private var isHovered = false
 
     var body: some View {
         HStack(spacing: 12) {
             Image(systemName: section.systemImage)
-                .font(.system(size: 17, weight: .medium))
-                .frame(width: 22)
-                .foregroundStyle(isSelected ? SettingsTheme.accent : SettingsTheme.muted)
+                .font(.system(size: 16, weight: .regular))
+                .frame(width: 18)
+                .foregroundStyle(isSelected ? SettingsTheme.ink : SettingsTheme.muted)
 
             Text(section.sidebarTitle)
-                .font(.system(size: 15, weight: isSelected ? .semibold : .regular))
-                .foregroundStyle(isSelected ? SettingsTheme.accent : SettingsTheme.ink)
+                .font(.system(size: 13, weight: isSelected ? .semibold : .regular))
+                .foregroundStyle(SettingsTheme.ink)
                 .lineLimit(1)
 
             Spacer(minLength: 8)
 
             if let badge {
                 Text(badge)
-                    .font(.caption2.weight(.semibold))
+                    .font(.system(size: 11, weight: .medium))
                     .monospacedDigit()
-                    .foregroundStyle(isSelected ? SettingsTheme.accent : SettingsTheme.muted)
-                    .padding(.horizontal, 7)
-                    .padding(.vertical, 3)
-                    .background(SettingsTheme.controlBackgroundHover, in: Capsule())
+                    .foregroundStyle(SettingsTheme.tertiary)
+                    .frame(minWidth: 18)
             }
         }
         .padding(.horizontal, 12)
-        .frame(height: 42)
+        .frame(height: 38)
         .frame(maxWidth: .infinity)
         .background(
-            isSelected ? SettingsTheme.accentSoft : Color.clear,
+            isSelected ? SettingsTheme.selectionFill : (isHovered ? SettingsTheme.subtleFill : Color.clear),
             in: RoundedRectangle(cornerRadius: 8)
         )
         .contentShape(Rectangle())
+        .onHover { isHovered = $0 }
+        .animation(.easeOut(duration: 0.12), value: isHovered)
         .gesture(
             DragGesture(minimumDistance: 0)
                 .onChanged { _ in
@@ -468,6 +404,7 @@ struct SidebarNavigationRow: View {
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(.isButton)
         .accessibilityAddTraits(isSelected ? .isSelected : [])
+        .accessibilityAction { onSelect() }
     }
 }
 
@@ -482,23 +419,19 @@ struct SettingsDetailShell<Content: View>: View {
                 titleBlock
                     .layoutPriority(1)
 
-                if section != .onboarding {
-                    Spacer(minLength: 12)
-
-                    headerActions
-                }
+                Spacer(minLength: 12)
+                headerActions
             }
             .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(minHeight: 36)
             .padding(.horizontal, 28)
-            .padding(.top, section == .directories ? 20 : (section == .onboarding ? 22 : 28))
-            .padding(.bottom, section == .onboarding ? 8 : 16)
+            .padding(.top, 44)
+            .padding(.bottom, 20)
             .background(SettingsTheme.headerBackground)
 
-            if section != .onboarding && section != .directories {
-                Rectangle()
-                    .fill(SettingsTheme.hairline)
-                    .frame(height: 1)
-            }
+            Rectangle()
+                .fill(SettingsTheme.hairline)
+                .frame(height: 0.5)
 
             content
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -506,129 +439,76 @@ struct SettingsDetailShell<Content: View>: View {
     }
 
     private var titleBlock: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(section.rawValue)
-                .font(.system(size: titleSize, weight: .bold))
-                .foregroundStyle(SettingsTheme.ink)
-                .lineLimit(1)
-                .minimumScaleFactor(0.86)
-
-            if section == .onboarding {
-                HStack(spacing: 0) {
-                    Text("管理和自定义 ")
-                    Text("Finder")
-                        .foregroundStyle(SettingsTheme.accent)
-                    Text(" 右键菜单，提升操作效率")
-                }
-                .font(.system(size: 14))
-                .foregroundStyle(SettingsTheme.muted)
-                .lineLimit(1)
-            } else {
-                Text(section.subtitle)
-                    .font(.system(size: 15))
-                    .foregroundStyle(SettingsTheme.muted)
-                    .lineLimit(2)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-        }
+        Text(section.rawValue)
+            .font(.system(size: 18, weight: .semibold))
+            .foregroundStyle(SettingsTheme.ink)
+            .lineLimit(1)
+            .help(section.subtitle)
     }
 
+    @ViewBuilder
     private var headerActions: some View {
-        HStack(spacing: 12) {
-            if section == .directories {
-                DirectoryHeaderAddButton {
+        switch section {
+        case .directories:
+            HStack(spacing: 12) {
+                headerStatusCluster
+                HeaderActionButton(title: "添加目录") {
                     viewModel.addDirectoryBookmarkFromPanel()
                 }
-            } else if section == .developer {
-                if viewModel.hasUnsavedChanges {
-                    StatusBadge(
-                        message: viewModel.statusMessage,
-                        tone: viewModel.statusTone,
-                        isDirty: viewModel.hasUnsavedChanges
-                    )
-                    .frame(maxWidth: 92)
-
-                    SaveConfigButton(viewModel: viewModel)
-                        .fixedSize(horizontal: true, vertical: false)
-                }
-                DeveloperHeaderAddButton {
+            }
+        case .developer:
+            HStack(spacing: 12) {
+                headerStatusCluster
+                HeaderActionButton(title: "添加快捷入口") {
                     viewModel.requestAddDeveloperEntrypoint()
                 }
-            } else if section == .commands {
-                if viewModel.hasUnsavedChanges {
-                    StatusBadge(
-                        message: viewModel.statusMessage,
-                        tone: viewModel.statusTone,
-                        isDirty: viewModel.hasUnsavedChanges
-                    )
-                    .frame(maxWidth: 92)
-
-                    SaveConfigButton(viewModel: viewModel)
-                        .fixedSize(horizontal: true, vertical: false)
-                }
-                CommandHeaderAddButton {
+            }
+        case .commands:
+            HStack(spacing: 12) {
+                headerStatusCluster
+                HeaderActionButton(title: "添加命令") {
                     viewModel.requestAddCommandTemplate()
                 }
-            } else if section == .templates {
-                if viewModel.hasUnsavedChanges {
-                    StatusBadge(
-                        message: viewModel.statusMessage,
-                        tone: viewModel.statusTone,
-                        isDirty: viewModel.hasUnsavedChanges
-                    )
-                    .frame(maxWidth: 92)
-
-                    SaveConfigButton(viewModel: viewModel)
-                        .fixedSize(horizontal: true, vertical: false)
-                }
-                TemplateHeaderAddButton {
+            }
+        case .templates:
+            HStack(spacing: 12) {
+                headerStatusCluster
+                HeaderActionButton(title: "添加模板") {
                     viewModel.requestAddTemplate()
                 }
-            } else if section == .actions {
-                if viewModel.hasUnsavedChanges {
-                    StatusBadge(
-                        message: viewModel.statusMessage,
-                        tone: viewModel.statusTone,
-                        isDirty: viewModel.hasUnsavedChanges
-                    )
-                    .frame(maxWidth: 92)
-
-                    SaveConfigButton(viewModel: viewModel)
-                        .fixedSize(horizontal: true, vertical: false)
-                }
-
-                SearchField(placeholder: "搜索菜单项或功能...", text: $viewModel.actionSearchText)
-                    .frame(width: 270)
-
-                ActionHeaderAddMenu(viewModel: viewModel)
-            } else {
-                StatusBadge(
-                    message: viewModel.statusMessage,
-                    tone: viewModel.statusTone,
-                    isDirty: viewModel.hasUnsavedChanges
-                )
-
-                SaveConfigButton(viewModel: viewModel)
             }
+        case .actions:
+            HStack(spacing: 12) {
+                headerStatusCluster
+                SearchField(placeholder: "搜索菜单项或功能...", text: $viewModel.actionSearchText)
+                    .frame(width: 240)
+                ActionHeaderAddMenu(viewModel: viewModel)
+            }
+        case .onboarding, .history:
+            headerStatusCluster
         }
-        .frame(alignment: .trailing)
-        .layoutPriority((section == .actions || section == .developer || section == .templates) ? 2 : 0)
     }
 
-    private var titleSize: CGFloat {
-        switch section {
-        case .onboarding, .directories:
-            return 22
-        case .actions:
-            return 26
-        default:
-            return 28
+    private var headerStatusCluster: some View {
+        HStack(spacing: 12) {
+            StatusBadge(
+                message: viewModel.statusMessage,
+                tone: viewModel.statusTone,
+                isDirty: viewModel.hasUnsavedChanges
+            )
+            .frame(maxWidth: 120)
+
+            if viewModel.hasUnsavedChanges {
+                SaveConfigButton(viewModel: viewModel)
+                    .fixedSize(horizontal: true, vertical: false)
+            }
         }
     }
 }
 
 struct ActionHeaderAddMenu: View {
     @ObservedObject var viewModel: SettingsViewModel
+    @State private var isHovered = false
 
     var body: some View {
         Menu {
@@ -656,97 +536,76 @@ struct ActionHeaderAddMenu: View {
                 Label("添加命令模板", systemImage: "terminal")
             }
         } label: {
-            HStack(spacing: 10) {
+            HStack(spacing: 8) {
                 Image(systemName: "plus")
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(.system(size: 13, weight: .semibold))
                 Text("新增菜单项")
-                    .font(.system(size: 14, weight: .semibold))
-                Divider()
-                    .frame(height: 18)
-                    .overlay(.white.opacity(0.42))
+                    .font(.system(size: 13, weight: .semibold))
                 Image(systemName: "chevron.down")
-                    .font(.system(size: 11, weight: .bold))
+                    .font(.system(size: 10, weight: .medium))
             }
-            .foregroundStyle(.white)
-            .padding(.horizontal, 16)
-            .frame(height: 38)
-            .background(SettingsTheme.accent, in: RoundedRectangle(cornerRadius: 8))
+            .foregroundStyle(SettingsTheme.primaryActionLabel)
+            .padding(.horizontal, 14)
+            .frame(height: 36)
+            .background(
+                isHovered ? SettingsTheme.primaryActionHover : SettingsTheme.primaryAction,
+                in: RoundedRectangle(cornerRadius: 8)
+            )
+            .contentShape(RoundedRectangle(cornerRadius: 7))
+            .onHover { isHovered = $0 }
+            .animation(.easeOut(duration: 0.12), value: isHovered)
         }
         .menuStyle(.button)
+        .menuIndicator(.hidden)
         .buttonStyle(.plain)
         .fixedSize(horizontal: true, vertical: false)
         .accessibilityLabel("新增菜单项")
     }
 }
 
-struct DirectoryHeaderAddButton: View {
-    let action: () -> Void
+struct SettingsButtonStyle: ButtonStyle {
+    var isPrimary = false
+    @Environment(\.isEnabled) private var isEnabled
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var isHovered = false
 
-    var body: some View {
-        Button(action: action) {
-            Label("添加目录", systemImage: "plus.circle")
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(.white)
-                .padding(.horizontal, 16)
-                .frame(height: 38)
-                .background(SettingsTheme.accent, in: RoundedRectangle(cornerRadius: 8))
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.system(size: 13, weight: .medium))
+            .foregroundStyle(isPrimary ? SettingsTheme.primaryActionLabel : SettingsTheme.ink)
+            .padding(.horizontal, 14)
+            .frame(height: 36)
+            .background(background(isPressed: configuration.isPressed), in: RoundedRectangle(cornerRadius: 8))
+            .contentShape(RoundedRectangle(cornerRadius: 8))
+            .opacity(isEnabled ? 1 : 0.4)
+            .onHover { isHovered = $0 }
+            .animation(reduceMotion ? nil : .easeInOut(duration: 0.15), value: isHovered)
+            .animation(reduceMotion ? nil : .easeInOut(duration: 0.15), value: configuration.isPressed)
+    }
+
+    private func background(isPressed: Bool) -> Color {
+        if isPrimary {
+            if isPressed && isEnabled { return SettingsTheme.primaryActionPressed }
+            return isHovered && isEnabled ? SettingsTheme.primaryActionHover : SettingsTheme.primaryAction
         }
-        .buttonStyle(.plain)
-        .accessibilityLabel("添加常用目录")
+        if isPressed && isEnabled { return SettingsTheme.selectionFill }
+        return isHovered && isEnabled ? SettingsTheme.controlBackgroundHover : SettingsTheme.controlBackground
     }
 }
 
-struct DeveloperHeaderAddButton: View {
+struct HeaderActionButton: View {
+    let title: String
+    var systemImage: String = "plus"
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
-            Label("添加快捷入口", systemImage: "plus")
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(.white)
+            Label(title, systemImage: systemImage)
                 .lineLimit(1)
-                .frame(width: 124, height: 38)
-                .background(SettingsTheme.accent, in: RoundedRectangle(cornerRadius: 8))
         }
-        .buttonStyle(.plain)
+        .buttonStyle(SettingsButtonStyle(isPrimary: true))
         .fixedSize(horizontal: true, vertical: false)
-        .accessibilityLabel("添加开发者快捷入口")
-    }
-}
-
-struct TemplateHeaderAddButton: View {
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            Label("添加模板", systemImage: "plus")
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(.white)
-                .lineLimit(1)
-                .frame(width: 112, height: 38)
-                .background(SettingsTheme.accent, in: RoundedRectangle(cornerRadius: 8))
-        }
-        .buttonStyle(.plain)
-        .fixedSize(horizontal: true, vertical: false)
-        .accessibilityLabel("添加新建文件模板")
-    }
-}
-
-struct CommandHeaderAddButton: View {
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            Label("添加命令", systemImage: "terminal")
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(.white)
-                .lineLimit(1)
-                .frame(width: 112, height: 38)
-                .background(SettingsTheme.accent, in: RoundedRectangle(cornerRadius: 8))
-        }
-        .buttonStyle(.plain)
-        .fixedSize(horizontal: true, vertical: false)
-        .accessibilityLabel("添加命令模板")
+        .accessibilityLabel(title)
     }
 }
 
@@ -757,17 +616,31 @@ struct StatusBadge: View {
 
     var body: some View {
         HStack(spacing: 6) {
-            Image(systemName: isDirty ? "circle.fill" : "checkmark.circle.fill")
+            Image(systemName: statusIcon)
                 .font(.caption)
-            Text(message.isEmpty ? "就绪" : message)
+            Text(message.isEmpty ? (isDirty ? "未保存" : "就绪") : message)
                 .lineLimit(1)
+                .foregroundStyle(statusTextColor)
         }
         .font(.caption)
         .foregroundStyle(tone.color)
-        .padding(.horizontal, 12)
-        .padding(.vertical, 7)
-        .background(tone.color.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
-        .overlay(RoundedRectangle(cornerRadius: 8).stroke(tone.color.opacity(0.16)))
+        .help(message.isEmpty ? "就绪" : message)
+    }
+
+    private var statusIcon: String {
+        switch tone {
+        case .error: return "exclamationmark.circle"
+        case .warning: return "exclamationmark.triangle"
+        case .success: return isDirty ? "circle.fill" : "checkmark.circle"
+        case .neutral: return isDirty ? "circle.fill" : "circle.dotted"
+        }
+    }
+
+    private var statusTextColor: Color {
+        switch tone {
+        case .neutral, .success: return SettingsTheme.muted
+        case .warning, .error: return tone.color
+        }
     }
 }
 
@@ -775,27 +648,16 @@ struct SaveConfigButton: View {
     @ObservedObject var viewModel: SettingsViewModel
 
     var body: some View {
-        if viewModel.hasUnsavedChanges {
-            Button {
-                viewModel.saveConfig()
-            } label: {
-                Label("保存配置", systemImage: "square.and.arrow.down")
-                    .frame(minWidth: 86)
-            }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.large)
-            .keyboardShortcut("s", modifiers: [.command])
-        } else {
-            Button {
-                viewModel.saveConfig()
-            } label: {
-                Label("已保存", systemImage: "checkmark")
-                    .frame(minWidth: 86)
-            }
-            .buttonStyle(.bordered)
-            .controlSize(.large)
-            .disabled(true)
+        Button {
+            viewModel.saveConfig()
+        } label: {
+            Label("保存配置", systemImage: "square.and.arrow.down")
+                .labelStyle(.iconOnly)
         }
+        .buttonStyle(SettingsButtonStyle(isPrimary: true))
+        .accessibilityLabel("保存配置")
+        .keyboardShortcut("s", modifiers: [.command])
+        .help("保存配置到磁盘（⌘S）")
     }
 }
 
@@ -804,45 +666,11 @@ struct DesignPageScroll<Content: View>: View {
 
     var body: some View {
         ScrollView {
-            LazyVStack(alignment: .leading, spacing: 20) {
-                content
-            }
-            .padding(.horizontal, 28)
-            .padding(.vertical, 24)
-            .frame(maxWidth: .infinity, alignment: .topLeading)
-        }
-        .background(SettingsTheme.pageOverlay)
-    }
-}
-
-struct OverviewPageScroll<Content: View>: View {
-    @ViewBuilder var content: Content
-
-    var body: some View {
-        ScrollView {
             LazyVStack(alignment: .leading, spacing: 16) {
                 content
             }
             .padding(.horizontal, 28)
-            .padding(.top, 8)
-            .padding(.bottom, 16)
-            .frame(maxWidth: .infinity, alignment: .topLeading)
-        }
-        .scrollIndicators(.hidden)
-        .background(SettingsTheme.pageOverlay)
-    }
-}
-
-struct DirectoryPageScroll<Content: View>: View {
-    @ViewBuilder var content: Content
-
-    var body: some View {
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: 16) {
-                content
-            }
-            .padding(.horizontal, 28)
-            .padding(.top, 4)
+            .padding(.top, 24)
             .padding(.bottom, 24)
             .frame(maxWidth: .infinity, alignment: .topLeading)
         }
@@ -858,38 +686,47 @@ struct DesignPanel<Content: View>: View {
         content
             .padding(padding)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(SettingsTheme.surface, in: RoundedRectangle(cornerRadius: 8))
-            .overlay(RoundedRectangle(cornerRadius: 8).stroke(SettingsTheme.hairline))
+            .background(SettingsTheme.surface)
     }
 }
 
-struct HintBanner: View {
-    let text: String
+struct SettingsHintBanner: View {
+    let icon: String
+    let title: String
+    let message: String
+    var tint: Color = SettingsTheme.accent
 
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
-            Image(systemName: "lightbulb")
-                .font(.title3)
-                .foregroundStyle(SettingsTheme.accent)
-            Text("提示：")
-                .font(.headline)
-                .foregroundStyle(SettingsTheme.accent)
-            Text(text)
-                .foregroundStyle(SettingsTheme.muted)
-                .fixedSize(horizontal: false, vertical: true)
+        HStack(alignment: .center, spacing: 12) {
+            Image(systemName: icon)
+                .font(.system(size: 18, weight: .regular))
+                .foregroundStyle(tint)
+                .frame(width: 24, alignment: .center)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(SettingsTheme.ink)
+
+                Text(message)
+                    .font(.system(size: 12))
+                    .foregroundStyle(SettingsTheme.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
             Spacer(minLength: 0)
         }
-        .font(.callout)
-        .padding(.horizontal, 18)
-        .padding(.vertical, 15)
-        .background(SettingsTheme.accent.opacity(0.07), in: RoundedRectangle(cornerRadius: 8))
-        .overlay(RoundedRectangle(cornerRadius: 8).stroke(SettingsTheme.accent.opacity(0.18)))
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .frame(maxWidth: .infinity, minHeight: 46, alignment: .leading)
+        .background(SettingsTheme.surfaceSoft, in: RoundedRectangle(cornerRadius: 8))
     }
 }
 
 struct SearchField: View {
     let placeholder: String
     @Binding var text: String
+    @FocusState private var isFocused: Bool
 
     var body: some View {
         HStack(spacing: 10) {
@@ -898,20 +735,31 @@ struct SearchField: View {
             TextField(placeholder, text: $text)
                 .textFieldStyle(.plain)
                 .foregroundStyle(SettingsTheme.ink)
-            if !text.isEmpty {
-                Button {
-                    text = ""
-                } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .foregroundStyle(.tertiary)
-                }
-                .buttonStyle(.plain)
+                .focused($isFocused)
+                .accessibilityLabel(placeholder)
+            Button {
+                text = ""
+                isFocused = true
+            } label: {
+                Image(systemName: "xmark.circle.fill")
+                    .foregroundStyle(SettingsTheme.tertiary)
+                    .frame(width: 16, height: 20)
             }
+            .buttonStyle(.plain)
+            .opacity(text.isEmpty ? 0 : 1)
+            .disabled(text.isEmpty)
+            .accessibilityHidden(text.isEmpty)
+            .accessibilityLabel("清除搜索")
+            .help("清除搜索")
         }
+        .font(.system(size: 13))
         .padding(.horizontal, 12)
         .frame(minWidth: 220, maxWidth: 360, minHeight: 36)
-        .background(SettingsTheme.surfaceElevated, in: RoundedRectangle(cornerRadius: 8))
-        .overlay(RoundedRectangle(cornerRadius: 8).stroke(SettingsTheme.hairline))
+        .background(SettingsTheme.controlBackground, in: RoundedRectangle(cornerRadius: 8))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .strokeBorder(isFocused ? SettingsTheme.accent : Color.clear, lineWidth: 1)
+        )
     }
 }
 
@@ -926,6 +774,68 @@ struct PageToolbar<Leading: View, Trailing: View>: View {
             trailing
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+struct SettingsTableHeaderStyle: ViewModifier {
+    func body(content: Content) -> some View {
+        content
+            .font(.system(size: 12, weight: .medium))
+            .foregroundStyle(SettingsTheme.muted)
+            .padding(.horizontal, 18)
+            .frame(height: 36)
+            .frame(maxWidth: .infinity)
+            .background(SettingsTheme.subtleFill)
+    }
+}
+
+extension View {
+    func settingsTableHeaderStyle() -> some View {
+        modifier(SettingsTableHeaderStyle())
+    }
+}
+
+struct FilterTabButton: View {
+    let title: String
+    let isSelected: Bool
+    let action: () -> Void
+    @State private var isHovered = false
+
+    var body: some View {
+        Button(action: action) {
+            Text(title)
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(isSelected ? SettingsTheme.ink : SettingsTheme.muted)
+                .padding(.horizontal, 12)
+                .frame(height: 30)
+                .background(
+                    isSelected ? SettingsTheme.selectionFill : (isHovered ? SettingsTheme.subtleFill : Color.clear),
+                    in: RoundedRectangle(cornerRadius: 7)
+                )
+                .contentShape(RoundedRectangle(cornerRadius: 7))
+        }
+        .buttonStyle(.plain)
+        .onHover { isHovered = $0 }
+        .animation(.easeOut(duration: 0.12), value: isHovered)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+}
+
+private struct HoverableRowBackground: ViewModifier {
+    @State private var isHovered = false
+
+    func body(content: Content) -> some View {
+        content
+            .background(isHovered ? SettingsTheme.subtleFill : Color.clear)
+            .contentShape(Rectangle())
+            .onHover { isHovered = $0 }
+            .animation(.easeOut(duration: 0.12), value: isHovered)
+    }
+}
+
+extension View {
+    func hoverRowBackground() -> some View {
+        modifier(HoverableRowBackground())
     }
 }
 
@@ -971,10 +881,10 @@ struct IconBadge: View {
 
     var body: some View {
         Image(systemName: systemImage)
-            .font(.system(size: 20, weight: .semibold))
+            .font(.system(size: 18, weight: .regular))
             .foregroundStyle(tint)
-            .frame(width: 46, height: 46)
-            .background(tint.opacity(0.09), in: RoundedRectangle(cornerRadius: 8))
+            .frame(width: 36, height: 36)
+            .background(SettingsTheme.surfaceSoft, in: RoundedRectangle(cornerRadius: 8))
     }
 }
 
@@ -997,7 +907,7 @@ enum RowIconControlTone {
     var hoverBackground: Color {
         switch self {
         case .neutral:
-            return SettingsTheme.accent.opacity(0.08)
+            return SettingsTheme.controlBackgroundHover
         case .accent:
             return SettingsTheme.accent.opacity(0.12)
         case .destructive:
@@ -1008,7 +918,7 @@ enum RowIconControlTone {
     var hoverStroke: Color {
         switch self {
         case .neutral:
-            return SettingsTheme.accent.opacity(0.18)
+            return Color.clear
         case .accent:
             return SettingsTheme.accent.opacity(0.24)
         case .destructive:
@@ -1034,7 +944,7 @@ struct RowIconControlLabel: View {
             .background(background, in: RoundedRectangle(cornerRadius: cornerRadius))
             .overlay(
                 RoundedRectangle(cornerRadius: cornerRadius)
-                    .stroke(stroke)
+                    .strokeBorder(stroke, lineWidth: 0.5)
             )
             .contentShape(RoundedRectangle(cornerRadius: cornerRadius))
             .onHover { hovering in
@@ -1057,9 +967,9 @@ struct RowIconControlLabel: View {
 
     private var stroke: Color {
         if isDisabled {
-            return SettingsTheme.hairline.opacity(0.65)
+            return Color.clear
         }
-        return isHovered ? tone.hoverStroke : SettingsTheme.hairline
+        return isHovered ? tone.hoverStroke : Color.clear
     }
 }
 
@@ -1085,4 +995,3 @@ struct RowIconButton: View {
         .accessibilityLabel(accessibilityLabel)
     }
 }
-

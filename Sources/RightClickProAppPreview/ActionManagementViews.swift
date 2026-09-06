@@ -224,7 +224,8 @@ struct ActionListView: View {
                     }
                 }
                 .padding(.horizontal, 28)
-                .padding(.vertical, 18)
+                .padding(.top, 24)
+                .padding(.bottom, 24)
                 .frame(width: metrics.contentWidth + 56, alignment: .topLeading)
                 .frame(maxWidth: .infinity, alignment: .topLeading)
             }
@@ -234,9 +235,14 @@ struct ActionListView: View {
 
     private func layoutMetrics(for availableWidth: CGFloat) -> (contentWidth: CGFloat, tableWidth: CGFloat, previewWidth: CGFloat) {
         let contentWidth = max(availableWidth - 56, 760)
-        let previewWidth: CGFloat = contentWidth >= 980 ? 322 : 0
-        let spacing: CGFloat = previewWidth > 0 ? 22 : 0
-        let tableWidth = max(690, contentWidth - previewWidth - spacing)
+        let minimumTableWidth: CGFloat = 690
+        let preferredPreviewWidth: CGFloat = 322
+        let previewSpacing: CGFloat = 18
+        let previewWidth: CGFloat = contentWidth >= minimumTableWidth + preferredPreviewWidth + previewSpacing
+            ? preferredPreviewWidth
+            : 0
+        let spacing: CGFloat = previewWidth > 0 ? previewSpacing : 0
+        let tableWidth = max(minimumTableWidth, contentWidth - previewWidth - spacing)
         return (contentWidth, tableWidth, previewWidth)
     }
 }
@@ -412,20 +418,12 @@ struct ActionFilterTabs: View {
     var body: some View {
         HStack(spacing: 8) {
             ForEach(ActionManagementFilter.allCases) { filter in
-                Button {
+                FilterTabButton(
+                    title: "\(filter.rawValue) (\(counts[filter, default: 0]))",
+                    isSelected: selectedFilter == filter
+                ) {
                     selectedFilter = filter
-                } label: {
-                    Text("\(filter.rawValue) (\(counts[filter, default: 0]))")
-                        .font(.system(size: 13, weight: selectedFilter == filter ? .semibold : .medium))
-                        .foregroundStyle(selectedFilter == filter ? .white : SettingsTheme.muted)
-                        .padding(.horizontal, 12)
-                        .frame(height: 30)
-                        .background(
-                            selectedFilter == filter ? SettingsTheme.accent : Color.clear,
-                            in: RoundedRectangle(cornerRadius: 7)
-                        )
                 }
-                .buttonStyle(.plain)
             }
 
             Spacer(minLength: 0)
@@ -438,7 +436,7 @@ struct ActionFilterTabs: View {
 struct ActionTableHeader: View {
     var body: some View {
         HStack(spacing: 12) {
-            Text("排序").frame(width: 54, alignment: .center)
+            Text("排序").frame(width: 58, alignment: .center)
             Text("菜单项").frame(maxWidth: .infinity, alignment: .leading)
             Text("状态").frame(width: 56, alignment: .center)
             Text("适用范围").frame(width: 130, alignment: .leading)
@@ -446,11 +444,7 @@ struct ActionTableHeader: View {
             Text("类型").frame(width: 58, alignment: .leading)
             Text("操作").frame(width: 40, alignment: .center)
         }
-        .font(.system(size: 12, weight: .medium))
-        .foregroundStyle(SettingsTheme.muted)
-        .padding(.horizontal, 18)
-        .frame(height: 42)
-        .background(SettingsTheme.subtleFill)
+        .settingsTableHeaderStyle()
     }
 }
 
@@ -472,7 +466,7 @@ struct ActionEditorRow: View {
                 onMoveUp: onMoveUp,
                 onMoveDown: onMoveDown
             )
-            .frame(width: 54)
+            .frame(width: 58)
 
             HStack(spacing: 12) {
                 MenuIconView(
@@ -498,13 +492,12 @@ struct ActionEditorRow: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .layoutPriority(3)
 
-            Toggle("启用", isOn: Binding(
+            Toggle("启用 \(action.title)", isOn: Binding(
                 get: { action.isEnabled },
                 set: { viewModel.setActionEnabled($0, actionID: action.id) }
             ))
             .toggleStyle(.switch)
             .labelsHidden()
-            .scaleEffect(0.86)
             .frame(width: 56)
 
             ActionVisibilityMenu(action: action, viewModel: viewModel)
@@ -531,6 +524,7 @@ struct ActionEditorRow: View {
         }
         .padding(.horizontal, 18)
         .frame(height: 56)
+        .hoverRowBackground()
         .opacity(action.isEnabled ? 1 : 0.6)
     }
 }
@@ -1069,25 +1063,11 @@ struct ActionInfoChip: View {
 
 struct ActionManagementHintBar: View {
     var body: some View {
-        HStack(spacing: 10) {
-            Image(systemName: "info.circle.fill")
-                .font(.system(size: 16, weight: .semibold))
-                .foregroundStyle(SettingsTheme.accent)
-            Text("提示：使用左侧箭头")
-                .font(.system(size: 12))
-                .foregroundStyle(SettingsTheme.muted)
-            Image(systemName: "circle.grid.2x3.fill")
-                .font(.system(size: 9, weight: .medium))
-                .foregroundStyle(SettingsTheme.muted.opacity(0.7))
-            Text("调整菜单顺序，控制右键菜单的展示位置。")
-                .font(.system(size: 12))
-                .foregroundStyle(SettingsTheme.muted)
-            Spacer(minLength: 0)
-        }
-        .padding(.horizontal, 16)
-        .frame(maxWidth: .infinity, minHeight: 38)
-        .background(SettingsTheme.accent.opacity(0.055), in: RoundedRectangle(cornerRadius: 8))
-        .overlay(RoundedRectangle(cornerRadius: 8).stroke(SettingsTheme.accent.opacity(0.14)))
+        SettingsHintBanner(
+            icon: "lightbulb",
+            title: "提示：",
+            message: "使用行首的上下箭头调整菜单顺序，控制右键菜单的展示位置。"
+        )
     }
 }
 
@@ -1145,25 +1125,23 @@ struct ActionPreviewContextPicker: View {
                     selectedContext = context
                 } label: {
                     Text(context.rawValue)
-                        .font(.system(size: 11, weight: selectedContext == context ? .semibold : .medium))
-                        .foregroundStyle(selectedContext == context ? SettingsTheme.accent : SettingsTheme.muted)
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(selectedContext == context ? SettingsTheme.ink : SettingsTheme.muted)
                         .frame(maxWidth: .infinity)
-                        .frame(height: 30)
+                        .frame(height: 28)
                         .background(
                             selectedContext == context ? SettingsTheme.surfaceElevated : Color.clear,
                             in: RoundedRectangle(cornerRadius: 6)
                         )
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 6)
-                                .stroke(selectedContext == context ? SettingsTheme.accent.opacity(0.18) : Color.clear)
-                        )
+                        .contentShape(RoundedRectangle(cornerRadius: 6))
                 }
                 .buttonStyle(.plain)
+                .accessibilityAddTraits(selectedContext == context ? .isSelected : [])
             }
         }
         .padding(4)
         .background(SettingsTheme.subtleFill, in: RoundedRectangle(cornerRadius: 8))
-        .overlay(RoundedRectangle(cornerRadius: 8).stroke(SettingsTheme.hairline))
+        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(SettingsTheme.hairline, lineWidth: 0.5))
     }
 }
 
@@ -1309,4 +1287,3 @@ struct FinderContextMenuGroupRow: View {
         .frame(height: 26)
     }
 }
-

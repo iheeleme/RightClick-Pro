@@ -85,18 +85,14 @@ struct CommandTemplateTableHeader: View {
     var body: some View {
         HStack(spacing: 14) {
             Text("排序").frame(width: 58, alignment: .center)
-            Text("名称").frame(width: 170, alignment: .leading)
+            Text("名称").frame(width: 220, alignment: .leading)
             Text("命令").frame(maxWidth: .infinity, alignment: .leading)
             Text("超时").frame(width: 70, alignment: .leading)
             Text("环境").frame(width: 72, alignment: .leading)
             Text("启用").frame(width: 64, alignment: .center)
             Text("操作").frame(width: 116, alignment: .center)
         }
-        .font(.system(size: 13, weight: .semibold))
-        .foregroundStyle(SettingsTheme.muted)
-        .padding(.horizontal, 14)
-        .frame(height: 38)
-        .background(SettingsTheme.pageOverlay)
+        .settingsTableHeaderStyle()
     }
 }
 
@@ -143,7 +139,8 @@ struct CommandTemplateTableRow: View {
                 }
             }
             .buttonStyle(.plain)
-            .frame(width: 170, alignment: .leading)
+            .frame(width: 220, alignment: .leading)
+            .help(template.title)
 
             Text(template.command)
                 .font(.system(size: 12, design: .monospaced))
@@ -203,8 +200,9 @@ struct CommandTemplateTableRow: View {
             }
             .frame(width: 116)
         }
-        .padding(.horizontal, 14)
-        .frame(height: 54)
+        .padding(.horizontal, 18)
+        .frame(height: 52)
+        .hoverRowBackground()
         .opacity((matchingAction?.isEnabled ?? true) ? 1 : 0.55)
     }
 
@@ -249,28 +247,11 @@ struct CommandMenuPreviewPanel: View {
 
 struct CommandHintBanner: View {
     var body: some View {
-        HStack(alignment: .center, spacing: 12) {
-            Image(systemName: "lock.shield")
-                .font(.system(size: 18, weight: .regular))
-                .foregroundStyle(.orange)
-                .frame(width: 24)
-
-            Text("安全边界：")
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(.orange)
-
-            Text("命令由 ActionRunner.xpc 执行；访问受 macOS 完全磁盘访问权限控制，敏感环境变量存入 Keychain。")
-                .font(.system(size: 13))
-                .foregroundStyle(SettingsTheme.muted)
-                .lineLimit(1)
-                .minimumScaleFactor(0.82)
-
-            Spacer(minLength: 0)
-        }
-        .padding(.horizontal, 16)
-        .frame(maxWidth: .infinity, minHeight: 48)
-        .background(.orange.opacity(0.055), in: RoundedRectangle(cornerRadius: 8))
-        .overlay(RoundedRectangle(cornerRadius: 8).stroke(.orange.opacity(0.18)))
+        SettingsHintBanner(
+            icon: "lock.shield",
+            title: "安全边界：",
+            message: "命令由 ActionRunner.xpc 执行；访问受 macOS 完全磁盘访问权限控制，敏感环境变量存入 Keychain。",
+            tint: .orange
+        )
     }
 }
-

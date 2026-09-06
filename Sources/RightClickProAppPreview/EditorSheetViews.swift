@@ -12,15 +12,14 @@ struct EditorSheetHeader: View {
     var body: some View {
         HStack(alignment: .center, spacing: 14) {
             Image(systemName: systemImage)
-                .font(.system(size: 20, weight: .semibold))
+                .font(.system(size: 18, weight: .regular))
                 .foregroundStyle(tint)
                 .frame(width: 42, height: 42)
-                .background(tint.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
-                .overlay(RoundedRectangle(cornerRadius: 8).stroke(tint.opacity(0.16)))
+                .background(SettingsTheme.surfaceSoft, in: RoundedRectangle(cornerRadius: 8))
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(title)
-                    .font(.system(size: 20, weight: .bold))
+                    .font(.system(size: 18, weight: .semibold))
                     .foregroundStyle(SettingsTheme.ink)
                     .lineLimit(1)
                 Text(subtitle)
@@ -43,6 +42,7 @@ struct EditorTextField: View {
     var helper: String? = nil
     var systemImage: String? = nil
     @Binding var text: String
+    @FocusState private var isFocused: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 7) {
@@ -63,11 +63,16 @@ struct EditorTextField: View {
                     .font(.system(size: 13))
                     .foregroundStyle(SettingsTheme.ink)
                     .lineLimit(1)
+                    .focused($isFocused)
+                    .accessibilityLabel(title)
             }
             .padding(.horizontal, 11)
             .frame(height: 36)
-            .background(SettingsTheme.surfaceElevated, in: RoundedRectangle(cornerRadius: 8))
-            .overlay(RoundedRectangle(cornerRadius: 8).stroke(SettingsTheme.hairline))
+            .background(SettingsTheme.controlBackground, in: RoundedRectangle(cornerRadius: 8))
+            .overlay(
+                RoundedRectangle(cornerRadius: 8)
+                    .strokeBorder(isFocused ? SettingsTheme.accent : SettingsTheme.hairline, lineWidth: isFocused ? 1 : 0.5)
+            )
 
             if let helper {
                 Text(helper)
@@ -83,6 +88,7 @@ struct EditorTextArea: View {
     let title: String
     let helper: String
     @Binding var text: String
+    @FocusState private var isFocused: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -96,13 +102,18 @@ struct EditorTextArea: View {
             }
 
             TextEditor(text: $text)
-                .font(.body.monospaced())
+                .font(.system(size: 13, design: .monospaced))
                 .foregroundStyle(SettingsTheme.ink)
+                .focused($isFocused)
+                .accessibilityLabel(title)
                 .scrollContentBackground(.hidden)
                 .padding(8)
                 .frame(minHeight: 176)
-                .background(SettingsTheme.surfaceElevated, in: RoundedRectangle(cornerRadius: 8))
-                .overlay(RoundedRectangle(cornerRadius: 8).stroke(SettingsTheme.hairline))
+                .background(SettingsTheme.controlBackground, in: RoundedRectangle(cornerRadius: 8))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8)
+                        .strokeBorder(isFocused ? SettingsTheme.accent : SettingsTheme.hairline, lineWidth: isFocused ? 1 : 0.5)
+                )
         }
     }
 }
@@ -129,6 +140,7 @@ struct EditorSheetFooter: View {
             Button("取消", role: .cancel) {
                 onCancel()
             }
+            .buttonStyle(SettingsButtonStyle())
             .keyboardShortcut(.cancelAction)
 
             Button {
@@ -137,7 +149,7 @@ struct EditorSheetFooter: View {
                 Label("保存", systemImage: "checkmark")
                     .frame(minWidth: 64)
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(SettingsButtonStyle(isPrimary: true))
             .keyboardShortcut(.defaultAction)
             .disabled(!canSave)
         }
@@ -753,8 +765,7 @@ struct DeveloperApplicationPickerCard: View {
                     Label(draft.bundleIdentifier.isEmpty ? "选择应用" : "更换应用", systemImage: "app.badge")
                         .lineLimit(1)
                 }
-                .buttonStyle(.bordered)
-                .controlSize(.regular)
+                .buttonStyle(SettingsButtonStyle())
             }
             .padding(12)
             .background(SettingsTheme.surfaceElevated, in: RoundedRectangle(cornerRadius: 8))
@@ -771,4 +782,3 @@ struct DeveloperApplicationPickerCard: View {
         draft.bundleIdentifier.isEmpty ? .systemSymbol("app") : .appBundleIdentifier(draft.bundleIdentifier)
     }
 }
-
