@@ -2,6 +2,25 @@ import XCTest
 @testable import RightClickProCore
 
 final class StorageTests: XCTestCase {
+    func testActionResultSupportsLegacyPayloadAndRemainingURLsRoundTrip() throws {
+        let result = ActionResult(
+            requestID: UUID(), status: .failure, message: "Partial failure",
+            affectedURLs: [URL(fileURLWithPath: "/tmp/completed.txt")],
+            remainingURLs: [URL(fileURLWithPath: "/tmp/pending.txt")]
+        )
+        let data = try JSONEncoder().encode(result)
+        XCTAssertEqual(try JSONDecoder().decode(ActionResult.self, from: data), result)
+
+        var legacy = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        legacy.removeValue(forKey: "remainingURLs")
+        let decoded = try JSONDecoder().decode(
+            ActionResult.self,
+            from: JSONSerialization.data(withJSONObject: legacy)
+        )
+        XCTAssertEqual(decoded.affectedURLs, result.affectedURLs)
+        XCTAssertEqual(decoded.remainingURLs, [])
+    }
+
     func testJSONFileStoreRoundTripsConfig() throws {
         let directory = try temporaryDirectory()
         let url = directory.appendingPathComponent("config.json")

@@ -1,0 +1,6 @@
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"Core/XPC/packaging quality contracts"}
+{"file":".trellis/spec/backend/error-handling.md","reason":"Action and XPC failure mapping"}
+{"file":".trellis/spec/backend/logging-guidelines.md","reason":"Operation history and diagnostics"}
+{"file":".trellis/spec/backend/database-guidelines.md","reason":"Configuration rollback, bootstrap marker, and file-backed state"}
+{"file":".trellis/spec/frontend/state-management.md","reason":"Settings persistence and command mutations"}
+{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"Settings UI verification"}

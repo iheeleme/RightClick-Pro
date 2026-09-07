@@ -30,6 +30,10 @@ let package = Package(
         .testTarget(
             name: "RightClickProCoreTests",
             dependencies: ["RightClickProCore"]
+        ),
+        .testTarget(
+            name: "RightClickProAppPreviewTests",
+            dependencies: ["RightClickProAppPreview", "RightClickProCore"]
         )
     ]
 )

@@ -1,0 +1,6 @@
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"Core/XPC/packaging quality checks"}
+{"file":".trellis/spec/backend/error-handling.md","reason":"Error propagation review"}
+{"file":".trellis/spec/backend/logging-guidelines.md","reason":"Operation log review"}
+{"file":".trellis/spec/backend/database-guidelines.md","reason":"Configuration rollback, bootstrap marker, and file-backed state"}
+{"file":".trellis/spec/frontend/state-management.md","reason":"Unsaved state and persistence review"}
+{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"UI smoke and compile checks"}

@@ -30,6 +30,7 @@ final class FinderSyncController: FIFinderSync, @unchecked Sendable {
     private var hasLoadedConfiguration = false
     private var lastCacheRefresh = Date.distantPast
     private var isRefreshingCache = false
+    private var needsForcedCacheRefresh = false
     private var iconCache: [String: NSImage] = [:]
     private var placeholderIconCache: [String: NSImage] = [:]
     private var pendingIconResolutionKeys: Set<String> = []
@@ -45,10 +46,33 @@ final class FinderSyncController: FIFinderSync, @unchecked Sendable {
         self.paths = paths
         self.configProvider = FileBackedRightClickProConfigProvider(paths: paths)
         super.init()
+        DistributedNotificationCenter.default().addObserver(
+            self,
+            selector: #selector(handleConfigurationChangedNotification),
+            name: Notification.Name(RightClickProConstants.configurationChangedNotificationName),
+            object: nil
+        )
         applyFallbackConfiguration()
         installGlobalFinderSyncScope()
         loadConfigurationForStartupInBackground()
         repairConfigurationInBackground(paths: paths)
+    }
+
+    deinit {
+        DistributedNotificationCenter.default().removeObserver(
+            self,
+            name: Notification.Name(RightClickProConstants.configurationChangedNotificationName),
+            object: nil
+        )
+    }
+
+    @objc private func handleConfigurationChangedNotification() {
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.configRefreshGeneration += 1
+            self.needsForcedCacheRefresh = true
+            self.refreshConfigurationFromDiskIfNeeded()
+        }
     }
 
     override func menu(for menuKind: FIMenuKind) -> NSMenu? {
@@ -130,11 +154,13 @@ final class FinderSyncController: FIFinderSync, @unchecked Sendable {
     }
 
     private func refreshConfigurationFromDiskIfNeeded() {
-        guard !isRefreshingCache, abs(lastCacheRefresh.timeIntervalSinceNow) > cacheRefreshInterval else {
+        guard !isRefreshingCache,
+              needsForcedCacheRefresh || abs(lastCacheRefresh.timeIntervalSinceNow) > cacheRefreshInterval else {
             return
         }
 
         isRefreshingCache = true
+        needsForcedCacheRefresh = false
         cacheRefreshQueue.async { [weak self] in
             guard let self else { return }
             let loadedConfig = try? self.configProvider.loadConfig()
@@ -142,6 +168,11 @@ final class FinderSyncController: FIFinderSync, @unchecked Sendable {
 
             DispatchQueue.main.async {
                 self.isRefreshingCache = false
+                // 读取期间又收到保存通知时，重新读取，不能把旧结果当作最新配置。
+                if self.needsForcedCacheRefresh {
+                    self.refreshConfigurationFromDiskIfNeeded()
+                    return
+                }
                 guard let loadedConfig, let loadedBookmarks else {
                     return
                 }
@@ -315,14 +346,49 @@ final class FinderSyncController: FIFinderSync, @unchecked Sendable {
             return
         }
 
+        let actionKind = cachedConfig.actions.first(where: { $0.id == request.actionID })?.kind
         xpcClient.perform(request) { result in
             switch result {
             case .success(let actionResult):
                 NSLog("RightClick Pro ActionRunner result for \(request.actionID): \(actionResult.status.rawValue) \(actionResult.message)")
+                if actionResult.status != .success {
+                    self.publishActionFailure(request: request, actionKind: actionKind, message: actionResult.message)
+                }
             case .failure(let error):
                 NSLog("RightClick Pro ActionRunner failed for \(request.actionID): \(error.localizedDescription)")
+                self.appendActionFailureRecord(request: request, actionKind: actionKind, message: error.localizedDescription)
+                self.publishActionFailure(request: request, actionKind: actionKind, message: error.localizedDescription)
             }
         }
+    }
+
+    private func appendActionFailureRecord(request: ActionRequest, actionKind: ActionKind?, message: String) {
+        let record = OperationRecord(
+            actionID: request.actionID,
+            kind: actionKind.map(OperationKind.init(actionKind:)) ?? .unsupported,
+            status: .failure,
+            sourcePaths: request.context.selectedItems.map(\.path),
+            destinationPaths: [request.context.targetDirectory.path],
+            message: message
+        )
+        do {
+            try JSONLineOperationLog(url: paths.operationLogURL).append(record)
+        } catch {
+            NSLog("RightClick Pro failed to persist XPC failure history for \(request.actionID): \(error.localizedDescription)")
+        }
+    }
+
+    private func publishActionFailure(request: ActionRequest, actionKind: ActionKind?, message: String) {
+        DistributedNotificationCenter.default().postNotificationName(
+            Notification.Name(RightClickProConstants.actionFailureNotificationName),
+            object: nil,
+            userInfo: [
+                RightClickProConstants.actionFailureActionIDKey: request.actionID,
+                RightClickProConstants.actionFailureActionKindKey: actionKind?.rawValue ?? "unknown",
+                RightClickProConstants.actionFailureMessageKey: message
+            ],
+            deliverImmediately: true
+        )
     }
 
     private func routeCommandTemplateToMainApp(_ request: ActionRequest) -> Bool {

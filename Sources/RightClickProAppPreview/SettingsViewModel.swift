@@ -34,6 +34,21 @@ private enum GitHubReleaseCheckResponse: Sendable {
     case failure(String)
 }
 
+/// 草稿阶段只在内存中保存敏感值；提交配置时再写入真实 Keychain。
+private struct PendingCommandSecret: Sendable {
+    var reference: String
+    var value: String
+}
+
+private struct ConfigurationRollbackError: LocalizedError {
+    var saveMessage: String
+    var rollbackMessage: String
+
+    var errorDescription: String? {
+        "\(saveMessage)；原书签恢复失败：\(rollbackMessage)"
+    }
+}
+
 private enum GitHubReleaseClient {
     static func fetchLatestRelease(from url: URL) async -> GitHubReleaseCheckResponse {
         var request = URLRequest(url: url)
@@ -227,16 +242,32 @@ final class SettingsViewModel: NSObject, ObservableObject {
     @Published private(set) var launchAtLoginStatus: LaunchAtLoginStatus = .unchecked
     @Published private(set) var updateCheckStatus: UpdateCheckStatus = .unchecked
 
-    private var paths = RightClickProStoragePaths.defaultForCurrentProcess()
-    private let commandSecretStore = KeychainCommandSecretStore()
+    private var paths: RightClickProStoragePaths
+    private let commandSecretStore: CommandSecretStoring
     private let actionRunnerClient = RightClickProActionRunnerXPCClient()
+    private var pendingCommandSecrets: [String: PendingCommandSecret] = [:]
 
-    override init() {
+    override convenience init() {
+        self.init(paths: .defaultForCurrentProcess())
+    }
+
+    init(
+        paths: RightClickProStoragePaths,
+        commandSecretStore: CommandSecretStoring = KeychainCommandSecretStore()
+    ) {
+        self.paths = paths
+        self.commandSecretStore = commandSecretStore
         super.init()
         DistributedNotificationCenter.default().addObserver(
             self,
             selector: #selector(handlePendingCommandRunNotification),
             name: Notification.Name(RightClickProConstants.pendingCommandRunNotificationName),
+            object: nil
+        )
+        DistributedNotificationCenter.default().addObserver(
+            self,
+            selector: #selector(handleActionFailureNotification(_:)),
+            name: Notification.Name(RightClickProConstants.actionFailureNotificationName),
             object: nil
         )
         NotificationCenter.default.addObserver(
@@ -394,7 +425,7 @@ final class SettingsViewModel: NSObject, ObservableObject {
 
     func loadOrBootstrap() {
         do {
-            let result = try ConfigurationBootstrapper().bootstrap()
+            let result = try ConfigurationBootstrapper().bootstrap(paths: paths)
             apply(result: result)
 
             if result.didCreateConfig || result.didCreateBookmarks {
@@ -413,14 +444,13 @@ final class SettingsViewModel: NSObject, ObservableObject {
             let bootstrapper = ConfigurationBootstrapper()
             let defaultBookmarks = bootstrapper.defaultBookmarks()
             let defaultConfig = bootstrapper.defaultConfig(bookmarks: defaultBookmarks)
-
-            try JSONFileStore<DirectoryBookmarkCatalog>(url: paths.bookmarksURL).save(defaultBookmarks)
-            try JSONFileStore<RightClickProConfig>(url: paths.configURL).save(defaultConfig)
+            try persistConfiguration(defaultConfig, bookmarks: defaultBookmarks)
 
             bookmarks = defaultBookmarks
             config = defaultConfig
             hasUnsavedChanges = false
             reloadRecentOperations()
+            pendingCommandSecrets.removeAll()
             setStatus("已恢复默认预览配置", tone: .success)
         } catch {
             setStatus("恢复默认配置失败：\(error.localizedDescription)", tone: .error)
@@ -430,10 +460,9 @@ final class SettingsViewModel: NSObject, ObservableObject {
     func saveConfig() {
         do {
             try validateConfig()
-            try JSONFileStore<DirectoryBookmarkCatalog>(url: paths.bookmarksURL).save(bookmarks)
-            try JSONFileStore<RightClickProConfig>(url: paths.configURL).save(config)
+            try persistConfiguration(config, bookmarks: bookmarks)
             hasUnsavedChanges = false
-            setStatus("配置已保存，重新打开 Finder 右键菜单后生效", tone: .success)
+            setStatus("配置已保存，已通知 Finder 刷新右键菜单", tone: .success)
         } catch {
             setStatus("保存失败：\(error.localizedDescription)", tone: .error)
         }
@@ -635,6 +664,29 @@ final class SettingsViewModel: NSObject, ObservableObject {
         }
     }
 
+    @objc nonisolated private func handleActionFailureNotification(_ notification: Notification) {
+        let userInfo = notification.userInfo
+        let actionID = userInfo?[RightClickProConstants.actionFailureActionIDKey] as? String
+        let message = userInfo?[RightClickProConstants.actionFailureMessageKey] as? String
+            ?? "Finder 扩展返回了未知错误"
+        Task { @MainActor [weak self, actionID, message] in
+            guard let self else { return }
+            let actionTitle = actionID.flatMap { id in
+                self.config.actions.first(where: { $0.id == id })?.title
+            } ?? actionID ?? "Finder 操作"
+            // Finder 可能在 App 未激活时发送通知，先刷新持久化历史，再保留错误状态。
+            do {
+                recentOperations = try JSONLineOperationLog(url: paths.operationLogURL)
+                    .loadRecent()
+                    .suffix(80)
+                    .reversed()
+            } catch {
+                // 失败通知本身仍然要可见，历史文件异常不能覆盖原始动作错误。
+            }
+            setStatus("\(actionTitle)失败：\(message)", tone: .error)
+        }
+    }
+
     @objc private func handleApplicationDidBecomeActive() {
         handlePendingCommandRunNotification()
         refreshLaunchAtLoginStatus()
@@ -827,9 +879,26 @@ final class SettingsViewModel: NSObject, ObservableObject {
 
     func upsertCommandTemplate(_ draft: CommandTemplateDraft) {
         do {
-            let template = try draft.makeTemplate(secretStore: commandSecretStore)
+            // makeTemplate 只写入临时内存 store，编辑器取消或丢弃主保存时不会触碰 Keychain。
+            let draftSecretStore = InMemoryCommandSecretStore()
+            var template = try draft.makeTemplate(secretStore: draftSecretStore)
+            for index in template.environment.indices {
+                guard
+                    template.environment[index].isSensitive,
+                    let oldReference = template.environment[index].secretReference,
+                    let secret = draftSecretStore.secrets[oldReference]
+                else {
+                    continue
+                }
+
+                let newReference = "command-env-\(template.id)-\(template.environment[index].name)-\(UUID().uuidString)"
+                template.environment[index].secretReference = newReference
+                pendingCommandSecrets[newReference] = PendingCommandSecret(
+                    reference: newReference,
+                    value: secret
+                )
+            }
             if let originalID = draft.originalID, let index = config.commandTemplates.firstIndex(where: { $0.id == originalID }) {
-                deleteRemovedCommandSecrets(oldTemplate: config.commandTemplates[index], newTemplate: template)
                 config.commandTemplates[index] = template
                 updateCommandBackReferences(from: originalID, to: template.id)
             } else {
@@ -843,11 +912,6 @@ final class SettingsViewModel: NSObject, ObservableObject {
     }
 
     func deleteCommandTemplate(_ template: CommandTemplate) {
-        for variable in template.environment where variable.isSensitive {
-            if let reference = variable.secretReference {
-                try? commandSecretStore.delete(reference: reference)
-            }
-        }
         config.commandTemplates.removeAll { $0.id == template.id }
         config.actions.removeAll { action in
             action.kind == .runCommand && action.payload.commandTemplateID == template.id
@@ -877,6 +941,16 @@ final class SettingsViewModel: NSObject, ObservableObject {
     }
 
     func runCommandTemplateFromSettings(_ template: CommandTemplate) {
+        guard !hasUnsavedChanges else {
+            setStatus("命令模板有未保存更改，请先保存配置后再运行", tone: .warning)
+            return
+        }
+
+        guard config.commandTemplates.contains(where: { $0.id == template.id }) else {
+            setStatus("命令模板尚未保存，保存配置后才能运行", tone: .warning)
+            return
+        }
+
         guard let action = config.actions.first(where: { $0.kind == .runCommand && $0.payload.commandTemplateID == template.id }) else {
             setStatus("找不到命令模板对应菜单动作", tone: .warning)
             return
@@ -993,6 +1067,7 @@ final class SettingsViewModel: NSObject, ObservableObject {
         bookmarks = result.bookmarks
         storagePath = result.paths.baseURL.path
         hasUnsavedChanges = false
+        pendingCommandSecrets.removeAll()
         recentOperations = (try? JSONLineOperationLog(url: result.paths.operationLogURL).loadRecent().suffix(80).reversed()) ?? []
     }
 
@@ -1345,19 +1420,6 @@ final class SettingsViewModel: NSObject, ObservableObject {
         )
     }
 
-    private func deleteRemovedCommandSecrets(oldTemplate: CommandTemplate, newTemplate: CommandTemplate) {
-        let newReferences = Set(newTemplate.environment.compactMap(\.secretReference))
-        for variable in oldTemplate.environment where variable.isSensitive {
-            guard
-                let reference = variable.secretReference,
-                !newReferences.contains(reference)
-            else {
-                continue
-            }
-            try? commandSecretStore.delete(reference: reference)
-        }
-    }
-
     private func checkForPendingCommandRun() {
         let store = JSONFileStore<PendingCommandRunRequest>(url: paths.pendingCommandRunURL)
         guard let request = try? store.loadRequired() else {
@@ -1519,14 +1581,95 @@ final class SettingsViewModel: NSObject, ObservableObject {
     private func saveDirectoryChanges(_ message: String) {
         do {
             try validateConfig()
-            try JSONFileStore<DirectoryBookmarkCatalog>(url: paths.bookmarksURL).save(bookmarks)
-            try JSONFileStore<RightClickProConfig>(url: paths.configURL).save(config)
+            try persistConfiguration(config, bookmarks: bookmarks)
             hasUnsavedChanges = false
             setStatus(message, tone: .success)
         } catch {
             hasUnsavedChanges = true
             setStatus("保存目录配置失败：\(error.localizedDescription)", tone: .error)
         }
+    }
+
+    /// 将配置文件和敏感变量作为一个保存动作提交，避免草稿阶段提前写入 Keychain。
+    /// 新密钥先写入，文件落盘失败时回收本次写入；旧密钥只在新配置落盘后清理。
+    private func persistConfiguration(
+        _ newConfig: RightClickProConfig,
+        bookmarks newBookmarks: DirectoryBookmarkCatalog
+    ) throws {
+        let configStore = JSONFileStore<RightClickProConfig>(url: paths.configURL)
+        let previousBookmarkData = FileManager.default.fileExists(atPath: paths.bookmarksURL.path)
+            ? try Data(contentsOf: paths.bookmarksURL)
+            : nil
+        // 损坏的配置仍应允许用当前配置或恢复默认值修复。
+        let savedConfig = (try? configStore.loadRequired()) ?? config
+        let oldSecretReferences = Set(
+            savedConfig.commandTemplates.flatMap { template in
+                template.environment.compactMap { variable in
+                    variable.isSensitive ? variable.secretReference : nil
+                }
+            }
+        )
+        let newSecretReferences = Set(
+            newConfig.commandTemplates.flatMap { template in
+                template.environment.compactMap { variable in
+                    variable.isSensitive ? variable.secretReference : nil
+                }
+            }
+        )
+        let pendingSecretsToWrite = pendingCommandSecrets.values.filter {
+            newSecretReferences.contains($0.reference)
+        }
+        var writtenReferences: [String] = []
+        var didSaveBookmarks = false
+
+        do {
+            for pendingSecret in pendingSecretsToWrite {
+                try commandSecretStore.save(
+                    secret: pendingSecret.value,
+                    reference: pendingSecret.reference
+                )
+                writtenReferences.append(pendingSecret.reference)
+            }
+
+            try JSONFileStore<DirectoryBookmarkCatalog>(url: paths.bookmarksURL).save(newBookmarks)
+            didSaveBookmarks = true
+            try configStore.save(newConfig)
+        } catch {
+            for reference in writtenReferences {
+                try? commandSecretStore.delete(reference: reference)
+            }
+            // 两个文件不能原子提交；第二次写入失败时恢复第一份文件的原始内容。
+            if didSaveBookmarks {
+                do {
+                    if let previousBookmarkData {
+                        try previousBookmarkData.write(to: paths.bookmarksURL, options: [.atomic])
+                    } else {
+                        try FileManager.default.removeItem(at: paths.bookmarksURL)
+                    }
+                } catch let rollbackError {
+                    throw ConfigurationRollbackError(
+                        saveMessage: error.localizedDescription,
+                        rollbackMessage: rollbackError.localizedDescription
+                    )
+                }
+            }
+            throw error
+        }
+
+        for reference in oldSecretReferences.subtracting(newSecretReferences) {
+            try? commandSecretStore.delete(reference: reference)
+        }
+
+        let committedReferences = Set(writtenReferences)
+        pendingCommandSecrets = pendingCommandSecrets.filter { reference, _ in
+            newSecretReferences.contains(reference) && !committedReferences.contains(reference)
+        }
+        DistributedNotificationCenter.default().postNotificationName(
+            Notification.Name(RightClickProConstants.configurationChangedNotificationName),
+            object: nil,
+            userInfo: nil,
+            deliverImmediately: true
+        )
     }
 
     private func appendUnique(_ id: String, to ids: inout [String]) {

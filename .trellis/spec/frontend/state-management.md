@@ -19,6 +19,11 @@ Reference files: `Sources/RightClickProAppPreview/SettingsViewModel.swift` and t
 - `saveConfig()` validates and writes both `bookmarks.json` and `config.json`.
 - Directory add/edit/delete operations currently save immediately through `saveDirectoryChanges`.
 - Template/action/developer edits mark unsaved changes and require the main save action.
+- Command template drafts keep changed secrets in memory under fresh references. Only `persistConfiguration` writes them to Keychain; failed persistence removes newly written secrets and keeps the draft retryable. Compare old references against the saved config, and remove obsolete secrets only after config persistence succeeds.
+- Main save, directory auto-save, and reset use the same persistence path and post `configurationChangedNotificationName` after both config files are saved. The success message reports that Finder was notified, without claiming an acknowledged refresh.
+- Snapshot the original bookmark bytes before persistence. If config writing fails after bookmarks were saved, restore those bytes (or remove the newly created bookmark file); surface rollback failures separately and preserve the unsaved draft.
+- Settings must reject command execution while `hasUnsavedChanges` is true, because ActionRunner reads the saved config.
+- Finder failure notifications carry only action identity and error text. Read the persisted operation history and update UI state on the main actor.
 - `reloadRecentOperations()` reads `operation-log.jsonl` and keeps the latest 80 reversed for display.
 - Finder menu repair state lives in `SettingsViewModel.isRepairingFinderMenu`, `finderExtensionNeedsAttention`, and `finderExtensionSetupMessage`; the ViewModel sends `SystemMaintenanceRequest` through ActionRunner XPC instead of running system commands directly from SwiftUI.
 - Full Disk Access overview state lives in `SettingsViewModel.fullDiskAccessStatus`, but the overview must not probe authorization by reading protected directories. Present the System Settings shortcut and rely on runtime file-action failures to surface `FullDiskAccessAdvisor.userFacingMessage(for:)`.
@@ -248,3 +253,53 @@ Correct:
 ```swift
 let response = await GitHubReleaseClient.fetchLatestRelease(from: AppMetadata.latestReleaseAPIURL)
 ```
+
+## Scenario: Configuration Commit and Secret Drafts
+
+### 1. Scope / Trigger
+
+- Changes to settings save/reset, directory auto-save, command-secret drafts, or Finder configuration notifications.
+
+### 2. Signatures
+
+```swift
+persistConfiguration(_:bookmarks:) throws
+CommandSecretStoring.save(secret:reference:)
+CommandSecretStoring.delete(reference:)
+```
+
+### 3. Contracts
+
+- Draft secret values stay in memory under fresh references until configuration persistence begins.
+- Capture existing bookmark bytes, write new referenced secrets, then save bookmarks and config.
+- Only after both files succeed may obsolete saved secret references be deleted and Finder be notified.
+- This is rollback for synchronous save errors, not a crash-atomic transaction across two files.
+
+### 4. Validation & Error Matrix
+
+- New secret or bookmark write fails -> remove secrets written by this attempt and keep the draft retryable.
+- Config write fails -> also restore the previous bookmarks; report both errors if restoration fails.
+- Saved config is malformed -> allow reset to repair it and use known in-memory config to identify obsolete secrets.
+- Unsaved command run -> show the save requirement before opening the run window or calling XPC.
+
+### 5. Good/Base/Bad Cases
+
+- Good: a blocked config path leaves previous bookmarks and saved secrets intact; removing the blocker allows the same draft to save.
+- Base: save succeeds, rotates secret references, and publishes the configuration notification.
+- Bad: the UI reports a failed save while a new bookmark catalog remains on disk beside the old config.
+
+### 6. Tests Required
+
+- `SettingsViewModelTests`: draft isolation, reload, deletion, malformed-config reset, and unsaved-run rejection.
+- Block each file write separately; assert old bookmark bytes and secrets survive, the draft remains unsaved, and retry commits the new values.
+- Use temporary paths and `InMemoryCommandSecretStore`; do not mutate the user's real Keychain in automated tests.
+
+### 7. Wrong vs Correct
+
+```swift
+// Wrong: bookmarks remain changed if the second write fails.
+try bookmarkStore.save(newBookmarks)
+try configStore.save(newConfig)
+```
+
+Correct: capture the prior bookmark bytes, perform both writes, and restore the first file from the catch path when the second write fails. Keep secret cleanup and Finder notification ordered around that commit boundary.

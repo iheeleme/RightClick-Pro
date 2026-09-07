@@ -23,6 +23,8 @@ public struct ConfigurationBootstrapResult: Equatable, Sendable {
 }
 
 public struct ConfigurationBootstrapper {
+    private static let defaultDirectoryBootstrapMarkerName = ".default-directory-bootstrap-v1"
+
     private let fileManager: FileManager
     private let processHomeDirectoryOverride: URL?
     private let realUserHomeDirectoryOverride: URL?
@@ -54,7 +56,13 @@ public struct ConfigurationBootstrapper {
         let didCreateBookmarks = !fileManager.fileExists(atPath: paths.bookmarksURL.path)
         let originalBookmarks = try bookmarkStore.load(default: defaultBookmarks)
         let sanitizedBookmarks = sanitizeBookmarks(originalBookmarks)
-        let bookmarks = repairDefaultBookmarks(sanitizedBookmarks, defaults: defaultBookmarks)
+        // 默认目录只在首次初始化或旧版本迁移时补齐，之后尊重用户删除。
+        let shouldInjectDefaultBookmarks = didCreateBookmarks || !fileManager.fileExists(
+            atPath: defaultDirectoryBootstrapMarkerURL(for: paths).path
+        )
+        let bookmarks = shouldInjectDefaultBookmarks
+            ? repairDefaultBookmarks(sanitizedBookmarks, defaults: defaultBookmarks)
+            : sanitizedBookmarks
         if didCreateBookmarks || bookmarks != originalBookmarks {
             try bookmarkStore.save(bookmarks)
         }
@@ -64,6 +72,13 @@ public struct ConfigurationBootstrapper {
         let config = repairDefaultConfig(originalConfig, bookmarks: bookmarks, defaultBookmarkIDs: defaultBookmarks.bookmarks.map(\.id))
         if didCreateConfig || config != originalConfig {
             try configStore.save(config)
+        }
+
+        if shouldInjectDefaultBookmarks {
+            try Data("1\n".utf8).write(
+                to: defaultDirectoryBootstrapMarkerURL(for: paths),
+                options: [.atomic]
+            )
         }
 
         if !fileManager.fileExists(atPath: paths.operationLogURL.path) {
@@ -85,6 +100,10 @@ public struct ConfigurationBootstrapper {
             didCreateConfig: didCreateConfig,
             didCreateBookmarks: didCreateBookmarks
         )
+    }
+
+    private func defaultDirectoryBootstrapMarkerURL(for paths: RightClickProStoragePaths) -> URL {
+        paths.baseURL.appendingPathComponent(Self.defaultDirectoryBootstrapMarkerName)
     }
 
     public func defaultBookmarks() -> DirectoryBookmarkCatalog {

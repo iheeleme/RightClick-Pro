@@ -146,6 +146,181 @@ final class ActionRunnerTests: XCTestCase {
         XCTAssertNil(try clipboard.load())
     }
 
+    func testPasteRetainsOnlyFailedItemsAndRetriesWithoutRepeatingCompletedItems() throws {
+        let directory = try temporaryDirectory()
+        let targetDirectory = directory.appendingPathComponent("target")
+        try FileManager.default.createDirectory(at: targetDirectory, withIntermediateDirectories: true)
+        let completedFile = directory.appendingPathComponent("done.txt")
+        let pendingFile = directory.appendingPathComponent("pending.txt")
+        try "done".write(to: completedFile, atomically: true, encoding: .utf8)
+
+        let action = RightClickProAction(
+            id: "paste",
+            title: "Paste",
+            kind: .paste,
+            visibility: [.container],
+            placement: .rootMenu,
+            group: .fileOperations,
+            order: 1
+        )
+        let config = RightClickProConfig(actions: [action])
+        let clipboard = InMemoryCutClipboardStore(
+            record: CutClipboardRecord(sourceURLs: [completedFile, pendingFile])
+        )
+        let log = InMemoryOperationLog()
+        let runner = ActionRunner(
+            configProvider: StaticRightClickProConfigProvider(config: config),
+            operationLog: log,
+            cutClipboard: clipboard,
+            urlOpener: RecordingURLOpener(),
+            developerAppOpener: RecordingURLOpener()
+        )
+        let request = ActionRequest(
+            actionID: action.id,
+            context: FinderContext(invocation: .container, targetDirectory: targetDirectory)
+        )
+
+        let firstResult = runner.run(request)
+
+        XCTAssertEqual(firstResult.status, .failure)
+        XCTAssertEqual(firstResult.affectedURLs, [targetDirectory.appendingPathComponent("done.txt")])
+        XCTAssertEqual(firstResult.remainingURLs, [pendingFile])
+        XCTAssertEqual(try clipboard.load()?.sourceURLs, [pendingFile])
+        XCTAssertEqual(try log.loadRecent().last?.kind, .paste)
+
+        try "pending".write(to: pendingFile, atomically: true, encoding: .utf8)
+        let secondResult = runner.run(request)
+
+        XCTAssertEqual(secondResult.status, .success)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: targetDirectory.appendingPathComponent("done.txt").path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: targetDirectory.appendingPathComponent("pending.txt").path))
+        XCTAssertNil(try clipboard.load())
+    }
+
+    func testMoveFailureLogsTheActionOperationKind() throws {
+        let directory = try temporaryDirectory()
+        let targetDirectory = directory.appendingPathComponent("target")
+        try FileManager.default.createDirectory(at: targetDirectory, withIntermediateDirectories: true)
+        let missingSource = directory.appendingPathComponent("missing.txt")
+        let bookmark = DirectoryBookmark(id: "target", displayName: "Target", path: targetDirectory.path)
+        let action = RightClickProAction(
+            id: "move",
+            title: "Move",
+            kind: .moveToDirectory,
+            visibility: [.selection],
+            placement: .submenu,
+            group: .moveToCommonDirectory,
+            order: 1,
+            payload: ActionPayload(directoryID: bookmark.id)
+        )
+        let log = InMemoryOperationLog()
+        let runner = ActionRunner(
+            configProvider: StaticRightClickProConfigProvider(
+                config: RightClickProConfig(actions: [action]),
+                bookmarkCatalog: DirectoryBookmarkCatalog(bookmarks: [bookmark])
+            ),
+            operationLog: log,
+            cutClipboard: InMemoryCutClipboardStore(),
+            urlOpener: RecordingURLOpener(),
+            developerAppOpener: RecordingURLOpener(),
+            bookmarkResolver: MappingBookmarkResolver(urlsByID: [bookmark.id: targetDirectory])
+        )
+
+        let result = runner.run(
+            ActionRequest(
+                actionID: action.id,
+                context: FinderContext(
+                    invocation: .selection,
+                    targetDirectory: directory,
+                    selectedItems: [missingSource]
+                )
+            )
+        )
+
+        XCTAssertEqual(result.status, .failure)
+        XCTAssertEqual(result.remainingURLs, [missingSource])
+        XCTAssertEqual(try log.loadRecent().first?.kind, .move)
+    }
+
+    func testPastePreservesBatchResultWhenHistoryCannotBeSaved() throws {
+        let directory = try temporaryDirectory()
+        let target = directory.appendingPathComponent("target")
+        let logURL = directory.appendingPathComponent("blocked-log")
+        try FileManager.default.createDirectory(at: target, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: logURL, withIntermediateDirectories: true)
+        let completed = directory.appendingPathComponent("completed.txt")
+        let pending = directory.appendingPathComponent("pending.txt")
+        try Data("completed".utf8).write(to: completed)
+        let clipboard = InMemoryCutClipboardStore(record: CutClipboardRecord(sourceURLs: [completed, pending]))
+        let action = RightClickProAction(
+            id: "paste", title: "Paste", kind: .paste,
+            visibility: [.container], placement: .submenu, order: 1
+        )
+        let runner = ActionRunner(
+            configProvider: StaticRightClickProConfigProvider(config: RightClickProConfig(actions: [action])),
+            operationLog: JSONLineOperationLog(url: logURL),
+            cutClipboard: clipboard,
+            urlOpener: RecordingURLOpener(),
+            developerAppOpener: RecordingURLOpener()
+        )
+
+        let result = runner.run(ActionRequest(
+            actionID: action.id,
+            context: FinderContext(invocation: .container, targetDirectory: target)
+        ))
+
+        XCTAssertEqual(result.status, .failure)
+        XCTAssertEqual(result.affectedURLs, [target.appendingPathComponent("completed.txt")])
+        XCTAssertEqual(result.remainingURLs, [pending])
+        XCTAssertEqual(try clipboard.load()?.sourceURLs, [pending])
+        XCTAssertTrue(result.message.contains("操作历史保存失败"))
+    }
+
+    func testPastePreservesBatchResultWhenClipboardCannotBeSaved() throws {
+        struct ReadOnlyClipboard: CutClipboardStoring {
+            var record: CutClipboardRecord
+
+            func load() throws -> CutClipboardRecord? { record }
+            func save(_ record: CutClipboardRecord) throws {
+                throw NSError(domain: NSCocoaErrorDomain, code: NSFileWriteNoPermissionError)
+            }
+            func clear() throws {
+                throw NSError(domain: NSCocoaErrorDomain, code: NSFileWriteNoPermissionError)
+            }
+        }
+
+        let directory = try temporaryDirectory()
+        let target = directory.appendingPathComponent("target")
+        try FileManager.default.createDirectory(at: target, withIntermediateDirectories: true)
+        let completed = directory.appendingPathComponent("completed.txt")
+        let pending = directory.appendingPathComponent("pending.txt")
+        try Data("completed".utf8).write(to: completed)
+        let action = RightClickProAction(
+            id: "paste", title: "Paste", kind: .paste,
+            visibility: [.container], placement: .submenu, order: 1
+        )
+        let log = InMemoryOperationLog()
+        let runner = ActionRunner(
+            configProvider: StaticRightClickProConfigProvider(config: RightClickProConfig(actions: [action])),
+            operationLog: log,
+            cutClipboard: ReadOnlyClipboard(record: CutClipboardRecord(sourceURLs: [completed, pending])),
+            urlOpener: RecordingURLOpener(),
+            developerAppOpener: RecordingURLOpener()
+        )
+
+        let result = runner.run(ActionRequest(
+            actionID: action.id,
+            context: FinderContext(invocation: .container, targetDirectory: target)
+        ))
+
+        XCTAssertEqual(result.status, .failure)
+        XCTAssertEqual(result.affectedURLs, [target.appendingPathComponent("completed.txt")])
+        XCTAssertEqual(result.remainingURLs, [pending])
+        XCTAssertTrue(result.message.contains("剪切板更新失败"))
+        XCTAssertTrue(result.message.contains("重新剪切"))
+        XCTAssertEqual(log.records.last?.destinationPaths, result.affectedURLs.map(\.path))
+    }
+
     func testCutSucceedsWhenCatalogContainsInvalidUnrelatedBookmark() throws {
         let directory = try temporaryDirectory()
         let file = directory.appendingPathComponent("draft.txt")

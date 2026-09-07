@@ -1,6 +1,6 @@
 import Foundation
 
-public enum OperationKind: String, Codable, Equatable {
+public enum OperationKind: String, Codable, Equatable, Sendable {
     case openDirectory
     case move
     case copy
@@ -10,15 +10,38 @@ public enum OperationKind: String, Codable, Equatable {
     case openInApp
     case runCommand
     case unsupported
+
+    public init(actionKind: ActionKind) {
+        switch actionKind {
+        case .openDirectory:
+            self = .openDirectory
+        case .moveToDirectory:
+            self = .move
+        case .copyToDirectory:
+            self = .copy
+        case .cut:
+            self = .cut
+        case .paste:
+            self = .paste
+        case .createFile:
+            self = .createFile
+        case .openInApp:
+            self = .openInApp
+        case .runCommand:
+            self = .runCommand
+        case .undoOperation:
+            self = .unsupported
+        }
+    }
 }
 
-public enum OperationRecordStatus: String, Codable, Equatable {
+public enum OperationRecordStatus: String, Codable, Equatable, Sendable {
     case success
     case failure
     case cancelled
 }
 
-public struct OperationRecord: Codable, Equatable, Identifiable {
+public struct OperationRecord: Codable, Equatable, Identifiable, Sendable {
     public var id: UUID
     public var createdAt: Date
     public var actionID: String

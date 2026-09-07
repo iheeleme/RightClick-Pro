@@ -323,7 +323,10 @@ public static func checkRepresentativeAccess(...) -> Bool {
 
 - Missing action/template -> `.error` snapshot and failure operation log.
 - Working directory unreadable -> `.error` snapshot with Full Disk Access guidance.
-- Timeout -> append timeout system chunk, terminate process, final status `.timedOut`.
+- Timeout -> append timeout system chunk, send termination, then escalate to SIGKILL after one second if still running. Use the command's isolated process group when available; final status is `.timedOut` even if stop was also requested.
+- Service initialization finalizes unowned nonterminal snapshots as `.error` with an interruption explanation and operation history. Hold a per-run file lock throughout execution; the second embedded XPC service must skip snapshots whose lock is still held. Already terminal snapshots remain unchanged.
+- Decode stdout/stderr incrementally with separate UTF-8 tails. Drain available output before finalizing, flush incomplete tails with replacement characters, and stop readability callbacks at EOF.
+- Finalization always runs `cleanupRun` through `defer`, including snapshot-write failures, so security-scoped access, process state, timers, and ownership handles are released.
 - User stop -> append stop system chunk, terminate process, final status `.stopped`.
 - XPC unavailable from UI -> command window shows an error and refreshes operation history once.
 
@@ -339,6 +342,7 @@ public static func checkRepresentativeAccess(...) -> Bool {
 
 - Unit-test `CommandRunService` success path with snapshot output and success operation log.
 - Unit-test `CommandRunService.stop(runID:)` with final `.stopped` status.
+- Cover commands ignoring SIGTERM, split UTF-8 on both streams, orphaned snapshots, and an observer service preserving another service's active run.
 - Codable regression for `PendingCommandRunRequest` legacy scoped-bookmark fields.
 - Direct typecheck or package check for App, Finder extension, XPC service, and Core after protocol changes.
 
@@ -397,7 +401,7 @@ actionRunnerClient.startCommandRun(request) { result in
 - App bundle icon cache misses must show the generic default app icon immediately.
 - File path icon cache misses may show an SF Symbol folder/file placeholder immediately.
 - Config/bookmark load failures should use `NSLog` diagnostics and keep the fallback menu available rather than returning `nil` solely because config did not load.
-- Config refresh should be scheduled after the menu returns, not before menu construction; background refresh/bootstrap may repair durable state and update cached config after the first menu has already been served.
+- Periodic config refresh should be scheduled after the menu returns, not before menu construction. An explicit `configurationChangedNotificationName` bypasses the periodic delay; if another notification arrives during a read, force a fresh read before applying the result. Keep disk I/O outside menu construction.
 
 #### 4. Validation & Error Matrix
 

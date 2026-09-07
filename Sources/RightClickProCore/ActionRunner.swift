@@ -57,37 +57,46 @@ public final class ActionRunner {
     }
 
     public func run(_ request: ActionRequest) -> ActionResult {
+        var selectedAction: RightClickProAction?
         do {
             let config = try configProvider.loadConfig()
-            let bookmarks = try configProvider.loadBookmarkCatalog()
             guard let action = config.actions.first(where: { $0.id == request.actionID }) else {
                 throw ActionRunnerError.actionNotFound(request.actionID)
             }
+            selectedAction = action
+            let bookmarks = try configProvider.loadBookmarkCatalog()
 
             let bookmarkAccess = try AuthorizedBookmarkAccess(
                 catalog: bookmarks,
                 ids: try bookmarkIDs(for: action),
                 resolver: bookmarkResolver
             )
-            let result = try execute(
+            var result = try execute(
                 action,
                 config: config,
                 bookmarkAccess: bookmarkAccess,
                 request: request
             )
-            try log(action: action, request: request, result: result)
+            do {
+                try log(action: action, request: request, result: result)
+            } catch {
+                // 文件动作已经执行，历史落盘错误不能抹掉完成项和待重试项。
+                result.status = .failure
+                result.message += "\n操作历史保存失败：\(error.localizedDescription)"
+            }
             return result
         } catch {
+            let status: ActionResultStatus = (error as? FileOperationError) == .cancelled ? .cancelled : .failure
             let result = ActionResult(
                 requestID: request.id,
-                status: .failure,
+                status: status,
                 message: FullDiskAccessAdvisor.userFacingMessage(for: error)
             )
             try? operationLog.append(
                 OperationRecord(
                     actionID: request.actionID,
-                    kind: .unsupported,
-                    status: .failure,
+                    kind: selectedAction.map { OperationKind(actionKind: $0.kind) } ?? .unsupported,
+                    status: recordStatus(for: status),
                     sourcePaths: request.context.selectedItems.map(\.path),
                     destinationPaths: [request.context.targetDirectory.path],
                     message: result.message
@@ -123,15 +132,28 @@ public final class ActionRunner {
 
         case .moveToDirectory:
             let directory = try directoryURL(from: action, bookmarkAccess: bookmarkAccess)
-            let outcomes = try fileService.move(request.context.selectedItems, to: directory)
-            return ActionResult(requestID: request.id, status: .success, message: "移动完成", affectedURLs: outcomes.map(\.destinationURL))
+            let batch = try fileService.moveBatch(request.context.selectedItems, to: directory)
+            return actionResult(
+                requestID: request.id,
+                batch: batch,
+                successMessage: "移动完成",
+                failurePrefix: "移动未完全完成"
+            )
 
         case .copyToDirectory:
             let directory = try directoryURL(from: action, bookmarkAccess: bookmarkAccess)
-            let outcomes = try fileService.copy(request.context.selectedItems, to: directory)
-            return ActionResult(requestID: request.id, status: .success, message: "复制完成", affectedURLs: outcomes.map(\.destinationURL))
+            let batch = try fileService.copyBatch(request.context.selectedItems, to: directory)
+            return actionResult(
+                requestID: request.id,
+                batch: batch,
+                successMessage: "复制完成",
+                failurePrefix: "复制未完全完成"
+            )
 
         case .cut:
+            guard !request.context.selectedItems.isEmpty else {
+                throw FileOperationError.missingSelection
+            }
             try cutClipboard.save(CutClipboardRecord(sourceURLs: request.context.selectedItems))
             return ActionResult(requestID: request.id, status: .success, message: "已记录剪切项目", affectedURLs: request.context.selectedItems)
 
@@ -139,9 +161,25 @@ public final class ActionRunner {
             guard let record = try cutClipboard.load(), !record.sourceURLs.isEmpty else {
                 throw ActionRunnerError.emptyClipboard
             }
-            let outcomes = try fileService.move(record.sourceURLs, to: request.context.targetDirectory)
-            try cutClipboard.clear()
-            return ActionResult(requestID: request.id, status: .success, message: "粘贴完成", affectedURLs: outcomes.map(\.destinationURL))
+            let batch = try fileService.moveBatch(record.sourceURLs, to: request.context.targetDirectory)
+            var result = actionResult(
+                requestID: request.id,
+                batch: batch,
+                successMessage: "粘贴完成",
+                failurePrefix: "粘贴未完全完成"
+            )
+            do {
+                if batch.remainingSourceURLs.isEmpty {
+                    try cutClipboard.clear()
+                } else {
+                    // 只保留待处理项，再次粘贴不会重复移动已完成项目。
+                    try cutClipboard.save(CutClipboardRecord(sourceURLs: batch.remainingSourceURLs))
+                }
+            } catch {
+                result.status = .failure
+                result.message += "\n剪切板更新失败：\(error.localizedDescription)。再次粘贴前，请重新剪切需要操作的文件。"
+            }
+            return result
 
         case .createFile:
             let template = try fileTemplate(from: action, config: config)
@@ -211,39 +249,55 @@ public final class ActionRunner {
     }
 
     private func log(action: RightClickProAction, request: ActionRequest, result: ActionResult) throws {
+        var sourcePaths = request.context.selectedItems.map(\.path)
+        for path in result.remainingURLs.map(\.path) where !sourcePaths.contains(path) {
+            sourcePaths.append(path)
+        }
         try operationLog.append(
             OperationRecord(
                 actionID: action.id,
                 kind: operationKind(for: action.kind),
                 status: recordStatus(for: result.status),
-                sourcePaths: request.context.selectedItems.map(\.path),
+                sourcePaths: sourcePaths,
                 destinationPaths: result.affectedURLs.map(\.path),
                 message: result.message
             )
         )
     }
 
-    private func operationKind(for actionKind: ActionKind) -> OperationKind {
-        switch actionKind {
-        case .openDirectory:
-            return .openDirectory
-        case .moveToDirectory:
-            return .move
-        case .copyToDirectory:
-            return .copy
-        case .cut:
-            return .cut
-        case .paste:
-            return .paste
-        case .createFile:
-            return .createFile
-        case .openInApp:
-            return .openInApp
-        case .runCommand:
-            return .runCommand
-        case .undoOperation:
-            return .unsupported
+    private func actionResult(
+        requestID: UUID,
+        batch: FileOperationBatchResult,
+        successMessage: String,
+        failurePrefix: String
+    ) -> ActionResult {
+        guard !batch.failures.isEmpty else {
+            return ActionResult(
+                requestID: requestID,
+                status: .success,
+                message: successMessage,
+                affectedURLs: batch.completed.map(\.destinationURL)
+            )
         }
+
+        let details = batch.failures.map { failure in
+            let message = FullDiskAccessAdvisor.userFacingMessage(for: failure.asNSError)
+            return "\(failure.sourceURL.lastPathComponent)：\(message)"
+        }.joined(separator: "；")
+        let completedCount = batch.completed.count
+        let pendingCount = batch.remainingSourceURLs.count
+        let message = "\(failurePrefix)（已完成 \(completedCount) 项，待重试 \(pendingCount) 项）：\(details)"
+        return ActionResult(
+            requestID: requestID,
+            status: batch.failures.allSatisfy(\.isCancellation) ? .cancelled : .failure,
+            message: message,
+            affectedURLs: batch.completed.map(\.destinationURL),
+            remainingURLs: batch.remainingSourceURLs
+        )
+    }
+
+    private func operationKind(for actionKind: ActionKind) -> OperationKind {
+        OperationKind(actionKind: actionKind)
     }
 
     private func recordStatus(for resultStatus: ActionResultStatus) -> OperationRecordStatus {

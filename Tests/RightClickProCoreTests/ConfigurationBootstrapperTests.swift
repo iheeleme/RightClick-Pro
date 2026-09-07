@@ -157,6 +157,37 @@ final class ConfigurationBootstrapperTests: XCTestCase {
         XCTAssertTrue(savedConfig.actions.contains { $0.id == "copy-to-downloads" })
     }
 
+    func testBootstrapDoesNotReinjectUserDeletedDefaultDirectoryAfterMigration() throws {
+        let baseDirectory = try temporaryDirectory()
+        let paths = RightClickProStoragePaths(baseURL: baseDirectory.appendingPathComponent("config"))
+        let realHome = baseDirectory.appendingPathComponent("real-home")
+        let desktop = realHome.appendingPathComponent("Desktop")
+        let downloads = realHome.appendingPathComponent("Downloads")
+        try FileManager.default.createDirectory(at: desktop, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: downloads, withIntermediateDirectories: true)
+
+        let bootstrapper = ConfigurationBootstrapper(
+            processHomeDirectory: nil,
+            realUserHomeDirectory: realHome
+        )
+        _ = try bootstrapper.bootstrap(paths: paths)
+
+        var bookmarks = try JSONFileStore<DirectoryBookmarkCatalog>(url: paths.bookmarksURL).loadRequired()
+        bookmarks.bookmarks.removeAll { $0.id == "downloads" }
+        try JSONFileStore<DirectoryBookmarkCatalog>(url: paths.bookmarksURL).save(bookmarks)
+
+        var config = try JSONFileStore<RightClickProConfig>(url: paths.configURL).loadRequired()
+        config.shortcutDirectoryIDs.removeAll { $0 == "downloads" }
+        config.actions.removeAll { $0.payload.directoryID == "downloads" }
+        try JSONFileStore<RightClickProConfig>(url: paths.configURL).save(config)
+
+        let result = try bootstrapper.bootstrap(paths: paths)
+
+        XCTAssertNil(result.bookmarks.bookmark(id: "downloads"))
+        XCTAssertFalse(result.config.shortcutDirectoryIDs.contains("downloads"))
+        XCTAssertFalse(result.config.actions.contains { $0.payload.directoryID == "downloads" })
+    }
+
     func testBootstrapRepairsMissingCommandActionsForExistingTemplates() throws {
         let baseDirectory = try temporaryDirectory()
         let paths = RightClickProStoragePaths(baseURL: baseDirectory.appendingPathComponent("config"))

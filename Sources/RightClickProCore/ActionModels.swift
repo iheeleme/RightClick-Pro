@@ -358,6 +358,11 @@ public extension RightClickProConstants {
     static let minimumCommandTimeoutSeconds = 5
     static let maximumCommandTimeoutSeconds = 600
     static let pendingCommandRunNotificationName = "com.iheeleme.rightclickpro.pending-command-run"
+    static let actionFailureNotificationName = "com.iheeleme.rightclickpro.action-failure"
+    static let configurationChangedNotificationName = "com.iheeleme.rightclickpro.configuration-changed"
+    static let actionFailureActionIDKey = "actionID"
+    static let actionFailureActionKindKey = "actionKind"
+    static let actionFailureMessageKey = "message"
     static let mainAppBundleIdentifier = "com.iheeleme.rightclickpro"
     static let commandEnvironmentKeychainService = "com.iheeleme.rightclickpro.command-env"
 }

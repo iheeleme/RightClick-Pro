@@ -59,7 +59,7 @@ generated from already-rasterized menu images.
 `ConfigurationBootstrapper` is the only place that creates or repairs default config/bookmark state.
 
 - Bootstrap must preserve unrelated user configuration.
-- Missing available default bookmarks may be appended.
+- Missing available default bookmarks may be appended only on first creation or the one-time `.default-directory-bootstrap-v1` migration. Write the marker after bookmarks/config save successfully; subsequent bootstrap runs preserve user-deleted defaults.
 - Missing monitored/common IDs for available defaults may be appended.
 - Missing generated directory actions may be appended.
 - Existing sandbox-container bookmark paths must be remapped to the real user home.

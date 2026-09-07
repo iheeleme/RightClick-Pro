@@ -23,7 +23,7 @@ public enum CommandRunStatus: String, Codable, Equatable, Sendable {
     }
 }
 
-public enum CommandRunOutputStream: String, Codable, Equatable, Sendable {
+public enum CommandRunOutputStream: String, Codable, Equatable, Hashable, Sendable {
     case system
     case stdout
     case stderr
@@ -104,7 +104,7 @@ public enum CommandRunServiceError: Error, Equatable, LocalizedError, Sendable {
     }
 }
 
-// Foundation 的进程回调会跨线程捕获服务实例；运行状态统一由 lock 保护。
+// 运行状态由 lock 保护；outputLock 串行化 pipe 读取与退出时的排空，避免并发消费同一句柄。
 public final class CommandRunService: @unchecked Sendable {
     private let paths: RightClickProStoragePaths
     private let configProvider: RightClickProConfigProviding
@@ -113,6 +113,7 @@ public final class CommandRunService: @unchecked Sendable {
     private let bookmarkResolver: BookmarkResolving
     private let fileManager: FileManager
     private let lock = NSLock()
+    private let outputLock = NSLock()
 
     private var snapshots: [UUID: CommandRunSnapshot] = [:]
     private var processes: [UUID: Process] = [:]
@@ -120,6 +121,9 @@ public final class CommandRunService: @unchecked Sendable {
     private var stopRequestedRunIDs = Set<UUID>()
     private var timedOutRunIDs = Set<UUID>()
     private var scopedAccessURLs: [UUID: [URL]] = [:]
+    private var outputBuffers: [UUID: [CommandRunOutputStream: Data]] = [:]
+    private var processGroupIDs: [UUID: Int32] = [:]
+    private var runOwnershipHandles: [UUID: FileHandle] = [:]
 
     public init(
         paths: RightClickProStoragePaths,
@@ -135,6 +139,7 @@ public final class CommandRunService: @unchecked Sendable {
         self.secretStore = secretStore
         self.bookmarkResolver = bookmarkResolver
         self.fileManager = fileManager
+        recoverInterruptedRuns()
     }
 
     public func start(_ request: PendingCommandRunRequest) -> CommandRunSnapshot {
@@ -143,6 +148,13 @@ public final class CommandRunService: @unchecked Sendable {
         }
 
         do {
+            // App 和 Finder 各有一份 XPC 服务，文件锁标识真正持有本次运行的实例。
+            guard let ownership = try acquireRunOwnership(request.id) else {
+                return (try? status(for: request.id)) ?? CommandRunSnapshot(
+                    id: request.id, actionID: request.actionID, status: .preparing
+                )
+            }
+            withLock { runOwnershipHandles[request.id] = ownership }
             let prepared = try prepareCommandRun(request)
             let startedAt = Date()
             var snapshot = CommandRunSnapshot(
@@ -183,9 +195,12 @@ public final class CommandRunService: @unchecked Sendable {
             }
 
             process.terminationHandler = { [weak self] process in
-                stdout.fileHandleForReading.readabilityHandler = nil
-                stderr.fileHandleForReading.readabilityHandler = nil
-                self?.finish(runID: request.id, exitCode: process.terminationStatus)
+                self?.finishOutputAndRun(
+                    runID: request.id,
+                    stdout: stdout.fileHandleForReading,
+                    stderr: stderr.fileHandleForReading,
+                    exitCode: process.terminationStatus
+                )
             }
 
             try withLock {
@@ -197,6 +212,10 @@ public final class CommandRunService: @unchecked Sendable {
 
             do {
                 try process.run()
+                let processGroupID = configureProcessGroup(process)
+                withLock {
+                    processGroupIDs[request.id] = processGroupID
+                }
                 scheduleTimeout(runID: request.id, seconds: prepared.template.timeoutSeconds)
                 return snapshot
             } catch {
@@ -210,7 +229,7 @@ public final class CommandRunService: @unchecked Sendable {
 
     public func status(for runID: UUID) throws -> CommandRunSnapshot {
         try withLock {
-            if let snapshot = snapshots[runID] {
+            if let snapshot = snapshots[runID], snapshot.status.isTerminal || runOwnershipHandles[runID] != nil {
                 return snapshot
             }
             let snapshot = try snapshotStore(for: runID).loadRequired()
@@ -220,25 +239,20 @@ public final class CommandRunService: @unchecked Sendable {
     }
 
     public func stop(runID: UUID) throws -> CommandRunSnapshot {
-        var processToStop: Process?
-        withLock {
+        let processToStop: Process? = withLock {
+            guard let process = processes[runID] else {
+                return nil
+            }
             stopRequestedRunIDs.insert(runID)
-            processToStop = processes[runID]
+            return process
+        }
+        guard let processToStop else {
+            return try status(for: runID)
         }
 
         appendOutput("\n用户请求停止命令...\n", runID: runID, stream: .system)
-        processToStop?.terminate()
-
-        if let processToStop {
-            DispatchQueue.global().asyncAfter(deadline: .now() + 2) { [weak processToStop] in
-                guard let processToStop, processToStop.isRunning else {
-                    return
-                }
-                #if canImport(Darwin)
-                kill(processToStop.processIdentifier, SIGKILL)
-                #endif
-            }
-        }
+        processToStop.terminate()
+        scheduleForceTermination(runID: runID, process: processToStop, after: 2)
 
         return try status(for: runID)
     }
@@ -341,17 +355,132 @@ public final class CommandRunService: @unchecked Sendable {
     }
 
     private func readAvailableOutput(from handle: FileHandle, runID: UUID, stream: CommandRunOutputStream) {
-        let data = handle.availableData
-        guard !data.isEmpty, let text = String(data: data, encoding: .utf8) else {
+        outputLock.lock()
+        defer { outputLock.unlock() }
+        guard withLock({ processes[runID] != nil }), let data = availableOutputData(from: handle) else {
             return
         }
-        appendOutput(text, runID: runID, stream: stream)
+        if data.isEmpty {
+            handle.readabilityHandler = nil
+            flushOutput(runID: runID, stream: stream)
+            return
+        }
+        consumeOutputData(data, runID: runID, stream: stream)
+    }
+
+    private func finishOutputAndRun(runID: UUID, stdout: FileHandle, stderr: FileHandle, exitCode: Int32) {
+        outputLock.lock()
+        defer { outputLock.unlock() }
+        stdout.readabilityHandler = nil
+        stderr.readabilityHandler = nil
+        drainOutput(from: stdout, runID: runID, stream: .stdout)
+        drainOutput(from: stderr, runID: runID, stream: .stderr)
+        finish(runID: runID, exitCode: exitCode)
+    }
+
+    private func drainOutput(from handle: FileHandle, runID: UUID, stream: CommandRunOutputStream) {
+        while let data = availableOutputData(from: handle), !data.isEmpty {
+            consumeOutputData(data, runID: runID, stream: stream)
+        }
+        flushOutput(runID: runID, stream: stream)
+    }
+
+    private func availableOutputData(from handle: FileHandle) -> Data? {
+        #if canImport(Darwin)
+        var descriptor = pollfd(fd: handle.fileDescriptor, events: Int16(POLLIN), revents: 0)
+        guard poll(&descriptor, 1, 0) > 0 else {
+            return nil
+        }
+        #endif
+        return handle.availableData
+    }
+
+    private func consumeOutputData(_ data: Data, runID: UUID, stream: CommandRunOutputStream) {
+        guard !data.isEmpty else {
+            return
+        }
+
+        let text: String? = withLock {
+            var buffers = outputBuffers[runID] ?? [:]
+            var buffer = buffers[stream] ?? Data()
+            buffer.append(data)
+
+            let completeLength = completeUTF8PrefixLength(in: buffer)
+            guard completeLength > 0 else {
+                buffers[stream] = buffer
+                outputBuffers[runID] = buffers
+                return nil
+            }
+
+            let completeData = Data(buffer.prefix(completeLength))
+            buffer.removeFirst(completeLength)
+            buffers[stream] = buffer
+            outputBuffers[runID] = buffers
+            return String(decoding: completeData, as: UTF8.self)
+        }
+
+        if let text, !text.isEmpty {
+            appendOutput(text, runID: runID, stream: stream)
+        }
+    }
+
+    private func flushOutput(runID: UUID, stream: CommandRunOutputStream) {
+        let data: Data? = withLock {
+            guard var buffers = outputBuffers[runID], let buffer = buffers.removeValue(forKey: stream) else {
+                return nil
+            }
+            outputBuffers[runID] = buffers.isEmpty ? nil : buffers
+            return buffer.isEmpty ? nil : buffer
+        }
+        guard let data else {
+            return
+        }
+        appendOutput(String(decoding: data, as: UTF8.self), runID: runID, stream: stream)
+    }
+
+    private func completeUTF8PrefixLength(in data: Data) -> Int {
+        let bytes = Array(data)
+        guard !bytes.isEmpty else {
+            return 0
+        }
+
+        var index = bytes.count - 1
+        var continuationCount = 0
+        while index >= 0, bytes[index] & 0xC0 == 0x80 {
+            continuationCount += 1
+            index -= 1
+        }
+
+        guard index >= 0 else {
+            return bytes.count
+        }
+
+        let lead = bytes[index]
+        let expectedContinuationCount: Int
+        switch lead {
+        case 0xC2...0xDF:
+            expectedContinuationCount = 1
+        case 0xE0...0xEF:
+            expectedContinuationCount = 2
+        case 0xF0...0xF4:
+            expectedContinuationCount = 3
+        default:
+            expectedContinuationCount = 0
+        }
+
+        if expectedContinuationCount > continuationCount {
+            return index
+        }
+        return bytes.count
     }
 
     private func appendOutput(_ text: String, runID: UUID, stream: CommandRunOutputStream) {
         do {
             try withLock {
                 guard var snapshot = try? loadSnapshotForMutation(runID) else {
+                    return
+                }
+                guard !snapshot.status.isTerminal else {
                     return
                 }
                 snapshot.outputChunks.append(
@@ -387,6 +516,7 @@ public final class CommandRunService: @unchecked Sendable {
             }
             self.appendOutput("\n命令超过 \(seconds) 秒，正在停止...\n", runID: runID, stream: .system)
             processToStop.terminate()
+            self.scheduleForceTermination(runID: runID, process: processToStop, after: 1)
         }
 
         let shouldSchedule = withLock {
@@ -402,15 +532,110 @@ public final class CommandRunService: @unchecked Sendable {
         DispatchQueue.global().asyncAfter(deadline: .now() + .seconds(seconds), execute: workItem)
     }
 
+    private func configureProcessGroup(_ process: Process) -> Int32? {
+        #if canImport(Darwin)
+        let processID = process.processIdentifier
+        if getpgid(processID) == processID || setpgid(processID, processID) == 0 {
+            return processID
+        }
+        #endif
+        return nil
+    }
+
+    private func scheduleForceTermination(runID: UUID, process: Process, after seconds: Int) {
+        DispatchQueue.global().asyncAfter(deadline: .now() + .seconds(seconds)) { [weak self, weak process] in
+            guard let self, let process else {
+                return
+            }
+            self.withLock {
+                guard self.processes[runID] === process, process.isRunning else {
+                    return
+                }
+                #if canImport(Darwin)
+                if let groupID = self.processGroupIDs[runID], groupID > 1 {
+                    kill(-groupID, SIGKILL)
+                } else {
+                    kill(process.processIdentifier, SIGKILL)
+                }
+                #endif
+            }
+        }
+    }
+
+    private func recoverInterruptedRuns() {
+        guard let urls = try? fileManager.contentsOfDirectory(
+            at: paths.commandRunStateDirectoryURL,
+            includingPropertiesForKeys: nil
+        ) else {
+            return
+        }
+
+        for url in urls where url.pathExtension == "json" {
+            let store = JSONFileStore<CommandRunSnapshot>(url: url, fileManager: fileManager)
+            guard let saved = try? store.loadRequired(), !saved.status.isTerminal,
+                  let ownership = try? acquireRunOwnership(saved.id)
+            else {
+                continue
+            }
+            defer { try? ownership.close() }
+            // 拿到锁后重新读取，避免覆盖刚刚结束的运行记录。
+            guard var snapshot = try? store.loadRequired(), !snapshot.status.isTerminal else {
+                continue
+            }
+            let finishedAt = Date()
+            let message = "命令运行服务已重启，原进程状态无法恢复，运行结果未知。"
+            snapshot.status = .error
+            snapshot.finishedAt = finishedAt
+            snapshot.durationMilliseconds = durationMilliseconds(startedAt: snapshot.startedAt, finishedAt: finishedAt)
+            snapshot.errorMessage = message
+            snapshot.outputChunks.append(
+                CommandRunOutputChunk(
+                    id: (snapshot.outputChunks.map(\.id).max() ?? 0) + 1,
+                    stream: .system,
+                    text: "\n运行中断：\(message)\n",
+                    createdAt: finishedAt
+                )
+            )
+            snapshots[snapshot.id] = snapshot
+            try? saveSnapshot(snapshot)
+            logCompletion(snapshot)
+        }
+    }
+
+    private func acquireRunOwnership(_ runID: UUID) throws -> FileHandle? {
+        try fileManager.createDirectory(at: paths.commandRunStateDirectoryURL, withIntermediateDirectories: true)
+        let lockURL = paths.commandRunStateDirectoryURL.appendingPathComponent("\(runID.uuidString).lock")
+        let descriptor = open(lockURL.path, O_CREAT | O_RDWR | O_CLOEXEC, S_IRUSR | S_IWUSR)
+        guard descriptor >= 0 else {
+            throw NSError(domain: NSPOSIXErrorDomain, code: Int(errno))
+        }
+        guard flock(descriptor, LOCK_EX | LOCK_NB) == 0 else {
+            let code = errno
+            close(descriptor)
+            if code == EWOULDBLOCK {
+                return nil
+            }
+            throw NSError(domain: NSPOSIXErrorDomain, code: Int(code))
+        }
+        return FileHandle(fileDescriptor: descriptor, closeOnDealloc: true)
+    }
+
+    private func releaseRunOwnership(_ runID: UUID) {
+        let handle = withLock { runOwnershipHandles.removeValue(forKey: runID) }
+        try? handle?.close()
+    }
+
     private func finish(runID: UUID, exitCode: Int32) {
+        defer { cleanupRun(runID: runID) }
         let snapshot: CommandRunSnapshot?
-        let scopedURLs: [URL]
 
         do {
             snapshot = try withLock {
                 timeoutWorkItems[runID]?.cancel()
                 timeoutWorkItems[runID] = nil
                 processes[runID] = nil
+                processGroupIDs[runID] = nil
+                outputBuffers[runID] = nil
 
                 guard var snapshot = try? loadSnapshotForMutation(runID) else {
                     return nil
@@ -421,9 +646,11 @@ public final class CommandRunService: @unchecked Sendable {
                 snapshot.finishedAt = finishedAt
                 snapshot.durationMilliseconds = durationMilliseconds(startedAt: snapshot.startedAt, finishedAt: finishedAt)
 
-                if timedOutRunIDs.remove(runID) != nil {
+                let timedOut = timedOutRunIDs.remove(runID) != nil
+                let stopped = stopRequestedRunIDs.remove(runID) != nil
+                if timedOut {
                     snapshot.status = .timedOut
-                } else if stopRequestedRunIDs.remove(runID) != nil {
+                } else if stopped {
                     snapshot.status = .stopped
                 } else if exitCode == 0 {
                     snapshot.status = .succeeded
@@ -447,13 +674,6 @@ public final class CommandRunService: @unchecked Sendable {
         } catch {
             return
         }
-
-        scopedURLs = withLock {
-            let urls = scopedAccessURLs[runID] ?? []
-            scopedAccessURLs[runID] = nil
-            return urls
-        }
-        scopedURLs.forEach { $0.stopAccessingSecurityScopedResource() }
 
         if let snapshot {
             logCompletion(snapshot)
@@ -530,15 +750,18 @@ public final class CommandRunService: @unchecked Sendable {
     private func cleanupRun(runID: UUID) {
         let urls = withLock { () -> [URL] in
             processes[runID] = nil
+            processGroupIDs[runID] = nil
             timeoutWorkItems[runID]?.cancel()
             timeoutWorkItems[runID] = nil
             stopRequestedRunIDs.remove(runID)
             timedOutRunIDs.remove(runID)
+            outputBuffers[runID] = nil
             let urls = scopedAccessURLs[runID] ?? []
             scopedAccessURLs[runID] = nil
             return urls
         }
         urls.forEach { $0.stopAccessingSecurityScopedResource() }
+        releaseRunOwnership(runID)
     }
 
     private func loadSnapshotForMutation(_ runID: UUID) throws -> CommandRunSnapshot {
