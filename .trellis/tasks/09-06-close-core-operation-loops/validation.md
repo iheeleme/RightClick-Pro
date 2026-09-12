@@ -62,5 +62,8 @@
 
 - 核心实现已由 `5bc11be` 提交；`93e1c5b` 合入远端 develop 的部署目标和并发检查修复。
 - GitHub Actions run https://github.com/iheeleme/RightClick-Pro/actions/runs/34679649253 的 arm64、x86_64 `Run Swift checks` 均通过，完整 XCTest 阻塞已在 CI 闭环。
-- 当前代码正在发布为 v0.2.0；历史章节中的未提交、未发布状态描述的是 2026-09-06 验收时点。
+- 当前代码已发布为 v0.2.0；历史章节中的未提交、未发布状态描述的是 2026-09-06 验收时点。
 - Finder 通知、真实 XPC 故障、权限切换实机验收仍未完成；任务继续保持 in_progress。
+
+- 标签流水线 https://github.com/iheeleme/RightClick-Pro/actions/runs/34679890759 双架构检查、打包及发布全部成功。
+- Release：https://github.com/iheeleme/RightClick-Pro/releases/tag/v0.2.0 ，已附两份 DMG 和中文更新说明。main、develop、任务分支已同步，标签保持在 df740f9。
