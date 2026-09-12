@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 19
+- **Total Sessions**: 20
 - **Last Active**: 2026-09-12
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~644 | Active |
+| `journal-1.md` | ~677 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 20 | 2026-09-12 | 收尾并发与命令故障边界 | `6ed96d8` | `task/settings-visual-unify` |
 | 19 | 2026-09-12 | 更新 v0.2.0 README 与界面截图 | `35c5d4b` | `task/settings-visual-unify` |
 | 18 | 2026-09-06 | Kimi 风格设置界面优化 | `2449b90` | `task/settings-visual-unify` |
 | 17 | 2026-09-06 | 增加设置主题切换 | `94c3065` | `task/settings-visual-unify` |

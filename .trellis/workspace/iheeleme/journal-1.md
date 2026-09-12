@@ -642,3 +642,36 @@ Fast-forwarded develop with completed packaging task records, verified v0.1.4 re
 ### Next Steps
 
 - None - task complete
+
+
+## Session 20: 收尾并发与命令故障边界
+
+**Date**: 2026-09-12
+**Task**: 收尾并发与命令故障边界
+**Branch**: `task/settings-visual-unify`
+
+### Summary
+
+修复命令请求队列、失败通知、并发日志与状态恢复/终态持久化重试；双架构各89项测试通过，DMG打包上传通过；已归档DMG任务并校正旧PRD，Finder实机验收继续保留。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `6ed96d8` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
