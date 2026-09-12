@@ -414,7 +414,38 @@ Rewrote the Chinese README in the style of jlcodes99/cockpit-tools with overview
 - None - task complete
 
 
-## Session 13: Ship macOS 15 packaging fix
+## Session 13: Add README project screenshot
+
+**Date**: 2026-07-05
+**Task**: Add README project screenshot
+**Branch**: `main`
+
+### Summary
+
+Added a Computer Use-captured RightClick Pro settings screenshot to README and stored the image under docs/assets.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `dd4cb63` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+## Session 14: Ship macOS 15 packaging fix
 
 **Date**: 2026-08-13
 **Task**: Ship macOS 15 packaging fix
@@ -448,7 +479,7 @@ Integrated the macOS 14 deployment-target guard onto current develop, diagnosed 
 - None - task complete
 
 
-## Session 14: Consolidate macOS packaging branches
+## Session 15: Consolidate macOS packaging branches
 
 **Date**: 2026-08-13
 **Task**: Consolidate macOS packaging branches
@@ -481,7 +512,7 @@ Fast-forwarded develop with completed packaging task records, verified v0.1.4 re
 - None - task complete
 
 
-## Session 15: 修复 Finder 菜单点击无响应
+## Session 16: 修复 Finder 菜单点击无响应
 
 **Date**: 2026-08-16
 **Task**: 修复 Finder 菜单点击无响应
@@ -514,7 +545,7 @@ Fast-forwarded develop with completed packaging task records, verified v0.1.4 re
 - None - task complete
 
 
-## Session 16: Kimi 风格设置界面优化
+## Session 17: Kimi 风格设置界面优化
 
 **Date**: 2026-09-06
 **Task**: Kimi 风格设置界面优化
@@ -547,7 +578,7 @@ Fast-forwarded develop with completed packaging task records, verified v0.1.4 re
 - None - task complete
 
 
-## Session 17: 增加设置主题切换
+## Session 18: 增加设置主题切换
 
 **Date**: 2026-09-06
 **Task**: 增加设置主题切换

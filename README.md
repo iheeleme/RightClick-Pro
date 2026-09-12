@@ -13,6 +13,10 @@
 
 官方支持平台：macOS。
 
+## 项目截图
+
+![RightClick Pro 设置概览](docs/assets/rightclick-pro-overview.png)
+
 ---
 
 ## 功能概览
