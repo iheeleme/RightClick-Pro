@@ -47,6 +47,82 @@ RightClick Pro quality checks center on SwiftPM compilation/tests, Finder extens
 - Run `ruby -e 'require "yaml"; YAML.load_file(".github/workflows/package-macos.yml")'` after workflow edits.
 - In tests, compare directory URL semantics with `standardizedFileURL.path` when trailing slash/resource identity is irrelevant; macOS and Swift toolchain versions can differ on directory URL trailing slash preservation.
 
+### Scenario: macOS Deployment Target for Preview Packaging
+
+#### 1. Scope / Trigger
+
+- Trigger: changes to `.github/workflows/package-macos.yml`, `scripts/ci-swift-check.sh`, `scripts/package-macos.sh`, SwiftPM preview bundle assembly, direct `swiftc` packaging, Xcode archive packaging, or bundled Info.plist generation.
+- This is an infra compatibility contract because GitHub-hosted runner OS/SDK upgrades can silently raise Mach-O `minos` for the app, Finder Sync extension, ActionRunner XPC, or embedded `libRightClickProCore.dylib`.
+
+#### 2. Signatures
+
+- CI env:
+  ```yaml
+  RIGHTCLICKPRO_MACOS_DEPLOYMENT_TARGET: "14.0"
+  MACOSX_DEPLOYMENT_TARGET: "14.0"
+  ```
+- Shell env default:
+  ```bash
+  RIGHTCLICKPRO_MACOS_DEPLOYMENT_TARGET="${RIGHTCLICKPRO_MACOS_DEPLOYMENT_TARGET:-${MACOSX_DEPLOYMENT_TARGET:-14.0}}"
+  export MACOSX_DEPLOYMENT_TARGET="$RIGHTCLICKPRO_MACOS_DEPLOYMENT_TARGET"
+  ```
+- Build target:
+  ```bash
+  swift build --triple "$(uname -m)-apple-macosx$RIGHTCLICKPRO_MACOS_DEPLOYMENT_TARGET"
+  swiftc -target "$(uname -m)-apple-macosx$RIGHTCLICKPRO_MACOS_DEPLOYMENT_TARGET" ...
+  ```
+
+#### 3. Contracts
+
+- GitHub Actions must use explicit macOS runner labels, not `macos-latest`; prefer `macos-15` for arm64 and `macos-15-intel` for x86_64 while RightClick Pro supports macOS 14+.
+- `RIGHTCLICKPRO_MACOS_DEPLOYMENT_TARGET` is the single packaging minimum. `MACOSX_DEPLOYMENT_TARGET`, SwiftPM `--triple`, direct `swiftc -target`, Xcode `MACOSX_DEPLOYMENT_TARGET`, and generated `LSMinimumSystemVersion` values must match it.
+- Manual `swiftc` builds for `RightClickProCore` and `RightClickProFinderExtension` must never rely on the host default target. On a macOS 26 runner, that can create `libRightClickProCore.dylib built for macOS 26.0`, which crashes the Finder extension on macOS 15.
+
+#### 4. Validation & Error Matrix
+
+- Invalid `RIGHTCLICKPRO_MACOS_DEPLOYMENT_TARGET` format -> exit 64 before building.
+- Unsupported host architecture -> exit 64 before building.
+- Packaged Mach-O missing a readable `LC_BUILD_VERSION minos` or legacy `LC_VERSION_MIN_MACOSX version` -> exit 65.
+- Packaged Mach-O deployment target differs from `RIGHTCLICKPRO_MACOS_DEPLOYMENT_TARGET` -> exit 65 and do not publish the artifact.
+- Workflow changed -> parse `.github/workflows/package-macos.yml` with Ruby YAML.
+- Shell script changed -> run `bash -n scripts/ci-swift-check.sh scripts/package-macos.sh`.
+
+#### 5. Good/Base/Bad Cases
+
+- Good: building on `macos-15` with `RIGHTCLICKPRO_MACOS_DEPLOYMENT_TARGET=14.0` produces `minos 14.0` for the app executable, both ActionRunner XPC binaries, Finder Sync executable, and every embedded `libRightClickProCore.dylib`.
+- Good: a future macOS 26 runner can still be used only if the same deployment-target env, SwiftPM `--triple`, direct `swiftc -target`, and `otool` validation remain in place.
+- Base: local developers can override `RIGHTCLICKPRO_MACOS_DEPLOYMENT_TARGET` for self-tests, but generated Info.plists and Mach-O validation must follow the override consistently.
+- Bad: changing only `LSMinimumSystemVersion` while leaving direct `swiftc` to infer the host target.
+- Bad: relying on `Package.swift` `.macOS(.v14)` to cover manually compiled dylibs or extension executables.
+
+#### 6. Tests Required
+
+- Run `scripts/ci-swift-check.sh debug`.
+- Run `scripts/package-macos.sh debug`.
+- For DMG artifact behavior, run `RIGHTCLICKPRO_PACKAGE_DMG=1 scripts/package-macos.sh debug`.
+- Spot-check at least the core dylib and Finder extension executable:
+  ```bash
+  otool -l "dist/staging/RightClick Pro.app/Contents/Frameworks/libRightClickProCore.dylib" | awk '/LC_BUILD_VERSION/{seen=1} seen && /minos/{print $2; exit}'
+  otool -l "dist/staging/RightClick Pro.app/Contents/PlugIns/RightClickProFinderExtension.appex/Contents/MacOS/RightClickProFinderExtension" | awk '/LC_BUILD_VERSION/{seen=1} seen && /minos/{print $2; exit}'
+  ```
+- Run `git diff --check`.
+
+#### 7. Wrong vs Correct
+
+Wrong:
+```bash
+swiftc -emit-library Sources/RightClickProCore/*.swift -o "$build_dir/libRightClickProCore.dylib"
+```
+
+Correct:
+```bash
+swiftc \
+  -target "$(uname -m)-apple-macosx$RIGHTCLICKPRO_MACOS_DEPLOYMENT_TARGET" \
+  -emit-library \
+  Sources/RightClickProCore/*.swift \
+  -o "$build_dir/libRightClickProCore.dylib"
+```
+
 ---
 
 ### Scenario: Swift 6 Strict Concurrency Boundaries
@@ -876,7 +952,7 @@ runs-on: macos-latest
 
 Correct:
 ```yaml
-runs-on: macos-26
+runs-on: macos-15
 ```
 
 Wrong:

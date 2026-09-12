@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 15
+- **Total Sessions**: 17
 - **Last Active**: 2026-09-06
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~513 | Active |
+| `journal-1.md` | ~580 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,9 +29,11 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
-| 15 | 2026-09-06 | 增加设置主题切换 | `94c3065` | `task/settings-visual-unify` |
-| 14 | 2026-09-06 | Kimi 风格设置界面优化 | `2449b90` | `task/settings-visual-unify` |
-| 13 | 2026-08-16 | 修复 Finder 菜单点击无响应 | `11705e0` | `codex/issue-2-finder-actions` |
+| 17 | 2026-09-06 | 增加设置主题切换 | `94c3065` | `task/settings-visual-unify` |
+| 16 | 2026-09-06 | Kimi 风格设置界面优化 | `2449b90` | `task/settings-visual-unify` |
+| 15 | 2026-08-16 | 修复 Finder 菜单点击无响应 | `11705e0` | `codex/issue-2-finder-actions` |
+| 14 | 2026-08-13 | Consolidate macOS packaging branches | `acde16b` | `develop` |
+| 13 | 2026-08-13 | Ship macOS 15 packaging fix | `f78fbf3`, `d12f72a` | `codex/ship-macos15-packaging-fix` |
 | 12 | 2026-07-03 | Rewrite open source README | `4474fcc` | `develop` |
 | 11 | 2026-07-03 | Avoid first-launch other app data prompts | `628ca6f` | `develop` |
 | 10 | 2026-07-03 | Avoid other app data permission prompts | `bd419af` | `develop` |

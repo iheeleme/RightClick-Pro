@@ -223,6 +223,7 @@ enum SettingsTheme {
     }
 }
 
+@MainActor
 private enum RightClickProIconAsset {
     static let resourceName = "RightClickProIcon"
     static let pngExtension = "png"

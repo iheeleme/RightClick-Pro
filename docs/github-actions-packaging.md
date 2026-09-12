@@ -10,7 +10,16 @@ The workflow runs on:
 * version tags matching `v*`;
 * pull requests that touch build, source, test, script, or docs files.
 
-It uses GitHub-hosted macOS runners, uploads packaged artifacts with `actions/upload-artifact`, and publishes GitHub Release assets from those workflow-built DMGs when a version tag is pushed.
+It uses explicit GitHub-hosted macOS 15 runners, uploads packaged artifacts with `actions/upload-artifact`, and publishes GitHub Release assets from those workflow-built DMGs when a version tag is pushed.
+
+The workflow pins:
+
+```text
+macos-15       -> arm64 artifact
+macos-15-intel -> x86_64 artifact
+```
+
+Both jobs set `RIGHTCLICKPRO_MACOS_DEPLOYMENT_TARGET=14.0` and `MACOSX_DEPLOYMENT_TARGET=14.0` so the preview binaries keep macOS 14+ compatibility even when newer runner images or SDKs are introduced later. The packaging script also validates the Mach-O deployment target for the app executable, ActionRunner XPC binaries, Finder Sync extension executable, and embedded `libRightClickProCore.dylib` copies before a package can pass.
 
 ## First Test Package
 
@@ -51,6 +60,8 @@ RightClick Pro.app
 The Finder Sync extension is manually linked with `_NSExtensionMain` so PlugInKit can discover it during local testing. The ActionRunner XPC service is embedded in both the app and the Finder extension bundle so `NSXPCConnection(serviceName:)` can resolve it from either process. The bundle is ad-hoc signed when `codesign` is available, but it is not Developer ID signed or notarized. Downloaded builds may still require removing quarantine before local testing.
 
 The preview app and Finder Sync extension are sandboxed and include user-selected read/write, app-scope bookmark, and a narrow home-relative read/write entitlement for `~/Library/Application Support/com.iheeleme.rightclickpro`. The preview app also includes `com.apple.security.network.client` so the settings Overview can reach GitHub's latest-release API for update checks; the Finder Sync extension does not receive that network entitlement. The preview ActionRunner XPC service is signed without app sandboxing so local smoke tests can exercise file actions and command templates through the Full Disk Access execution model. New installs auto-inject Desktop and Downloads as shortcut targets only; runtime authorization no longer rejects paths simply because they are outside configured shortcuts.
+
+All preview bundle Info.plists write `LSMinimumSystemVersion=14.0`, and all SwiftPM/manual `swiftc` builds use a host-architecture target triple such as `arm64-apple-macosx14.0` or `x86_64-apple-macosx14.0`.
 
 Packaging does not register the staging Finder Sync extension with the local PlugInKit database by default. The installed app owns runtime registration after it is copied to `/Applications`; this avoids Finder showing build-artifact app icons for local source directories such as `~/Code`. For a one-off local smoke test against the staging bundle, run:
 
@@ -98,6 +109,8 @@ README.txt
 
 `README.txt` covers drag-to-Applications installation, `xattr -cr "/Applications/RightClick Pro.app"` quarantine cleanup, the non-Developer-ID/non-notarized warning, automatic Finder Extension registration on app launch, one-time Finder reload after successful first setup, manual enablement fallback, and the Finder restart fallback when the right-click menu does not appear. The packaging script mounts the DMG after creation and validates those three entries before it succeeds.
 
+The DMG `README.txt` and app `PACKAGING-NOTES.txt` include the minimum macOS version for quick local verification.
+
 ## Switching to Full Xcode Packaging
 
 After adding a real Xcode project, set these repository or workflow environment variables:
@@ -120,7 +133,6 @@ If `RIGHTCLICKPRO_EXPORT_OPTIONS_PLIST` points to an export options plist, the s
 The current workflow intentionally builds non-notarized test artifacts. For signed distribution, add the Apple certificate and provisioning material as GitHub Actions secrets, then import the certificate into a temporary keychain during the workflow before `xcodebuild archive`.
 
 Relevant official references:
-
 * GitHub-hosted macOS runners: https://docs.github.com/en/actions/reference/runners/github-hosted-runners
 * Workflow syntax: https://docs.github.com/actions/using-workflows/workflow-syntax-for-github-actions
 * Installing Apple certificates on macOS runners: https://docs.github.com/actions/deployment/deploying-xcode-applications/installing-an-apple-certificate-on-macos-runners-for-xcode-development

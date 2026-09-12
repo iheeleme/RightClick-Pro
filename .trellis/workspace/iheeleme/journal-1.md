@@ -414,7 +414,74 @@ Rewrote the Chinese README in the style of jlcodes99/cockpit-tools with overview
 - None - task complete
 
 
-## Session 13: 修复 Finder 菜单点击无响应
+## Session 13: Ship macOS 15 packaging fix
+
+**Date**: 2026-08-13
+**Task**: Ship macOS 15 packaging fix
+**Branch**: `codex/ship-macos15-packaging-fix`
+
+### Summary
+
+Integrated the macOS 14 deployment-target guard onto current develop, diagnosed the macOS 15 release compiler failure with gh, main-actor isolated the AppKit icon cache, and published verified arm64/x86_64 v0.1.4 DMGs.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `f78fbf3` | (see git log) |
+| `d12f72a` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 14: Consolidate macOS packaging branches
+
+**Date**: 2026-08-13
+**Task**: Consolidate macOS packaging branches
+**Branch**: `develop`
+
+### Summary
+
+Fast-forwarded develop with completed packaging task records, verified v0.1.4 remained immutable, and removed superseded local and remote macOS packaging fix branches.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `acde16b` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 15: 修复 Finder 菜单点击无响应
 
 **Date**: 2026-08-16
 **Task**: 修复 Finder 菜单点击无响应
@@ -447,7 +514,7 @@ Rewrote the Chinese README in the style of jlcodes99/cockpit-tools with overview
 - None - task complete
 
 
-## Session 14: Kimi 风格设置界面优化
+## Session 16: Kimi 风格设置界面优化
 
 **Date**: 2026-09-06
 **Task**: Kimi 风格设置界面优化
@@ -480,7 +547,7 @@ Rewrote the Chinese README in the style of jlcodes99/cockpit-tools with overview
 - None - task complete
 
 
-## Session 15: 增加设置主题切换
+## Session 17: 增加设置主题切换
 
 **Date**: 2026-09-06
 **Task**: 增加设置主题切换
