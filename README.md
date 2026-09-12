@@ -5,17 +5,29 @@
 [![GitHub issues](https://img.shields.io/github/issues/iheeleme/RightClick-Pro?style=flat-square)](https://github.com/iheeleme/RightClick-Pro/issues)
 [![License: CC BY-NC-SA 4.0](https://img.shields.io/badge/License-CC%20BY--NC--SA%204.0-lightgrey.svg?style=flat-square)](https://creativecommons.org/licenses/by-nc-sa/4.0/)
 
-一款面向 macOS Finder 的右键菜单效率工具。RightClick Pro 通过 Finder Sync Extension 把常用目录、文件操作、开发工具入口、文件模板和命令模板放进 Finder 右键菜单，并用用户级 XPC ActionRunner 执行真实文件动作与命令运行。
+把常用目录、文件操作、开发工具和命令模板放进 macOS Finder 右键菜单。RightClick Pro 提供原生设置界面，支持跟随系统、浅色和深色主题。
 
-> 当前状态：预览版。项目可以构建本地 App bundle 和 DMG 预览包，但尚未接入 Developer ID 签名与 notarization 公证。
+[下载最新版本](https://github.com/iheeleme/RightClick-Pro/releases/latest) · [v0.2.0 更新说明](https://github.com/iheeleme/RightClick-Pro/releases/tag/v0.2.0)
+
+> 当前版本：v0.2.0 预览版，支持 macOS 14 及以上。提供 Apple Silicon 和 Intel DMG，采用 ad-hoc 签名，尚未接入 Developer ID 签名与 notarization 公证。
 
 功能：Finder 右键菜单 · 常用目录快捷入口 · 文件剪切/粘贴/移动/复制 · 新建文件模板 · 开发者工具入口 · 命令模板 · 实时命令输出 · 操作历史 · 登录时自动启动 · Finder Extension 修复
 
-官方支持平台：macOS。
-
 ## 项目截图
 
-![RightClick Pro 设置概览](docs/assets/rightclick-pro-overview.png)
+以下图片由当前 SwiftUI 源码与隔离的默认配置渲染，展示设置界面及其内置菜单预览；并非已安装 Finder Extension 的实机截图。
+
+### 浅色概览
+
+![RightClick Pro 浅色设置概览](docs/assets/rightclick-pro-overview.png)
+
+### 深色概览
+
+![RightClick Pro 深色设置概览](docs/assets/rightclick-pro-overview-dark.png)
+
+### 菜单管理
+
+![RightClick Pro 菜单管理与内置菜单预览](docs/assets/rightclick-pro-menu.png)
 
 ---
 
@@ -28,6 +40,7 @@
 - 全局 Finder Sync 作用域，菜单不再受固定目录白名单限制；
 - 菜单项按“常用目录 / 文件操作 / 新建文件 / 开发者工具 / 命令模板”分组；
 - 支持一级菜单与分组菜单两种摆放方式；
+- 保存配置后通知 Finder Extension 刷新菜单缓存；
 - Finder Extension 只负责渲染和派发，不直接修改文件。
 
 ### 2. 常用目录快捷入口
@@ -37,7 +50,8 @@
 - 快速打开指定目录；
 - 将选中文件移动到指定目录；
 - 将选中文件复制到指定目录；
-- 支持通过设置页添加、替换、删除和排序。
+- 支持通过设置页添加、替换、删除和排序；
+- 默认目录仅初始化一次，删除后不会在下次启动时重新出现。
 
 ### 3. 文件操作
 
@@ -45,7 +59,10 @@
 
 - 剪切、粘贴；
 - 移动、复制；
-- 操作记录写入本地 JSONL，方便回看执行结果。
+- 批量操作保留逐项结果，部分失败后继续处理其他文件；
+- 粘贴部分失败后保留未完成项，修复问题后可重试；
+- 操作记录写入本地 JSONL，方便回看执行结果；
+- 历史或剪切板保存失败时仍保留真实操作结果，并显示恢复指引。
 
 当前版本尚不支持撤销文件操作。
 
@@ -71,9 +88,10 @@
 在当前 Finder 上下文执行预设命令：
 
 - 支持当前目录或选中项所在目录作为工作目录；
-- 命令输出窗口实时展示 stdout/stderr；
-- 支持停止运行、超时处理和最终状态记录；
-- 敏感环境变量存入 macOS Keychain。
+- 命令输出窗口实时展示 stdout/stderr，支持分块 UTF-8 中文输出与退出时的尾部输出；
+- 支持停止运行、超时终止和最终状态记录；
+- 服务重启后将失去运行进程的遗留记录标记为异常，避免一直显示“运行中”；
+- 未保存的命令不能运行；敏感变量草稿仅保存在内存，点击保存时才写入 macOS Keychain，保存失败会回滚新密钥。
 
 ### 7. 权限与修复入口
 
@@ -90,7 +108,14 @@ RightClick Pro 不安装特权 Helper，也不会静默请求系统权限：
 
 ### 选项 A：从 Releases 下载 DMG
 
-前往 [GitHub Releases](https://github.com/iheeleme/RightClick-Pro/releases) 下载最新预览包。
+前往 [最新 Release](https://github.com/iheeleme/RightClick-Pro/releases/latest) 下载预览包，按 Mac 芯片选择：
+
+| 设备 | v0.2.0 安装包 |
+| --- | --- |
+| Apple Silicon（M 系列） | [arm64 DMG](https://github.com/iheeleme/RightClick-Pro/releases/download/v0.2.0/RightClick.Pro-0.2.0-arm64-preview.dmg) |
+| Intel Mac | [x86_64 DMG](https://github.com/iheeleme/RightClick-Pro/releases/download/v0.2.0/RightClick.Pro-0.2.0-x86_64-preview.dmg) |
+
+可在“苹果菜单 > 关于本机”查看芯片或处理器类型。
 
 1. 打开 DMG。
 2. 将 `RightClick Pro.app` 拖到 `/Applications`。
@@ -154,6 +179,15 @@ killall Finder
 ### 应用提示未公证或无法验证开发者？
 
 当前预览包尚未接入 Developer ID 签名和 notarization 公证。你可以在“系统设置 > 隐私与安全性”中选择仍要打开，或在本地测试时清理 quarantine。
+
+---
+
+## 验证状态与当前限制
+
+- v0.2.0 的 [GitHub Actions 发布流水线](https://github.com/iheeleme/RightClick-Pro/actions/runs/34679890759) 已通过：arm64 与 x86_64 各 83 项测试，以及双架构打包与发布。
+- 测试覆盖 Core 执行逻辑和设置持久化，包括批次重试、命令生命周期与敏感变量保存失败回滚。
+- 已安装 Finder Extension 的通知刷新、真实 XPC 故障和权限切换仍待实机验收。
+- 当前不支持文件操作撤销；安装包未进行 Developer ID 签名与公证。
 
 ---
 
@@ -241,7 +275,8 @@ Sources/
 ├── RightClickProActionRunnerService/
 └── RightClickProAppPreview/
 Tests/
-└── RightClickProCoreTests/
+├── RightClickProCoreTests/
+└── RightClickProAppPreviewTests/
 scripts/
 ├── ci-swift-check.sh
 └── package-macos.sh
