@@ -57,3 +57,10 @@
 1. `bash scripts/ci-swift-check.sh debug` 再次确认在 SwiftPM manifest 链接阶段失败：`PackageDescription.Package.__allocating_init` arm64 符号缺失。本机 Swift 为 6.3.2，但 ManifestAPI 的私有接口来自 Swift 5.10，声明 `SwiftVersion`；公开接口将其别名到 `SwiftLanguageMode`，动态库也只导出后者对应的构造符，接口与库版本不一致。直接编译测试仍缺少 `XCTest`，未发现可用 Xcode。完整 XCTest 必须在完整工具链或 CI 中运行；本轮未改系统工具链。
 2. Finder 通知刷新和 XPC 通信失败的持久化路径已实现并通过类型检查，尚未在已安装扩展中制造真实 XPC 故障、切换权限或完成 UI 验收。内存密钥探针也不等同于真实 Keychain 授权弹窗验收。
 3. 本轮未合并、打标签或发布新版。发布交付、Developer ID 签名、公证和完整文件撤销仍按原范围留待后续工作。
+
+## 2026-09-12 GitHub 发布验证
+
+- 核心实现已由 `5bc11be` 提交；`93e1c5b` 合入远端 develop 的部署目标和并发检查修复。
+- GitHub Actions run https://github.com/iheeleme/RightClick-Pro/actions/runs/34679649253 的 arm64、x86_64 `Run Swift checks` 均通过，完整 XCTest 阻塞已在 CI 闭环。
+- 当前代码正在发布为 v0.2.0；历史章节中的未提交、未发布状态描述的是 2026-09-06 验收时点。
+- Finder 通知、真实 XPC 故障、权限切换实机验收仍未完成；任务继续保持 in_progress。

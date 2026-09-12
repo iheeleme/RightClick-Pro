@@ -21,6 +21,6 @@
   "children": [],
   "parent": null,
   "relatedFiles": [],
-  "notes": "核心闭环实现与后续持久化错误修复已完成：历史/剪切板保存失败保留批次结果，配置保存失败恢复书签，命令终态统一释放资源。严格编译、四个隔离回归探针和最新预览打包通过，详见 validation.md。完整 XCTest 被本机 ManifestAPI 接口/动态库版本不一致及缺少 XCTest 阻塞；已安装 Finder 实机验收未执行。代码未提交，任务保持 in_progress。",
+  "notes": "核心实现已提交；GitHub Actions 34679649253 双架构完整 Swift 检查通过，本机 XCTest 阻塞已由 CI 补齐。正在发布 v0.2.0。Finder 实机验收仍未完成，任务保持 in_progress。",
   "meta": {}
 }

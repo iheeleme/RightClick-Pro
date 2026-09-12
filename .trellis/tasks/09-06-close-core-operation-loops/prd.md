@@ -33,7 +33,7 @@
 * [x] 命令草稿不修改已生效密钥，保存失败可回收新密钥并重试；已使用内存密钥仓库验证。
 * [x] Core 严格编译、App/Finder/XPC 类型检查和可运行回归探针通过。
 * [x] 预览打包及 App/Finder/XPC ad-hoc 签名校验通过。
-* [ ] 完整 XCTest 在可用的 Xcode/SwiftPM 工具链上运行通过。本机 manifest 链接失败且缺少 XCTest 模块。
+* [x] 完整 XCTest 在 GitHub Actions 的 arm64 与 x86_64 工具链上通过（run 34679649253）。
 * [ ] 已安装 Finder 扩展的通知刷新、XPC 不可用反馈与权限错误完成实机验收。
 
 ## Out Of Scope
