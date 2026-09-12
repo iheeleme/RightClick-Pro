@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 18
-- **Last Active**: 2026-09-06
+- **Total Sessions**: 19
+- **Last Active**: 2026-09-12
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~611 | Active |
+| `journal-1.md` | ~644 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 19 | 2026-09-12 | 更新 v0.2.0 README 与界面截图 | `35c5d4b` | `task/settings-visual-unify` |
 | 18 | 2026-09-06 | Kimi 风格设置界面优化 | `2449b90` | `task/settings-visual-unify` |
 | 17 | 2026-09-06 | 增加设置主题切换 | `94c3065` | `task/settings-visual-unify` |
 | 16 | 2026-08-16 | 修复 Finder 菜单点击无响应 | `11705e0` | `codex/issue-2-finder-actions` |

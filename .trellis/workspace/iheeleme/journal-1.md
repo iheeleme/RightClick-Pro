@@ -609,3 +609,36 @@ Fast-forwarded develop with completed packaging task records, verified v0.1.4 re
 ### Next Steps
 
 - None - task complete
+
+
+## Session 19: 更新 v0.2.0 README 与界面截图
+
+**Date**: 2026-09-12
+**Task**: 更新 v0.2.0 README 与界面截图
+**Branch**: `task/settings-visual-unify`
+
+### Summary
+
+更新发布说明、双架构下载与功能边界；从当前 SwiftUI 源码隔离渲染浅色概览、深色概览与菜单管理三图，逐张检查和引用校验通过，已推送 main/develop。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `35c5d4b` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
