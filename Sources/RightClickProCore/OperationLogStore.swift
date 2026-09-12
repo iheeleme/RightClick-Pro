@@ -87,8 +87,6 @@ public final class JSONLineOperationLog: OperationLogging {
     private let url: URL
     private let maxRecords: Int
     private let fileManager: FileManager
-    private let encoder = JSONEncoder()
-    private let decoder = JSONDecoder()
 
     public init(url: URL, maxRecords: Int = 500, fileManager: FileManager = .default) {
         self.url = url
@@ -97,12 +95,14 @@ public final class JSONLineOperationLog: OperationLogging {
     }
 
     public func append(_ record: OperationRecord) throws {
-        var records = try loadRecent()
-        records.append(record)
-        if records.count > maxRecords {
-            records = Array(records.suffix(maxRecords))
+        try FileTransactionLock.withLock(at: url.appendingPathExtension("lock")) {
+            var records = try loadRecent()
+            records.append(record)
+            if records.count > maxRecords {
+                records = Array(records.suffix(maxRecords))
+            }
+            try write(records)
         }
-        try write(records)
     }
 
     public func loadRecent() throws -> [OperationRecord] {
@@ -116,7 +116,7 @@ public final class JSONLineOperationLog: OperationLogging {
         return text
             .split(separator: "\n")
             .compactMap { line in
-                try? decoder.decode(OperationRecord.self, from: Data(line.utf8))
+                try? JSONDecoder().decode(OperationRecord.self, from: Data(line.utf8))
             }
     }
 
@@ -124,7 +124,7 @@ public final class JSONLineOperationLog: OperationLogging {
         let directory = url.deletingLastPathComponent()
         try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
         let lines = try records.map { record -> String in
-            let data = try encoder.encode(record)
+            let data = try JSONEncoder().encode(record)
             return String(decoding: data, as: UTF8.self)
         }
         let body = lines.joined(separator: "\n") + (lines.isEmpty ? "" : "\n")

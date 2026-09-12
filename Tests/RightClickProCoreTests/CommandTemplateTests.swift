@@ -249,6 +249,51 @@ final class CommandTemplateTests: XCTestCase {
         XCTAssertEqual(try observer.status(for: request.id).status, .succeeded)
     }
 
+    func testExistingObserverRecoversNewlyOrphanedSnapshot() throws {
+        let paths = RightClickProStoragePaths(baseURL: try temporaryDirectory())
+        let log = InMemoryOperationLog()
+        let observer = CommandRunService(paths: paths, operationLog: log, secretStore: InMemoryCommandSecretStore())
+        let snapshot = CommandRunSnapshot(id: UUID(), actionID: "late-orphan", status: .running, startedAt: Date())
+        try JSONFileStore<CommandRunSnapshot>(
+            url: paths.commandRunStateDirectoryURL.appendingPathComponent("\(snapshot.id.uuidString).json")
+        ).save(snapshot)
+        XCTAssertEqual(try observer.status(for: snapshot.id).status, .error)
+        XCTAssertEqual(try observer.stop(runID: snapshot.id).status, .error)
+        XCTAssertEqual(log.records.count, 1)
+    }
+
+    func testTerminalPersistenceFailureRetainsResultAndRetries() throws {
+        let directory = try temporaryDirectory()
+        let paths = RightClickProStoragePaths(baseURL: directory)
+        let template = CommandTemplate(id: "persist", title: "Persist", command: "sleep 1; printf done")
+        let action = RightClickProAction(
+            id: "persist", title: "Persist", kind: .runCommand,
+            visibility: [.container], placement: .submenu, order: 1,
+            payload: ActionPayload(commandTemplateID: template.id)
+        )
+        let service = CommandRunService(
+            paths: paths,
+            configProvider: StaticRightClickProConfigProvider(config: RightClickProConfig(actions: [action], commandTemplates: [template])),
+            secretStore: InMemoryCommandSecretStore()
+        )
+        let request = PendingCommandRunRequest(actionID: action.id, context: FinderContext(invocation: .container, targetDirectory: directory))
+        let initial = service.start(request)
+        let backup = directory.appendingPathComponent("saved-runs")
+        try FileManager.default.moveItem(at: paths.commandRunStateDirectoryURL, to: backup)
+        try Data().write(to: paths.commandRunStateDirectoryURL)
+        let terminal = try waitForCommandRunToFinish(initial, service: service)
+        XCTAssertEqual(terminal.status, .succeeded)
+        XCTAssertTrue(terminal.combinedOutput.contains("运行结果保存失败"))
+        XCTAssertEqual(try JSONLineOperationLog(url: paths.operationLogURL).loadRecent().count, 1)
+        try FileManager.default.removeItem(at: paths.commandRunStateDirectoryURL)
+        try FileManager.default.moveItem(at: backup, to: paths.commandRunStateDirectoryURL)
+        let store = JSONFileStore<CommandRunSnapshot>(url: paths.commandRunStateDirectoryURL.appendingPathComponent("\(request.id.uuidString).json"))
+        let deadline = Date().addingTimeInterval(5)
+        while !(try store.loadRequired()).status.isTerminal && Date() < deadline { Thread.sleep(forTimeInterval: 0.1) }
+        XCTAssertEqual(try store.loadRequired().status, .succeeded)
+        XCTAssertEqual(service.start(request).status, .succeeded)
+    }
+
     private func commandRunFixture(
         command: String,
         timeoutSeconds: Int = 5

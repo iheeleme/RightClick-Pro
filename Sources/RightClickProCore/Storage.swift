@@ -6,7 +6,6 @@ public struct RightClickProStoragePaths: Equatable, Sendable {
     public var bookmarksURL: URL
     public var cutClipboardURL: URL
     public var operationLogURL: URL
-    public var pendingCommandRunURL: URL
     public var commandRunStateDirectoryURL: URL
 
     public init(baseURL: URL) {
@@ -15,7 +14,6 @@ public struct RightClickProStoragePaths: Equatable, Sendable {
         self.bookmarksURL = baseURL.appendingPathComponent("bookmarks.json")
         self.cutClipboardURL = baseURL.appendingPathComponent("cut-clipboard.json")
         self.operationLogURL = baseURL.appendingPathComponent("operation-log.jsonl")
-        self.pendingCommandRunURL = baseURL.appendingPathComponent("pending-command-run.json")
         self.commandRunStateDirectoryURL = baseURL.appendingPathComponent("command-runs", isDirectory: true)
     }
 

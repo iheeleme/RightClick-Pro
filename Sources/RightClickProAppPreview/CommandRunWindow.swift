@@ -242,6 +242,10 @@ final class CommandRunWindowCoordinator {
         paths: RightClickProStoragePaths,
         onFinish: @escaping () -> Void
     ) {
+        if let existing = windows[request.id] {
+            existing.makeKeyAndOrderFront(nil)
+            return
+        }
         let viewModel = CommandRunViewModel(request: request, onFinish: onFinish)
         let view = CommandRunWindow(viewModel: viewModel)
         let window = NSWindow(

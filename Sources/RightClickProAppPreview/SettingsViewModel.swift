@@ -1420,18 +1420,25 @@ final class SettingsViewModel: NSObject, ObservableObject {
         )
     }
 
+    private var isConsumingPendingCommands = false
+
     private func checkForPendingCommandRun() {
-        let store = JSONFileStore<PendingCommandRunRequest>(url: paths.pendingCommandRunURL)
-        guard let request = try? store.loadRequired() else {
-            return
+        // 打开窗口会触发 App 激活通知，避免重入后再次等待同一个文件锁。
+        guard !isConsumingPendingCommands else { return }
+        isConsumingPendingCommands = true
+        defer { isConsumingPendingCommands = false }
+        do {
+            let queue = PendingCommandRunQueue(paths: paths)
+            while try queue.consumeNext({ request in
+                CommandRunWindowCoordinator.shared.open(
+                    request: request,
+                    paths: paths,
+                    onFinish: { [weak self] in self?.reloadRecentOperations() }
+                )
+            }) {}
+        } catch {
+            setStatus("读取命令队列失败，请修复存储问题后重新打开 App：\(error.localizedDescription)", tone: .error)
         }
-        try? FileManager.default.removeItem(at: paths.pendingCommandRunURL)
-        NSApplication.shared.activate(ignoringOtherApps: true)
-        CommandRunWindowCoordinator.shared.open(
-            request: request,
-            paths: paths,
-            onFinish: { [weak self] in self?.reloadRecentOperations() }
-        )
     }
 
     private var directoryActionKinds: Set<ActionKind> {

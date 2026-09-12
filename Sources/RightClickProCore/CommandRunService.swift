@@ -116,6 +116,7 @@ public final class CommandRunService: @unchecked Sendable {
     private let outputLock = NSLock()
 
     private var snapshots: [UUID: CommandRunSnapshot] = [:]
+    private var pendingTerminalWrites = Set<UUID>()
     private var processes: [UUID: Process] = [:]
     private var timeoutWorkItems: [UUID: DispatchWorkItem] = [:]
     private var stopRequestedRunIDs = Set<UUID>()
@@ -143,8 +144,12 @@ public final class CommandRunService: @unchecked Sendable {
     }
 
     public func start(_ request: PendingCommandRunRequest) -> CommandRunSnapshot {
-        if let existing = try? status(for: request.id), !existing.status.isTerminal {
-            return existing
+        if withLock({ snapshots[request.id] != nil }) || fileManager.fileExists(atPath: snapshotStore(for: request.id).url.path) {
+            do { return try status(for: request.id) }
+            catch {
+                return CommandRunSnapshot(id: request.id, actionID: request.actionID, status: .error,
+                                          errorMessage: "读取已有运行结果失败：\(error.localizedDescription)")
+            }
         }
 
         do {
@@ -232,7 +237,17 @@ public final class CommandRunService: @unchecked Sendable {
             if let snapshot = snapshots[runID], snapshot.status.isTerminal || runOwnershipHandles[runID] != nil {
                 return snapshot
             }
-            let snapshot = try snapshotStore(for: runID).loadRequired()
+            var snapshot = try snapshotStore(for: runID).loadRequired()
+            if !snapshot.status.isTerminal, let ownership = try acquireRunOwnership(runID) {
+                defer { try? ownership.close() }
+                // 锁获取前所有者可能刚好结束；重读后再决定是否恢复。
+                snapshot = try snapshotStore(for: runID).loadRequired()
+                if !snapshot.status.isTerminal {
+                    snapshot = interruptedSnapshot(snapshot)
+                    try saveSnapshot(snapshot)
+                    logCompletion(snapshot)
+                }
+            }
             snapshots[runID] = snapshot
             return snapshot
         }
@@ -571,35 +586,25 @@ public final class CommandRunService: @unchecked Sendable {
         }
 
         for url in urls where url.pathExtension == "json" {
-            let store = JSONFileStore<CommandRunSnapshot>(url: url, fileManager: fileManager)
-            guard let saved = try? store.loadRequired(), !saved.status.isTerminal,
-                  let ownership = try? acquireRunOwnership(saved.id)
-            else {
-                continue
-            }
-            defer { try? ownership.close() }
-            // 拿到锁后重新读取，避免覆盖刚刚结束的运行记录。
-            guard var snapshot = try? store.loadRequired(), !snapshot.status.isTerminal else {
-                continue
-            }
-            let finishedAt = Date()
-            let message = "命令运行服务已重启，原进程状态无法恢复，运行结果未知。"
-            snapshot.status = .error
-            snapshot.finishedAt = finishedAt
-            snapshot.durationMilliseconds = durationMilliseconds(startedAt: snapshot.startedAt, finishedAt: finishedAt)
-            snapshot.errorMessage = message
-            snapshot.outputChunks.append(
-                CommandRunOutputChunk(
-                    id: (snapshot.outputChunks.map(\.id).max() ?? 0) + 1,
-                    stream: .system,
-                    text: "\n运行中断：\(message)\n",
-                    createdAt: finishedAt
-                )
-            )
-            snapshots[snapshot.id] = snapshot
-            try? saveSnapshot(snapshot)
-            logCompletion(snapshot)
+            guard let id = UUID(uuidString: url.deletingPathExtension().lastPathComponent) else { continue }
+            // 初始化尽力恢复；读取失败仍由后续 status 调用向客户端报告。
+            _ = try? status(for: id)
         }
+    }
+
+    private func interruptedSnapshot(_ saved: CommandRunSnapshot) -> CommandRunSnapshot {
+        var snapshot = saved
+        let finishedAt = Date()
+        let message = "命令运行服务已中断，原进程状态无法恢复，运行结果未知。"
+        snapshot.status = .error
+        snapshot.finishedAt = finishedAt
+        snapshot.durationMilliseconds = durationMilliseconds(startedAt: snapshot.startedAt, finishedAt: finishedAt)
+        snapshot.errorMessage = message
+        snapshot.outputChunks.append(CommandRunOutputChunk(
+            id: (snapshot.outputChunks.map(\.id).max() ?? 0) + 1,
+            stream: .system, text: "\n运行中断：\(message)\n", createdAt: finishedAt
+        ))
+        return snapshot
     }
 
     private func acquireRunOwnership(_ runID: UUID) throws -> FileHandle? {
@@ -621,62 +626,95 @@ public final class CommandRunService: @unchecked Sendable {
     }
 
     private func releaseRunOwnership(_ runID: UUID) {
-        let handle = withLock { runOwnershipHandles.removeValue(forKey: runID) }
+        let handle = withLock { () -> FileHandle? in
+            guard !pendingTerminalWrites.contains(runID) else { return nil }
+            return runOwnershipHandles.removeValue(forKey: runID)
+        }
         try? handle?.close()
     }
 
     private func finish(runID: UUID, exitCode: Int32) {
         defer { cleanupRun(runID: runID) }
-        let snapshot: CommandRunSnapshot?
+        let snapshot: CommandRunSnapshot? = withLock {
+            timeoutWorkItems[runID]?.cancel()
+            timeoutWorkItems[runID] = nil
+            processes[runID] = nil
+            processGroupIDs[runID] = nil
+            outputBuffers[runID] = nil
 
-        do {
-            snapshot = try withLock {
-                timeoutWorkItems[runID]?.cancel()
-                timeoutWorkItems[runID] = nil
-                processes[runID] = nil
-                processGroupIDs[runID] = nil
-                outputBuffers[runID] = nil
-
-                guard var snapshot = try? loadSnapshotForMutation(runID) else {
-                    return nil
-                }
-
-                let finishedAt = Date()
-                snapshot.exitCode = exitCode
-                snapshot.finishedAt = finishedAt
-                snapshot.durationMilliseconds = durationMilliseconds(startedAt: snapshot.startedAt, finishedAt: finishedAt)
-
-                let timedOut = timedOutRunIDs.remove(runID) != nil
-                let stopped = stopRequestedRunIDs.remove(runID) != nil
-                if timedOut {
-                    snapshot.status = .timedOut
-                } else if stopped {
-                    snapshot.status = .stopped
-                } else if exitCode == 0 {
-                    snapshot.status = .succeeded
-                } else {
-                    snapshot.status = .failed
-                }
-
-                let durationText = formattedDuration(milliseconds: snapshot.durationMilliseconds)
-                snapshot.outputChunks.append(
-                    CommandRunOutputChunk(
-                        id: (snapshot.outputChunks.map(\.id).max() ?? 0) + 1,
-                        stream: .system,
-                        text: "\n退出码：\(exitCode) · 耗时：\(durationText)\n",
-                        createdAt: finishedAt
-                    )
-                )
-                snapshots[runID] = snapshot
-                try saveSnapshot(snapshot)
-                return snapshot
+            guard var snapshot = try? loadSnapshotForMutation(runID) else {
+                return nil
             }
-        } catch {
-            return
+
+            let finishedAt = Date()
+            snapshot.exitCode = exitCode
+            snapshot.finishedAt = finishedAt
+            snapshot.durationMilliseconds = durationMilliseconds(startedAt: snapshot.startedAt, finishedAt: finishedAt)
+
+            let timedOut = timedOutRunIDs.remove(runID) != nil
+            let stopped = stopRequestedRunIDs.remove(runID) != nil
+            if timedOut {
+                snapshot.status = .timedOut
+            } else if stopped {
+                snapshot.status = .stopped
+            } else if exitCode == 0 {
+                snapshot.status = .succeeded
+            } else {
+                snapshot.status = .failed
+            }
+
+            let durationText = formattedDuration(milliseconds: snapshot.durationMilliseconds)
+            snapshot.outputChunks.append(
+                CommandRunOutputChunk(
+                    id: (snapshot.outputChunks.map(\.id).max() ?? 0) + 1,
+                    stream: .system,
+                    text: "\n退出码：\(exitCode) · 耗时：\(durationText)\n",
+                    createdAt: finishedAt
+                )
+            )
+            snapshots[runID] = snapshot
+            persistTerminalSnapshot(&snapshot)
+            return snapshot
         }
 
         if let snapshot {
             logCompletion(snapshot)
+        }
+    }
+
+    // 调用者持有 lock。保存失败保留真实终态和运行锁，防止其他实例误判为遗留 running。
+    private func persistTerminalSnapshot(_ snapshot: inout CommandRunSnapshot) {
+        do {
+            try saveSnapshot(snapshot)
+        } catch {
+            let message = "运行结果保存失败，将自动重试：\(error.localizedDescription)"
+            snapshot.errorMessage = [snapshot.errorMessage, message].compactMap { $0 }.joined(separator: "\n")
+            snapshot.outputChunks.append(CommandRunOutputChunk(
+                id: (snapshot.outputChunks.map(\.id).max() ?? 0) + 1,
+                stream: .system, text: "\n\(message)\n"
+            ))
+            snapshots[snapshot.id] = snapshot
+            if pendingTerminalWrites.insert(snapshot.id).inserted {
+                scheduleTerminalWriteRetry(snapshot.id)
+            }
+        }
+    }
+
+    private func scheduleTerminalWriteRetry(_ runID: UUID) {
+        DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 2) { [weak self] in
+            guard let self else { return }
+            let retry = self.withLock { () -> Bool in
+                guard self.pendingTerminalWrites.contains(runID), let snapshot = self.snapshots[runID] else { return false }
+                do {
+                    try self.saveSnapshot(snapshot)
+                    self.pendingTerminalWrites.remove(runID)
+                    try? self.runOwnershipHandles.removeValue(forKey: runID)?.close()
+                    return false
+                } catch {
+                    return true
+                }
+            }
+            if retry { self.scheduleTerminalWriteRetry(runID) }
         }
     }
 
@@ -701,12 +739,10 @@ public final class CommandRunService: @unchecked Sendable {
             )
         ]
 
-        do {
-            try withLock {
-                snapshots[request.id] = snapshot
-                try saveSnapshot(snapshot)
-            }
-        } catch {}
+        withLock {
+            snapshots[request.id] = snapshot
+            persistTerminalSnapshot(&snapshot)
+        }
 
         try? operationLog.append(
             OperationRecord(

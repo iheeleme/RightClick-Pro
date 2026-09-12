@@ -402,29 +402,35 @@ final class FinderSyncController: FIFinderSync, @unchecked Sendable {
                 actionID: request.actionID,
                 context: request.context
             )
-            try JSONFileStore<PendingCommandRunRequest>(url: paths.pendingCommandRunURL).save(pendingRequest)
+            try PendingCommandRunQueue(paths: paths).enqueue(pendingRequest)
             DistributedNotificationCenter.default().post(
                 name: Notification.Name(RightClickProConstants.pendingCommandRunNotificationName),
                 object: nil
             )
-            launchMainAppForCommandWindow()
+            launchMainAppForCommandWindow(request: request)
             NSLog("RightClick Pro queued command template for main app: \(request.actionID)")
         } catch {
-            NSLog("RightClick Pro failed to queue command template \(request.actionID): \(error.localizedDescription)")
+            reportCommandHandoffFailure(request, message: "命令请求保存失败，请重试：\(error.localizedDescription)")
         }
         return true
     }
 
-    private func launchMainAppForCommandWindow() {
+    private func reportCommandHandoffFailure(_ request: ActionRequest, message: String) {
+        NSLog("RightClick Pro command handoff failed: \(message)")
+        appendActionFailureRecord(request: request, actionKind: .runCommand, message: message)
+        publishActionFailure(request: request, actionKind: .runCommand, message: message)
+    }
+
+    private func launchMainAppForCommandWindow(request: ActionRequest) {
         guard let appURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: RightClickProConstants.mainAppBundleIdentifier) else {
-            NSLog("RightClick Pro main app bundle not found: \(RightClickProConstants.mainAppBundleIdentifier)")
+            reportCommandHandoffFailure(request, message: "找不到主 App。命令请求已保留，请打开 RightClick Pro 继续。")
             return
         }
         let configuration = NSWorkspace.OpenConfiguration()
         configuration.activates = true
         NSWorkspace.shared.openApplication(at: appURL, configuration: configuration) { _, error in
             if let error {
-                NSLog("RightClick Pro failed to open main app: \(error.localizedDescription)")
+                self.reportCommandHandoffFailure(request, message: "主 App 启动失败，命令请求已保留，请手动打开 RightClick Pro：\(error.localizedDescription)")
             }
         }
     }

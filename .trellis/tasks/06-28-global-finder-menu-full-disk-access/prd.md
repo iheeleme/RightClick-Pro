@@ -43,11 +43,8 @@ RightClick Pro should stop using user-selected directories as the product's menu
 
 - Add a settings-page Full Disk Access guidance banner.
 - Provide an action to open the relevant macOS System Settings privacy pane when possible.
-- Provide a lightweight "check permission" flow:
-  - Attempt a representative protected file-system access.
-  - Show "likely granted" when access succeeds.
-  - Show guidance when access fails.
-- Treat permission checks as advisory only. Real action execution remains the source of truth.
+- Use non-invasive permission guidance and a System Settings shortcut.
+- Do not probe representative protected paths at launch or from overview controls; real action execution remains the source of truth (supersedes the original probe requirement).
 - When an action fails due to file-system permission/access issues, return a user-facing message that clearly points to Full Disk Access.
 
 ### Runtime Authorization Model
@@ -117,7 +114,7 @@ RightClick Pro should stop using user-selected directories as the product's menu
 - [ ] Existing bookmark entries are preserved during bootstrap/migration.
 - [ ] File actions are no longer blocked by configured-directory validation.
 - [ ] Permission/access failures produce Full Disk Access guidance.
-- [ ] Settings UI includes Full Disk Access guidance, open-settings action, and lightweight permission check.
+- [ ] Settings UI includes non-invasive Full Disk Access guidance and an open-settings action; runtime failures supply permission feedback.
 - [ ] Command templates execute through `ActionRunner.xpc`.
 - [ ] Command window still shows realtime stdout/stderr.
 - [ ] Command stop/cancel still works.
@@ -157,3 +154,7 @@ RightClick Pro should stop using user-selected directories as the product's menu
 - Swift checks pass with the project test/check script.
 - Docs explain the new Full Disk Access model and shortcut-directory semantics.
 - Migration behavior is covered by tests and does not delete user bookmarks.
+
+## 2026-09-12 记录校正
+
+schema v2、全局范围、默认目录及 XPC 命令实现已随 v0.2.0 发布，双架构 CI 通过。以上未勾选的交互条目保留为实机验收清单，不能据此认定代码未实现。权限探测需求已被后续非侵入式策略替代；安装后的范围与权限切换仍待实测。

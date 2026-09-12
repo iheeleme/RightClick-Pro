@@ -67,3 +67,17 @@
 
 - 标签流水线 https://github.com/iheeleme/RightClick-Pro/actions/runs/34679890759 双架构检查、打包及发布全部成功。
 - Release：https://github.com/iheeleme/RightClick-Pro/releases/tag/v0.2.0 ，已附两份 DMG 和中文更新说明。main、develop、任务分支已同步，标签保持在 df740f9。
+
+## 2026-09-12 并发与故障收尾
+
+- 命令改为 `PendingCommandRunQueue` 独立请求文件；交付失败保留请求，健康请求不被损坏文件阻塞，窗口激活防重入，同一运行 ID 不重复执行。
+- Finder 排队与 App 启动失败接入通知和失败历史，启动失败保留队列供打开 App 后处理。
+- 操作历史用稳定锁文件覆盖读改写事务。
+- 观察者按需恢复后来失主的运行；恢复落盘失败向调用方抛错，不提前记录恢复成功。
+- 终态落盘失败保留真实执行结果和所有权锁，输出明确提示并每两秒自动重试。若服务本身退出且存储仍不可写，仍只能在重启后报告运行结果未知。
+- 本轮 Core Swift 6 严格编译、App/Finder/XPC 严格类型检查、测试语法解析、`git diff --check` 均通过。
+- 7 个独立回归探针通过：并发历史、并发请求交付、失败保留、损坏请求隔离、后来失主恢复、终态保存重试、活动所有者保护。探针复用对应测试方法并以断言执行，不冒充完整 XCTest。
+- 独立 4 进程同时追加 300 条日志，实际保留 300 个唯一记录。
+- `DIST_DIR=dist/final-closure-validation bash scripts/package-macos.sh debug` 通过，包括 App/Finder/XPC ad-hoc 签名与结构校验。
+- 本机完整检查仍因已有 ManifestAPI 接口/库不匹配失败；最新改动的完整双架构 XCTest 待本轮 CI 结果补记。
+- Finder 已安装扩展实机验收尚未完成，继续保留任务为 in_progress。

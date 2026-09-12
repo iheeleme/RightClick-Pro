@@ -12,6 +12,7 @@ baseURL/
 ├── bookmarks.json
 ├── cut-clipboard.json
 ├── operation-log.jsonl
+├── pending-command-runs/
 ├── command-runs/
 └── icon-cache/
     └── v1/
@@ -30,7 +31,7 @@ Reference files: `Sources/RightClickProCore/Storage.swift`, `OperationLogStore.s
 ## Operation Log
 
 - Use `JSONLineOperationLog` for `operation-log.jsonl`.
-- Append by loading existing records, adding the new record, capping to `maxRecords`, and atomically rewriting the file.
+- Hold `operation-log.jsonl.lock` across loading, appending, capping and atomic rewrite. Keep the lock file in place; locking the replaced JSON inode does not serialize other processes.
 - The default cap is 500 records. Settings UI currently displays the latest 80 in reverse chronological order.
 - Invalid JSONL lines are ignored by `loadRecent()` through `try?`; do not make the UI fail just because one historical line is corrupt.
 
@@ -73,3 +74,37 @@ Reference tests: `Tests/RightClickProCoreTests/ConfigurationBootstrapperTests.sw
 - Do not write storage files directly from child SwiftUI views.
 - Do not remove or reorder unrelated user actions while repairing defaults.
 - Do not introduce a database or migration framework until the JSON contract is proven insufficient.
+
+## Scenario: Command Handoff and Orphan Recovery
+
+### 1. Scope / Trigger
+- Finder command dispatch, App queue consumption, or command state persistence changes.
+
+### 2. Signatures
+- `PendingCommandRunQueue.enqueue(_:)` and `consumeNext(_:) throws -> Bool`.
+- `CommandRunService.status(for:) throws -> CommandRunSnapshot`.
+
+### 3. Contracts
+- Each pending request owns `<UUID>.json`; queue lock covers delivery and acknowledgement.
+- Delivery failure retains the request. Corrupt files are retained and reported after healthy requests are delivered.
+- Window activation must not reenter queue consumption. Repeated delivery of an ID focuses the existing window; an existing run ID must not start another process.
+- Status queries acquire nonblocking ownership and re-read before recovering a nonterminal orphan; initialization alone is insufficient.
+- Terminal write failure preserves actual exit status, appends a visible warning, retains ownership and retries every two seconds while the service lives.
+
+### 4. Validation & Error Matrix
+- Queue write/App launch failure -> Finder failure history and notification; queued launch failures retain requests.
+- Recovery save failure -> throw from status, no success cache or completion log.
+- Terminal write failure -> keep in-memory result and ownership until a retry saves it; service loss still means recovery reports an unknown result.
+
+### 5. Good/Base/Bad Cases
+- Good: concurrent requests survive and concurrent log writers retain every record up to the cap.
+- Base: one request delivers once and its terminal state persists normally.
+- Bad: atomic replacement treated as a cross-process transaction, or every terminal read automatically reruns a command.
+
+### 6. Tests Required
+- Storage tests: concurrent queue producers/consumers, failed delivery retry, corrupt-file isolation, concurrent history writers.
+- Command tests: late orphan recovery, active owner preservation, failed terminal save with recovery and same-ID deduplication.
+
+### 7. Wrong vs Correct
+- Wrong: overwrite `pending-command-run.json`; recover only in service initialization.
+- Correct: use `PendingCommandRunQueue`; check ownership during status reads as well as startup.

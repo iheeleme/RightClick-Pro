@@ -25,7 +25,7 @@ Finder
 ├── bookmarks.json
 ├── cut-clipboard.json
 ├── operation-log.jsonl
-├── pending-command-run.json
+├── pending-command-runs/
 ├── command-runs/
 └── icon-cache/
     └── v1/

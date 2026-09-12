@@ -35,7 +35,7 @@
 * [x] `menu(for:)` 不再对应用 bundle、文件路径图标做冷路径同步解析。
 * [x] 配置/书签读取失败时，扩展不会因为 `hasLoadedConfiguration == false` 直接返回 `nil`。
 * [x] Swift 单元测试覆盖新增菜单图标策略或 fallback 行为。
-* [ ] `scripts/ci-swift-check.sh debug` 通过，必要时补充 packaging 验证。
+* [x] v0.2.0 双架构 CI 检查与打包通过（34679649253、34679890759）；本机 CLT 问题不再作为该版本的未验收项。
 * [x] app 图标缓存未命中时显示默认缺省图标，并在后台异步解析真实图标。
 
 ## Definition of Done

@@ -46,6 +46,67 @@ final class StorageTests: XCTestCase {
         XCTAssertEqual(records.map(\.actionID), ["b", "c"])
     }
 
+    func testConcurrentOperationLogWritersPreserveEveryRecord() throws {
+        let url = try temporaryDirectory().appendingPathComponent("history.jsonl")
+        DispatchQueue.concurrentPerform(iterations: 100) { index in
+            do {
+                try JSONLineOperationLog(url: url).append(
+                    OperationRecord(actionID: String(index), kind: .runCommand, status: .success)
+                )
+            } catch { XCTFail("Concurrent append failed: \(error)") }
+        }
+        let records = try JSONLineOperationLog(url: url).loadRecent()
+        XCTAssertEqual(records.count, 100)
+        XCTAssertEqual(Set(records.map(\.actionID)).count, 100)
+    }
+
+    func testPendingQueuePreservesConcurrentRequestsAndConsumesOnce() throws {
+        let paths = RightClickProStoragePaths(baseURL: try temporaryDirectory())
+        DispatchQueue.concurrentPerform(iterations: 50) { index in
+            do {
+                try PendingCommandRunQueue(paths: paths).enqueue(PendingCommandRunRequest(
+                    actionID: String(index), context: FinderContext(invocation: .container, targetDirectory: paths.baseURL)
+                ))
+            } catch { XCTFail("Enqueue failed: \(error)") }
+        }
+        let delivered = paths.baseURL.appendingPathComponent("delivered")
+        try FileManager.default.createDirectory(at: delivered, withIntermediateDirectories: true)
+        DispatchQueue.concurrentPerform(iterations: 4) { _ in
+            do {
+                while try PendingCommandRunQueue(paths: paths).consumeNext({ request in
+                    let url = delivered.appendingPathComponent(request.actionID)
+                    XCTAssertFalse(FileManager.default.fileExists(atPath: url.path))
+                    try Data().write(to: url)
+                }) {}
+            } catch { XCTFail("Consume failed: \(error)") }
+        }
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: delivered.path).count, 50)
+    }
+
+    func testCorruptPendingRequestDoesNotBlockHealthyRequests() throws {
+        let paths = RightClickProStoragePaths(baseURL: try temporaryDirectory())
+        let queue = PendingCommandRunQueue(paths: paths)
+        let request = PendingCommandRunRequest(actionID: "healthy", context: FinderContext(invocation: .container, targetDirectory: paths.baseURL))
+        try queue.enqueue(request)
+        let corrupt = paths.baseURL.appendingPathComponent("pending-command-runs/broken.json")
+        try Data("broken".utf8).write(to: corrupt)
+        XCTAssertTrue(try queue.consumeNext { XCTAssertEqual($0, request) })
+        XCTAssertThrowsError(try queue.consumeNext { _ in XCTFail("Unexpected delivery") })
+        XCTAssertTrue(FileManager.default.fileExists(atPath: corrupt.path))
+    }
+
+    func testPendingQueueRetainsRequestWhenDeliveryFails() throws {
+        let paths = RightClickProStoragePaths(baseURL: try temporaryDirectory())
+        let queue = PendingCommandRunQueue(paths: paths)
+        let request = PendingCommandRunRequest(
+            actionID: "retry", context: FinderContext(invocation: .container, targetDirectory: paths.baseURL)
+        )
+        try queue.enqueue(request)
+        XCTAssertThrowsError(try queue.consumeNext { _ in throw CocoaError(.fileWriteNoPermission) })
+        XCTAssertTrue(try queue.consumeNext { XCTAssertEqual($0, request) })
+        XCTAssertFalse(try queue.consumeNext { _ in XCTFail("Duplicate delivery") })
+    }
+
     func testDefaultStoragePrefersApplicationSupportOverAppGroupContainer() throws {
         let directory = try temporaryDirectory()
         let homeDirectory = directory.appendingPathComponent("home")

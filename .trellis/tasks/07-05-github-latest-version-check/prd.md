@@ -12,7 +12,7 @@ Add an in-app version update check for RightClick Pro, using GitHub Releases as 
 * `AppMetadata.versionText` currently reads `CFBundleShortVersionString` and `CFBundleVersion` from `Bundle.main`.
 * `scripts/package-macos.sh` writes `CFBundleShortVersionString` from `RIGHTCLICKPRO_VERSION`, GitHub tag name, GitHub SHA, or `0.0.0-dev`.
 * README uses GitHub Releases at `https://github.com/iheeleme/RightClick-Pro/releases`.
-* GitHub's latest release endpoint currently returns 404 for `iheeleme/RightClick-Pro`, so "no full release yet" must be handled gracefully.
+* At initial planning there was no full release. v0.2.0 has since been published; 404 remains an error-path requirement.
 
 ## Assumptions
 
@@ -39,7 +39,7 @@ Add an in-app version update check for RightClick Pro, using GitHub Releases as 
 * [ ] If the installed version is current, the UI says it is up to date.
 * [ ] If GitHub returns 404, the UI explains that no public full release is available yet.
 * [ ] Network and decoding failures do not crash the app and are shown as retryable errors.
-* [ ] Swift compile checks pass.
+* [x] v0.2.0 Swift checks passed on both CI architectures (34679649253).
 
 ## Definition of Done
 
@@ -88,3 +88,7 @@ MVP should keep the network/UI behavior in the app target and extract version co
   * `.trellis/spec/backend/index.md`
   * `.trellis/spec/backend/error-handling.md`
   * `.trellis/spec/backend/quality-guidelines.md`
+
+## 2026-09-12 记录校正
+
+更新按钮、请求状态、HTTP/解码失败处理、版本比较与跳转均已实现并发布。未勾选的 UI 条目保留为待交互验收状态；本轮未伪造网络故障或 UI 实测结论。
