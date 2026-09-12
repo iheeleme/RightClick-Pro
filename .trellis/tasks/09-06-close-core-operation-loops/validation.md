@@ -79,5 +79,13 @@
 - 7 个独立回归探针通过：并发历史、并发请求交付、失败保留、损坏请求隔离、后来失主恢复、终态保存重试、活动所有者保护。探针复用对应测试方法并以断言执行，不冒充完整 XCTest。
 - 独立 4 进程同时追加 300 条日志，实际保留 300 个唯一记录。
 - `DIST_DIR=dist/final-closure-validation bash scripts/package-macos.sh debug` 通过，包括 App/Finder/XPC ad-hoc 签名与结构校验。
-- 本机完整检查仍因已有 ManifestAPI 接口/库不匹配失败；最新改动的完整双架构 XCTest 待本轮 CI 结果补记。
+- 本机完整检查仍因已有 ManifestAPI 接口/库不匹配失败；最新改动已由 CI 34681905613 补齐完整验证。
 - Finder 已安装扩展实机验收尚未完成，继续保留任务为 in_progress。
+
+### 本轮最终 CI
+
+- 工作提交：`6ed96d8`，已推送 `task/settings-visual-unify`。
+- https://github.com/iheeleme/RightClick-Pro/actions/runs/34681905613 完全成功。
+- arm64 和 x86_64 各执行 89 项 XCTest，0 failures；两架构 DMG 打包及上传通过。
+- 手动测试版本 `0.2.1-test.1`，未创建新 Release/tag，未推进 main/develop。
+- 已归档完成的 DMG 产物任务；核心任务仍因 Finder 实机验收未完成而保留。

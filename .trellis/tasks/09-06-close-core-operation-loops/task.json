@@ -21,6 +21,6 @@
   "children": [],
   "parent": null,
   "relatedFiles": [],
-  "notes": "核心实现已提交；GitHub Actions 34679649253 双架构完整 Swift 检查通过，本机 XCTest 阻塞已由 CI 补齐。已发布 v0.2.0，标签流水线 34679890759 双架构检查、打包及 Release 发布全部成功。Finder 实机验收仍未完成，任务保持 in_progress。",
+  "notes": "v0.2.0 已发布。2026-09-12 收尾提交 6ed96d8 修复请求队列、命令交付失败反馈、并发历史写入和按需状态恢复及终态落盘重试。CI 34681905613 双架构各 89 项 XCTest 通过，DMG 打包上传通过。已推送任务分支；未推进 main/develop 或发布新版本。Finder 实机验收仍未完成，保持 in_progress。",
   "meta": {}
 }
